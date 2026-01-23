@@ -1,0 +1,32 @@
+{
+  "name": "suisui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BDD Test Builder - Electron + Nuxt + PrimeVue",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @suisui/desktop dev",
+    "build": "pnpm --filter @suisui/desktop build",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm --filter @suisui/shared test",
+    "test:e2e": "pnpm --filter @suisui/desktop test:e2e",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^20.11.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

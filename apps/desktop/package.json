@@ -1,0 +1,46 @@
+{
+  "name": "@suisui/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SuiSui Desktop - BDD Test Builder",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron\"",
+    "dev:nuxt": "nuxt dev --port 3000",
+    "dev:electron": "wait-on http://localhost:3000 && electron .",
+    "build": "nuxt build && pnpm build:electron",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "prepare": "nuxt prepare"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.3",
+    "@suisui/shared": "workspace:*",
+    "keytar": "^7.9.0"
+  },
+  "devDependencies": {
+    "@oxc-minify/binding-linux-x64-gnu": "^0.110.0",
+    "@oxc-parser/binding-linux-x64-gnu": "^0.110.0",
+    "@oxc-transform/binding-linux-x64-gnu": "^0.110.0",
+    "@playwright/test": "^1.58.0",
+    "@primevue/nuxt-module": "^4.2.0",
+    "@types/node": "^20.11.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.0.0",
+    "nuxt": "^3.15.0",
+    "primeflex": "^3.3.1",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^2.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0",
+    "vue-tsc": "^3.2.3",
+    "wait-on": "^8.0.0"
+  }
+}

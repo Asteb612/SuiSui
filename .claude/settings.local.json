@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(timeout 30s pnpm dev:nuxt:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm --filter @suisui/desktop test)",
+      "Bash(pnpm --filter @suisui/desktop typecheck:*)"
+    ]
+  }
+}
