@@ -6,7 +6,10 @@
       "Bash(timeout 30s pnpm dev:nuxt:*)",
       "Bash(pnpm build:*)",
       "Bash(pnpm --filter @suisui/desktop test)",
-      "Bash(pnpm --filter @suisui/desktop typecheck:*)"
+      "Bash(pnpm --filter @suisui/desktop typecheck:*)",
+      "Bash(xargs:*)",
+      "Bash(wc:*)",
+      "Bash(tree:*)"
     ]
   }
 }

@@ -1,0 +1,141 @@
+# SuiSui Project Rules for Cursor
+
+## Project Context
+
+SuiSui is a BDD Test Builder desktop application using Electron + Nuxt 4 (Vue 3).
+
+**IMPORTANT: Read the documentation in `/doc/` before making changes:**
+- [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) - Overall architecture and design patterns
+- [doc/SERVICES.md](doc/SERVICES.md) - Backend services documentation
+- [doc/FRONTEND.md](doc/FRONTEND.md) - Frontend components and stores
+- [doc/IPC_TYPES.md](doc/IPC_TYPES.md) - IPC channels and shared types
+- [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) - Development workflow
+- [doc/TESTING.md](doc/TESTING.md) - Testing strategies
+
+## Architecture Rules
+
+### Monorepo Structure
+```
+apps/desktop/          # Main Electron application
+├── app/               # Nuxt 4 Renderer (Frontend)
+├── electron/          # Electron Main Process (Backend)
+└── e2e/               # End-to-end tests
+
+packages/shared/       # Shared types and IPC contracts
+```
+
+### Process Separation
+- **Main Process** (`electron/`): Node.js environment, business logic services
+- **Renderer Process** (`app/`): Browser environment, Vue 3 UI
+- **Communication**: Only via typed IPC channels through preload script
+- **Security**: Context isolation enabled, no direct Node.js in renderer
+
+## Code Conventions
+
+### Naming
+| Type | Convention | Example |
+|------|------------|---------|
+| Vue Component | PascalCase.vue | `ScenarioBuilder.vue` |
+| Pinia Store | camelCase | `useWorkspaceStore.ts` |
+| Service Class | PascalCase | `WorkspaceService.ts` |
+| Type/Interface | PascalCase | `WorkspaceInfo` |
+| IPC Channel | SCREAMING_SNAKE | `WORKSPACE_GET` |
+
+### Service Pattern
+Always use singleton pattern with dependency injection:
+```typescript
+class MyService {
+  constructor(private commandRunner?: ICommandRunner) {
+    this.commandRunner = commandRunner ?? getCommandRunner();
+  }
+}
+
+let instance: MyService | null = null;
+export function getMyService(): MyService {
+  if (!instance) instance = new MyService();
+  return instance;
+}
+```
+
+### Frontend Pattern
+Use composition API with stores:
+```vue
+<script setup lang="ts">
+const api = useApi();
+const store = useWorkspaceStore();
+</script>
+```
+
+## Development Workflow
+
+### Adding New IPC Channel
+1. Add channel constant in `packages/shared/src/ipc/channels.ts`
+2. Add method signature in `packages/shared/src/ipc/api.ts`
+3. Add handler in `apps/desktop/electron/ipc/handlers.ts`
+4. Expose in `apps/desktop/electron/preload.ts`
+5. Rebuild: `pnpm --filter @suisui/shared build`
+
+### Adding New Service
+1. Create service in `electron/services/`
+2. Use `ICommandRunner` for CLI commands
+3. Add types in `packages/shared/src/types/`
+4. Register IPC channels (see above)
+5. Write tests using `FakeCommandRunner`
+
+### Adding New Component
+1. Create in `app/components/`
+2. Use PrimeVue components for UI
+3. Access data via Pinia stores
+4. Access Electron API via `useApi()`
+
+## Testing Rules
+
+### Unit Tests
+- Location: `electron/__tests__/`
+- Framework: Vitest
+- **CRITICAL**: Use `FakeCommandRunner` - never call real CLI tools
+- Test both success and failure paths
+
+```typescript
+const fakeRunner = new FakeCommandRunner();
+fakeRunner.setResponse('npx', { code: 0, stdout: '[]', stderr: '' });
+const service = new MyService(fakeRunner);
+```
+
+### E2E Tests
+- Location: `e2e/`
+- Framework: Playwright
+- Requires production build first: `pnpm build`
+
+## Type Safety
+
+- Strict TypeScript enabled
+- All IPC communication is typed via `ElectronAPI` interface
+- Shared types in `@suisui/shared` package
+- Avoid `any` - use `unknown` for truly unknown types
+
+## Common Gotchas
+
+1. **Shared package changes**: Run `pnpm --filter @suisui/shared build` after changes
+2. **IPC not working**: Check handler registration order in `handlers.ts`
+3. **Type errors**: Ensure shared package is rebuilt
+4. **E2E failing**: Ensure `pnpm build` was run first
+
+## Commands Reference
+
+```bash
+pnpm dev              # Development mode
+pnpm build            # Production build
+pnpm test             # Run unit tests
+pnpm test:e2e         # Run E2E tests
+pnpm lint:fix         # Fix linting
+pnpm typecheck        # Type checking
+```
+
+## Do Not
+
+- Import Node.js modules in renderer (`app/`)
+- Call real `bddgen` or `playwright` in tests
+- Skip `FakeCommandRunner` for service tests
+- Mutate Pinia state outside actions
+- Use untyped IPC channels
