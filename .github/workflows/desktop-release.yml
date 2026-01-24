@@ -37,7 +37,7 @@ jobs:
         run: NUXT_TYPECHECK=false pnpm --filter @suisui/desktop build
 
       - name: Package app
-        run: pnpm --filter @suisui/desktop exec electron-builder --publish=never --debug
+        run: pnpm --filter @suisui/desktop exec electron-builder --publish=never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
