@@ -62,7 +62,16 @@ export class FeatureService {
 
   async read(relativePath: string): Promise<string> {
     const fullPath = this.getFullPath(relativePath)
-    return fs.readFile(fullPath, 'utf-8')
+    
+    try {
+      return await fs.readFile(fullPath, 'utf-8')
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        throw new Error(`Feature file not found: ${relativePath}`)
+      }
+      throw error
+    }
   }
 
   async write(relativePath: string, content: string): Promise<void> {

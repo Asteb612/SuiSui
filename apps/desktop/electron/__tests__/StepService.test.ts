@@ -27,7 +27,7 @@ describe('StepService', () => {
         ],
       })
 
-      runner.setResponse('bddgen export', {
+      runner.setResponse('node -e', {
         code: 0,
         stdout: bddgenOutput,
         stderr: '',
@@ -55,7 +55,7 @@ describe('StepService', () => {
         ],
       })
 
-      runner.setResponse('bddgen export', {
+      runner.setResponse('node -e', {
         code: 0,
         stdout: bddgenOutput,
         stderr: '',
@@ -74,7 +74,7 @@ describe('StepService', () => {
     })
 
     it('should throw error on bddgen failure', async () => {
-      runner.setResponse('bddgen export', {
+      runner.setResponse('node -e', {
         code: 1,
         stdout: '',
         stderr: 'bddgen not found',
@@ -85,7 +85,7 @@ describe('StepService', () => {
 
     it('should cache the result', async () => {
       const bddgenOutput = JSON.stringify({ steps: [] })
-      runner.setResponse('bddgen export', { code: 0, stdout: bddgenOutput, stderr: '' })
+      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
 
       await service.export()
       const cached = await service.getCached()
@@ -106,7 +106,7 @@ describe('StepService', () => {
         ],
       })
 
-      runner.setResponse('bddgen export', { code: 0, stdout: bddgenOutput, stderr: '' })
+      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
       await service.export()
 
       const givenSteps = service.getStepsByKeyword('Given')
@@ -122,7 +122,7 @@ describe('StepService', () => {
   describe('clearCache', () => {
     it('should clear the cached steps', async () => {
       const bddgenOutput = JSON.stringify({ steps: [] })
-      runner.setResponse('bddgen export', { code: 0, stdout: bddgenOutput, stderr: '' })
+      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
 
       await service.export()
       service.clearCache()

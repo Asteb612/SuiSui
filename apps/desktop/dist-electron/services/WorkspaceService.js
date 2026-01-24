@@ -5,22 +5,54 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorkspaceService = void 0;
 exports.getWorkspaceService = getWorkspaceService;
+exports.resetWorkspaceService = resetWorkspaceService;
 const node_path_1 = __importDefault(require("node:path"));
 const promises_1 = __importDefault(require("node:fs/promises"));
 const SettingsService_1 = require("./SettingsService");
+const logger_1 = require("../utils/logger");
+const logger = (0, logger_1.createLogger)('WorkspaceService');
 class WorkspaceService {
     currentWorkspace = null;
+    async ensurePlaywrightConfig(workspacePath) {
+        const playwrightConfigPath = node_path_1.default.join(workspacePath, 'playwright.config.ts');
+        try {
+            await promises_1.default.access(playwrightConfigPath);
+            logger.debug('playwright.config.ts already exists', { playwrightConfigPath });
+        }
+        catch {
+            logger.info('Creating playwright.config.ts', { playwrightConfigPath });
+            const playwrightConfig = [
+                "import { defineConfig } from '@playwright/test'",
+                "import { defineBddConfig } from 'playwright-bdd'",
+                '',
+                'const testDir = defineBddConfig({',
+                "  paths: ['features/**/*.feature'],",
+                "  steps: ['features/**/*.ts', 'features/**/*.js'],",
+                '})',
+                '',
+                'export default defineConfig({',
+                '  testDir,',
+                '})',
+                '',
+            ].join('\n');
+            await promises_1.default.writeFile(playwrightConfigPath, playwrightConfig, 'utf-8');
+            logger.info('playwright.config.ts created', { playwrightConfigPath });
+        }
+    }
     async validate(workspacePath) {
+        logger.debug('Validating workspace', { workspacePath });
         const errors = [];
         try {
             const stat = await promises_1.default.stat(workspacePath);
             if (!stat.isDirectory()) {
                 errors.push('Path is not a directory');
+                logger.warn('Path is not a directory', { workspacePath });
                 return { isValid: false, errors };
             }
         }
-        catch {
+        catch (error) {
             errors.push('Directory does not exist');
+            logger.error('Directory does not exist', error instanceof Error ? error : new Error(String(error)), { workspacePath });
             return { isValid: false, errors };
         }
         const packageJsonPath = node_path_1.default.join(workspacePath, 'package.json');
@@ -29,8 +61,9 @@ class WorkspaceService {
             await promises_1.default.access(packageJsonPath);
             hasPackageJson = true;
         }
-        catch {
+        catch (error) {
             errors.push('Missing package.json');
+            logger.debug('Missing package.json', { packageJsonPath });
         }
         const featuresPath = node_path_1.default.join(workspacePath, 'features');
         let hasFeaturesDir = false;
@@ -38,15 +71,19 @@ class WorkspaceService {
             const stat = await promises_1.default.stat(featuresPath);
             hasFeaturesDir = stat.isDirectory();
         }
-        catch {
+        catch (error) {
             errors.push('Missing features/ directory');
+            logger.debug('Missing features/ directory', { featuresPath });
         }
-        return {
+        const result = {
             isValid: hasPackageJson && hasFeaturesDir,
             errors,
         };
+        logger.info('Workspace validation completed', { isValid: result.isValid, errors: result.errors.length });
+        return result;
     }
     async set(workspacePath) {
+        logger.info('Setting workspace', { workspacePath });
         const validation = await this.validate(workspacePath);
         if (validation.isValid) {
             this.currentWorkspace = {
@@ -56,16 +93,23 @@ class WorkspaceService {
                 hasPackageJson: true,
                 hasFeaturesDir: true,
             };
+            await this.ensurePlaywrightConfig(workspacePath);
             const settingsService = (0, SettingsService_1.getSettingsService)();
             await settingsService.save({ workspacePath });
             await settingsService.addRecentWorkspace(workspacePath);
+            logger.info('Workspace set successfully', { workspacePath, name: this.currentWorkspace.name });
+        }
+        else {
+            logger.warn('Workspace validation failed', { workspacePath, errors: validation.errors });
         }
         return validation;
     }
     async get() {
         if (this.currentWorkspace) {
+            logger.debug('Returning cached workspace', { path: this.currentWorkspace.path });
             return this.currentWorkspace;
         }
+        logger.debug('Loading workspace from settings');
         const settingsService = (0, SettingsService_1.getSettingsService)();
         const settings = await settingsService.get();
         if (settings.workspacePath) {
@@ -78,9 +122,15 @@ class WorkspaceService {
                     hasPackageJson: true,
                     hasFeaturesDir: true,
                 };
+                await this.ensurePlaywrightConfig(settings.workspacePath);
+                logger.info('Workspace loaded from settings', { path: this.currentWorkspace.path });
                 return this.currentWorkspace;
             }
+            else {
+                logger.warn('Workspace from settings is invalid', { path: settings.workspacePath, errors: validation.errors });
+            }
         }
+        logger.debug('No valid workspace found');
         return null;
     }
     getPath() {
@@ -88,6 +138,55 @@ class WorkspaceService {
     }
     clear() {
         this.currentWorkspace = null;
+    }
+    async init(workspacePath) {
+        logger.info('Initializing workspace', { workspacePath });
+        // Create package.json if missing
+        const packageJsonPath = node_path_1.default.join(workspacePath, 'package.json');
+        try {
+            await promises_1.default.access(packageJsonPath);
+            logger.debug('package.json already exists', { packageJsonPath });
+        }
+        catch (error) {
+            logger.info('Creating package.json', { packageJsonPath });
+            const packageJson = {
+                name: node_path_1.default.basename(workspacePath),
+                version: '1.0.0',
+                description: 'BDD Test Project',
+                scripts: {
+                    test: 'npx bddgen && npx playwright test',
+                },
+                devDependencies: {
+                    '@playwright/test': '^1.40.0',
+                    'playwright-bdd': '^6.0.0',
+                },
+            };
+            await promises_1.default.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+            logger.info('package.json created', { packageJsonPath });
+        }
+        // Create features directory if missing
+        const featuresPath = node_path_1.default.join(workspacePath, 'features');
+        try {
+            await promises_1.default.access(featuresPath);
+            logger.debug('features/ directory already exists', { featuresPath });
+        }
+        catch (error) {
+            logger.info('Creating features/ directory', { featuresPath });
+            await promises_1.default.mkdir(featuresPath, { recursive: true });
+            logger.info('features/ directory created', { featuresPath });
+        }
+        await this.ensurePlaywrightConfig(workspacePath);
+        // Now set the workspace
+        await this.set(workspacePath);
+        const result = {
+            path: workspacePath,
+            name: node_path_1.default.basename(workspacePath),
+            isValid: true,
+            hasPackageJson: true,
+            hasFeaturesDir: true,
+        };
+        logger.info('Workspace initialized successfully', { workspacePath, name: result.name });
+        return result;
     }
 }
 exports.WorkspaceService = WorkspaceService;
@@ -97,5 +196,9 @@ function getWorkspaceService() {
         workspaceServiceInstance = new WorkspaceService();
     }
     return workspaceServiceInstance;
+}
+// For testing: reset the singleton instance
+function resetWorkspaceService() {
+    workspaceServiceInstance = null;
 }
 //# sourceMappingURL=WorkspaceService.js.map

@@ -6,12 +6,19 @@ import type { RunResult, RunOptions } from '../types/runner'
 import type { GitStatusResult, GitOperationResult } from '../types/git'
 import type { AppSettings } from '../types/settings'
 
+export interface WorkspaceSelectResult {
+  workspace: WorkspaceInfo | null
+  validation: WorkspaceValidation | null
+  selectedPath: string | null
+}
+
 export interface ElectronAPI {
   workspace: {
     get: () => Promise<WorkspaceInfo | null>
     set: (path: string) => Promise<WorkspaceValidation>
-    select: () => Promise<WorkspaceInfo | null>
+    select: () => Promise<WorkspaceSelectResult>
     validate: (path: string) => Promise<WorkspaceValidation>
+    init: (path: string) => Promise<WorkspaceInfo>
   }
 
   features: {

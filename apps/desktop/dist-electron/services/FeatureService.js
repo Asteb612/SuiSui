@@ -61,7 +61,16 @@ class FeatureService {
     }
     async read(relativePath) {
         const fullPath = this.getFullPath(relativePath);
-        return promises_1.default.readFile(fullPath, 'utf-8');
+        try {
+            return await promises_1.default.readFile(fullPath, 'utf-8');
+        }
+        catch (error) {
+            const nodeError = error;
+            if (nodeError.code === 'ENOENT') {
+                throw new Error(`Feature file not found: ${relativePath}`);
+            }
+            throw error;
+        }
     }
     async write(relativePath, content) {
         const fullPath = this.getFullPath(relativePath);

@@ -170,5 +170,36 @@ export const useScenarioStore = defineStore('scenario', {
       this.isDirty = false
       this.currentFeaturePath = null
     },
+
+    createNew(name: string) {
+      this.scenario = { name, steps: [] }
+      this.validation = null
+      this.isDirty = true
+      this.currentFeaturePath = null
+    },
+
+    replaceStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const index = this.scenario.steps.findIndex((s) => s.id === stepId)
+      if (index !== -1) {
+        const oldStep = this.scenario.steps[index]!
+        // Preserve argument values for matching names and types
+        const newArgs = args.map((arg) => {
+          const existingArg = oldStep.args.find((a) => a.name === arg.name && a.type === arg.type)
+          return {
+            name: arg.name,
+            type: arg.type,
+            value: existingArg?.value ?? '',
+          }
+        })
+
+        this.scenario.steps[index] = {
+          id: oldStep.id,
+          keyword,
+          pattern,
+          args: newArgs,
+        }
+        this.isDirty = true
+      }
+    },
   },
 })

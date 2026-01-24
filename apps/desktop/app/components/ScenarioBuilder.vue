@@ -1,8 +1,17 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useScenarioStore } from '~/stores/scenario'
-import type { ScenarioStep } from '@suisui/shared'
+import type { ScenarioStep, StepKeyword, StepArgDefinition } from '@suisui/shared'
 
 const scenarioStore = useScenarioStore()
+
+// Drag & drop state
+const draggedIndex = ref<number | null>(null)
+const dropTargetIndex = ref<number | null>(null)
+
+// Edit dialog state
+const showEditDialog = ref(false)
+const editingStep = ref<ScenarioStep | null>(null)
 
 function moveStepUp(index: number) {
   if (index > 0) {
@@ -32,6 +41,51 @@ function getStepIssues(stepId: string) {
 async function validateScenario() {
   await scenarioStore.validate()
 }
+
+// Drag & drop handlers
+function handleDragStart(index: number, event: DragEvent) {
+  draggedIndex.value = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+function handleDragEnter(index: number) {
+  if (draggedIndex.value !== null && draggedIndex.value !== index) {
+    dropTargetIndex.value = index
+  }
+}
+
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+function handleDrop(index: number) {
+  if (draggedIndex.value !== null && draggedIndex.value !== index) {
+    scenarioStore.moveStep(draggedIndex.value, index)
+  }
+  draggedIndex.value = null
+  dropTargetIndex.value = null
+}
+
+function handleDragEnd() {
+  draggedIndex.value = null
+  dropTargetIndex.value = null
+}
+
+// Edit step handlers
+function openEditDialog(step: ScenarioStep) {
+  editingStep.value = step
+  showEditDialog.value = true
+}
+
+function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+  scenarioStore.replaceStep(stepId, keyword, pattern, args)
+}
 </script>
 
 <template>
@@ -57,10 +111,21 @@ async function validateScenario() {
         v-for="(step, index) in scenarioStore.scenario.steps"
         :key="step.id"
         class="step-row"
-        :class="{ 'has-error': getStepIssues(step.id).some(i => i.severity === 'error') }"
+        :class="{
+          'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
+          'is-dragging': draggedIndex === index,
+          'is-drop-target': dropTargetIndex === index
+        }"
         data-testid="scenario-step"
+        draggable="true"
+        @dragstart="handleDragStart(index, $event)"
+        @dragenter="handleDragEnter(index)"
+        @dragover="handleDragOver"
+        @drop="handleDrop(index)"
+        @dragend="handleDragEnd"
       >
         <div class="step-controls">
+          <i class="pi pi-bars drag-handle" title="Drag to reorder" />
           <Button
             icon="pi pi-chevron-up"
             text
@@ -86,11 +151,20 @@ async function validateScenario() {
             </span>
             <span class="step-pattern">{{ step.pattern }}</span>
             <Button
+              icon="pi pi-pencil"
+              text
+              rounded
+              size="small"
+              title="Edit step"
+              @click="openEditDialog(step)"
+            />
+            <Button
               icon="pi pi-times"
               text
               rounded
               severity="danger"
               size="small"
+              title="Remove step"
               @click="removeStep(step.id)"
             />
           </div>
@@ -137,6 +211,13 @@ async function validateScenario() {
         Unsaved changes
       </span>
     </div>
+
+    <!-- Edit Step Dialog -->
+    <StepEditDialog
+      v-model:visible="showEditDialog"
+      :step="editingStep"
+      @replace="handleReplaceStep"
+    />
   </div>
 </template>
 
@@ -204,10 +285,35 @@ async function validateScenario() {
   background: rgba(220, 53, 69, 0.05);
 }
 
+.step-row.is-dragging {
+  opacity: 0.5;
+  background: var(--surface-ground);
+}
+
+.step-row.is-drop-target {
+  border-top: 2px solid var(--primary-color);
+}
+
 .step-controls {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.25rem;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-color-secondary);
+  padding: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.drag-handle:hover {
+  color: var(--primary-color);
+}
+
+.step-row.is-dragging .drag-handle {
+  cursor: grabbing;
 }
 
 .step-content {

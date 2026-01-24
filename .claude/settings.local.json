@@ -9,7 +9,14 @@
       "Bash(pnpm --filter @suisui/desktop typecheck:*)",
       "Bash(xargs:*)",
       "Bash(wc:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm lint:fix:*)",
+      "Bash(eslint:*)",
+      "Bash(pnpm eslint:*)",
+      "Bash(pnpm --filter @suisui/shared build:*)"
     ]
   }
 }

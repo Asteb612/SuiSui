@@ -4,6 +4,7 @@ export const IPC_CHANNELS = {
   WORKSPACE_SET: 'workspace:set',
   WORKSPACE_SELECT: 'workspace:select',
   WORKSPACE_VALIDATE: 'workspace:validate',
+  WORKSPACE_INIT: 'workspace:init',
 
   // Features
   FEATURES_LIST: 'features:list',

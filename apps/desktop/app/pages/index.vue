@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
@@ -9,6 +9,9 @@ const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
 const gitStore = useGitStore()
+
+const showNewScenarioDialog = ref(false)
+const showInitDialog = computed(() => workspaceStore.needsInit)
 
 onMounted(async () => {
   await workspaceStore.loadWorkspace()
@@ -35,17 +38,29 @@ async function saveScenario() {
   await workspaceStore.loadFeatures()
 }
 
-function createNewFeature() {
-  const name = prompt('Enter feature name:')
-  if (!name) return
-  const fileName = name.toLowerCase().replace(/\s+/g, '-') + '.feature'
-  scenarioStore.clear()
-  scenarioStore.setName(name)
+function openNewScenarioDialog() {
+  showNewScenarioDialog.value = true
+}
+
+function handleCreateScenario(data: { name: string; fileName: string }) {
+  scenarioStore.createNew(data.name)
   workspaceStore.selectFeature({
     path: '',
-    name,
-    relativePath: fileName,
+    name: data.name,
+    relativePath: data.fileName,
   })
+}
+
+async function initializeWorkspace() {
+  await workspaceStore.initWorkspace()
+  if (workspaceStore.hasWorkspace) {
+    await stepsStore.loadCached()
+    await gitStore.refreshStatus()
+  }
+}
+
+function cancelInit() {
+  workspaceStore.clearPending()
 }
 </script>
 
@@ -74,14 +89,51 @@ function createNewFeature() {
       </div>
 
       <div v-else-if="!workspaceStore.hasWorkspace" class="no-workspace">
-        <i class="pi pi-folder-open" style="font-size: 4rem; color: var(--text-color-secondary)" />
-        <h2>No workspace selected</h2>
-        <p>Select a workspace directory to get started</p>
-        <Button
-          label="Select Workspace"
-          icon="pi pi-folder"
-          @click="workspaceStore.selectWorkspace"
-        />
+        <div class="no-workspace-content">
+          <div class="workspace-icon">
+            <i class="pi pi-folder-open" />
+          </div>
+          <h2>Welcome to SuiSui</h2>
+          <p class="workspace-description">
+            Get started by selecting a workspace directory or creating a new one
+          </p>
+          <div class="workspace-actions">
+            <Button
+              label="Select Existing Workspace"
+              icon="pi pi-folder"
+              size="large"
+              @click="workspaceStore.selectWorkspace"
+            />
+            <Button
+              label="Create New Workspace"
+              icon="pi pi-plus-circle"
+              severity="secondary"
+              size="large"
+              outlined
+              @click="workspaceStore.selectWorkspace"
+            />
+          </div>
+          <div class="workspace-requirements">
+            <p class="requirements-title">Workspace Requirements:</p>
+            <ul class="requirements-list">
+              <li>
+                <i class="pi pi-check-circle" />
+                <span><code>package.json</code> file</span>
+              </li>
+              <li>
+                <i class="pi pi-check-circle" />
+                <span><code>features/</code> directory</span>
+              </li>
+            </ul>
+            <p class="workspace-hint">
+              Don't have these? Select a folder and we'll initialize it for you!
+            </p>
+          </div>
+          <div v-if="workspaceStore.error && !workspaceStore.needsInit" class="workspace-error">
+            <i class="pi pi-exclamation-triangle" />
+            <span>{{ workspaceStore.error }}</span>
+          </div>
+        </div>
       </div>
 
       <div v-else class="workspace-layout">
@@ -95,7 +147,8 @@ function createNewFeature() {
               rounded
               size="small"
               title="New Feature"
-              @click="createNewFeature"
+              data-testid="new-feature-button"
+              @click="openNewScenarioDialog"
             />
           </div>
           <div class="panel-content">
@@ -147,6 +200,61 @@ function createNewFeature() {
         {{ stepsStore.steps.length }} steps loaded
       </span>
     </footer>
+
+    <!-- Dialogs -->
+    <NewScenarioDialog
+      v-model:visible="showNewScenarioDialog"
+      @create="handleCreateScenario"
+    />
+
+    <!-- Initialize Workspace Dialog -->
+    <Dialog
+      :visible="showInitDialog"
+      modal
+      header="Initialize Workspace"
+      :style="{ width: '500px' }"
+      :closable="false"
+    >
+      <div class="init-dialog-content">
+        <div class="init-icon">
+          <i class="pi pi-info-circle" />
+        </div>
+        <h3>Missing Required Files</h3>
+        <p class="init-description">
+          The selected folder is missing some required files to be a valid BDD workspace:
+        </p>
+        <div class="missing-items">
+          <div
+            v-for="error in workspaceStore.pendingValidation?.errors"
+            :key="error"
+            class="missing-item"
+          >
+            <i class="pi pi-times-circle" />
+            <span>{{ error }}</span>
+          </div>
+        </div>
+        <div class="init-info">
+          <p class="init-question">Would you like to initialize this folder as a new BDD workspace?</p>
+          <p class="init-hint">
+            <i class="pi pi-lightbulb" />
+            This will automatically create the missing <code>package.json</code> and <code>features/</code> directory for you.
+          </p>
+        </div>
+      </div>
+      <template #footer>
+        <Button
+          label="Cancel"
+          text
+          severity="secondary"
+          @click="cancelInit"
+        />
+        <Button
+          label="Initialize Workspace"
+          icon="pi pi-check"
+          @click="initializeWorkspace"
+        />
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -193,12 +301,130 @@ function createNewFeature() {
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 1rem;
-  color: var(--text-color-secondary);
+  padding: 2rem;
 }
 
-.no-workspace h2 {
+.no-workspace-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 600px;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.workspace-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-600) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  margin-bottom: 0.5rem;
+}
+
+.workspace-icon i {
+  font-size: 4rem;
+  color: white;
+}
+
+.no-workspace-content h2 {
+  font-size: 2rem;
+  font-weight: 600;
   color: var(--text-color);
+  margin: 0;
+}
+
+.workspace-description {
+  font-size: 1.125rem;
+  color: var(--text-color-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.workspace-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.workspace-requirements {
+  margin-top: 1rem;
+  padding: 1.5rem;
+  background: var(--surface-ground);
+  border-radius: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+.requirements-title {
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.requirements-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.requirements-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-color-secondary);
+  font-size: 0.9375rem;
+}
+
+.requirements-list li i {
+  color: var(--primary-color);
+  font-size: 1.125rem;
+}
+
+.requirements-list code {
+  background: var(--surface-card);
+  padding: 0.125rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  color: var(--primary-color);
+  border: 1px solid var(--surface-border);
+}
+
+.workspace-hint {
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+  margin: 0;
+  font-style: italic;
+  text-align: center;
+}
+
+.workspace-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 8px;
+  color: #dc3545;
+  font-size: 0.9375rem;
+  width: 100%;
+  text-align: left;
+}
+
+.workspace-error i {
+  font-size: 1.25rem;
+  flex-shrink: 0;
 }
 
 .workspace-layout {
@@ -285,5 +511,105 @@ function createNewFeature() {
 
 .steps-info {
   color: var(--primary-color);
+}
+
+.init-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0.5rem 0;
+}
+
+.init-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.init-icon i {
+  font-size: 3rem;
+  color: var(--primary-color);
+}
+
+.init-dialog-content h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
+  text-align: center;
+}
+
+.init-description {
+  margin: 0;
+  color: var(--text-color-secondary);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.missing-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(220, 53, 69, 0.05);
+  border: 1px solid rgba(220, 53, 69, 0.2);
+  border-radius: 6px;
+}
+
+.missing-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #dc3545;
+  font-size: 0.9375rem;
+}
+
+.missing-item i {
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.init-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+.init-question {
+  margin: 0;
+  font-weight: 500;
+  color: var(--text-color);
+  text-align: center;
+}
+
+.init-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--surface-ground);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+  line-height: 1.5;
+}
+
+.init-hint i {
+  color: var(--primary-color);
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.init-hint code {
+  background: var(--surface-card);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  color: var(--primary-color);
+  border: 1px solid var(--surface-border);
 }
 </style>

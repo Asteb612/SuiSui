@@ -1,0 +1,458 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { vol } from 'memfs'
+import path from 'node:path'
+import { WorkspaceService } from '../services/WorkspaceService'
+import type { AppSettings } from '@suisui/shared'
+import { DEFAULT_SETTINGS } from '@suisui/shared'
+
+// Mock fs/promises with memfs
+vi.mock('node:fs/promises', async () => {
+  const memfs = await import('memfs')
+  return {
+    default: memfs.vol.promises,
+  }
+})
+
+// Mock SettingsService
+const mockSave = vi.fn()
+const mockAddRecentWorkspace = vi.fn()
+const mockGet = vi.fn<() => Promise<AppSettings>>()
+
+vi.mock('../services/SettingsService', () => ({
+  getSettingsService: () => ({
+    save: mockSave,
+    addRecentWorkspace: mockAddRecentWorkspace,
+    get: mockGet,
+  }),
+}))
+
+describe('WorkspaceService', () => {
+  let service: WorkspaceService
+
+  beforeEach(() => {
+    // Reset memfs volume
+    vol.reset()
+    // Reset mocks
+    vi.clearAllMocks()
+    mockGet.mockResolvedValue({ ...DEFAULT_SETTINGS })
+    // Create new service instance for each test
+    service = new WorkspaceService()
+  })
+
+  describe('validate', () => {
+    it('should validate a valid workspace', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('should return error when directory does not exist', async () => {
+      const result = await service.validate('/nonexistent/path')
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Directory does not exist')
+    })
+
+    it('should return error when path is not a directory', async () => {
+      const filePath = '/test/file.txt'
+      vol.fromJSON({
+        [filePath]: 'content',
+      })
+
+      const result = await service.validate(filePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Path is not a directory')
+    })
+
+    it('should return error when package.json is missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing package.json')
+    })
+
+    it('should return error when features directory is missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing features/ directory')
+    })
+
+    it('should return multiple errors when both package.json and features are missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/.gitkeep`]: '',
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing package.json')
+      expect(result.errors).toContain('Missing features/ directory')
+      expect(result.errors).toHaveLength(2)
+    })
+  })
+
+  describe('set', () => {
+    it('should successfully set a valid workspace', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.set(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
+      expect(service.getPath()).toBe(workspacePath)
+    })
+
+    it('should create playwright.config.ts when missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = await vol.promises.readFile(configPath, 'utf-8')
+      expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should not set workspace when validation fails', async () => {
+      const workspacePath = '/invalid/workspace'
+
+      const result = await service.set(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(mockSave).not.toHaveBeenCalled()
+      expect(mockAddRecentWorkspace).not.toHaveBeenCalled()
+      expect(service.getPath()).toBeNull()
+    })
+
+    it('should update current workspace when setting a new valid workspace', async () => {
+      const workspacePath1 = '/test/workspace1'
+      const workspacePath2 = '/test/workspace2'
+      vol.fromJSON({
+        [`${workspacePath1}/package.json`]: JSON.stringify({ name: 'test1' }),
+        [`${workspacePath1}/features/.gitkeep`]: '',
+        [`${workspacePath2}/package.json`]: JSON.stringify({ name: 'test2' }),
+        [`${workspacePath2}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath1)
+      expect(service.getPath()).toBe(workspacePath1)
+
+      await service.set(workspacePath2)
+      expect(service.getPath()).toBe(workspacePath2)
+    })
+  })
+
+  describe('get', () => {
+    it('should return current workspace if set', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath)
+      const result = await service.get()
+
+      expect(result).not.toBeNull()
+      expect(result?.path).toBe(workspacePath)
+      expect(result?.name).toBe('workspace')
+      expect(result?.isValid).toBe(true)
+      expect(result?.hasPackageJson).toBe(true)
+      expect(result?.hasFeaturesDir).toBe(true)
+    })
+
+    it('should load workspace from settings if no current workspace', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath,
+      })
+
+      const result = await service.get()
+
+      expect(result).not.toBeNull()
+      expect(result?.path).toBe(workspacePath)
+      expect(mockGet).toHaveBeenCalled()
+    })
+
+    it('should create playwright.config.ts when loading from settings', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath,
+      })
+
+      await service.get()
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = await vol.promises.readFile(configPath, 'utf-8')
+      expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should return null if no workspace in settings', async () => {
+      mockGet.mockResolvedValue({ ...DEFAULT_SETTINGS })
+
+      const result = await service.get()
+
+      expect(result).toBeNull()
+    })
+
+    it('should return null if workspace in settings is invalid', async () => {
+      const invalidPath = '/invalid/workspace'
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath: invalidPath,
+      })
+
+      const result = await service.get()
+
+      expect(result).toBeNull()
+    })
+
+    it('should cache workspace after loading from settings', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath,
+      })
+
+      const result1 = await service.get()
+      const result2 = await service.get()
+
+      expect(result1).not.toBeNull()
+      expect(result2).not.toBeNull()
+      expect(result1?.path).toBe(result2?.path)
+      // Should only call get() once (on first call)
+      expect(mockGet).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('getPath', () => {
+    it('should return workspace path when set', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath)
+
+      expect(service.getPath()).toBe(workspacePath)
+    })
+
+    it('should return null when no workspace is set', () => {
+      expect(service.getPath()).toBeNull()
+    })
+  })
+
+  describe('clear', () => {
+    it('should clear current workspace', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath)
+      expect(service.getPath()).toBe(workspacePath)
+
+      service.clear()
+      expect(service.getPath()).toBeNull()
+      expect(await service.get()).toBeNull()
+    })
+  })
+
+  describe('init', () => {
+    it('should create package.json if missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.path).toBe(workspacePath)
+      
+      // Check that package.json was created
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
+      const packageJson = JSON.parse(packageJsonContent as string)
+      
+      expect(packageJson.name).toBe('workspace')
+      expect(packageJson.version).toBe('1.0.0')
+      expect(packageJson.description).toBe('BDD Test Project')
+      expect(packageJson.scripts.test).toBe('npx bddgen && npx playwright test')
+      expect(packageJson.devDependencies).toBeDefined()
+    })
+
+    it('should create features directory if missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      
+      // Check that features directory was created
+      const featuresPath = path.join(workspacePath, 'features')
+      const stat = await vol.promises.stat(featuresPath)
+      expect(stat.isDirectory()).toBe(true)
+    })
+
+    it('should create playwright.config.ts if missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = await vol.promises.readFile(configPath, 'utf-8')
+      expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should not overwrite existing playwright.config.ts', async () => {
+      const workspacePath = '/test/workspace'
+      const existingConfig = "export default {}"
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/playwright.config.ts`]: existingConfig,
+      })
+
+      await service.init(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = await vol.promises.readFile(configPath, 'utf-8')
+      expect(String(configContent)).toBe(existingConfig)
+    })
+
+    it('should not overwrite existing package.json', async () => {
+      const workspacePath = '/test/workspace'
+      const existingPackageJson = {
+        name: 'existing-project',
+        version: '2.0.0',
+        customField: 'custom',
+      }
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify(existingPackageJson),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      // Check that package.json was not overwritten
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
+      const packageJson = JSON.parse(packageJsonContent as string)
+      
+      expect(packageJson.name).toBe('existing-project')
+      expect(packageJson.version).toBe('2.0.0')
+      expect(packageJson.customField).toBe('custom')
+      expect(packageJson.description).toBeUndefined()
+    })
+
+    it('should not fail if features directory already exists', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      // Should not throw error
+    })
+
+    it('should set workspace after initialization', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      expect(service.getPath()).toBe(workspacePath)
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
+    })
+
+    it('should handle partial initialization (package.json exists, features missing)', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      const featuresPath = path.join(workspacePath, 'features')
+      const stat = await vol.promises.stat(featuresPath)
+      expect(stat.isDirectory()).toBe(true)
+    })
+
+    it('should handle partial initialization (features exists, package.json missing)', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
+      const packageJson = JSON.parse(packageJsonContent as string)
+      expect(packageJson.name).toBe('workspace')
+    })
+  })
+})

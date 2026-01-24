@@ -4,6 +4,8 @@ exports.registerIpcHandlers = registerIpcHandlers;
 const electron_1 = require("electron");
 const shared_1 = require("@suisui/shared");
 const services_1 = require("../services");
+const logger_1 = require("../utils/logger");
+const logger = (0, logger_1.createLogger)('IPC');
 function registerIpcHandlers(ipcMain, dialog, shell, options) {
     const { isTestMode } = options;
     if (isTestMode) {
@@ -25,28 +27,60 @@ function registerIpcHandlers(ipcMain, dialog, shell, options) {
     });
     // Workspace handlers
     ipcMain.handle(shared_1.IPC_CHANNELS.WORKSPACE_GET, async () => {
-        return workspaceService.get();
+        logger.debug('WORKSPACE_GET called');
+        const result = await workspaceService.get();
+        logger.debug('WORKSPACE_GET completed', { hasWorkspace: result !== null });
+        return result;
     });
     ipcMain.handle(shared_1.IPC_CHANNELS.WORKSPACE_SET, async (_event, path) => {
-        return workspaceService.set(path);
+        logger.info('WORKSPACE_SET called', { path });
+        const result = await workspaceService.set(path);
+        logger.info('WORKSPACE_SET completed', { path, isValid: result.isValid });
+        return result;
     });
     ipcMain.handle(shared_1.IPC_CHANNELS.WORKSPACE_SELECT, async () => {
-        const result = await dialog.showOpenDialog({
-            properties: ['openDirectory'],
-            title: 'Select Workspace Directory',
-        });
-        if (result.canceled || result.filePaths.length === 0) {
-            return null;
+        logger.info('WORKSPACE_SELECT called');
+        let workspacePath = null;
+        // Mock dialog in test mode using environment variable
+        if (isTestMode && process.env.TEST_WORKSPACE_PATH) {
+            workspacePath = process.env.TEST_WORKSPACE_PATH;
+            logger.debug('Test mode: using path from env', { workspacePath });
         }
-        const workspacePath = result.filePaths[0];
+        else {
+            logger.debug('Showing workspace selection dialog');
+            // Normal dialog flow (requires GUI, won't work in headless mode)
+            const result = await dialog.showOpenDialog({
+                properties: ['openDirectory'],
+                title: 'Select Workspace Directory',
+            });
+            if (result.canceled || result.filePaths.length === 0) {
+                logger.debug('Workspace selection canceled');
+                return { workspace: null, validation: null, selectedPath: null };
+            }
+            workspacePath = result.filePaths[0];
+            logger.info('Workspace path selected', { workspacePath });
+        }
+        // Continue with validation and workspace setup
         const validation = await workspaceService.set(workspacePath);
         if (!validation.isValid) {
-            return null;
+            logger.warn('Workspace validation failed', { workspacePath, errors: validation.errors });
+            return { workspace: null, validation, selectedPath: workspacePath };
         }
-        return workspaceService.get();
+        const workspace = await workspaceService.get();
+        logger.info('Workspace selected successfully', { workspacePath, workspaceName: workspace?.name });
+        return { workspace, validation, selectedPath: workspacePath };
     });
     ipcMain.handle(shared_1.IPC_CHANNELS.WORKSPACE_VALIDATE, async (_event, path) => {
-        return workspaceService.validate(path);
+        logger.debug('WORKSPACE_VALIDATE called', { path });
+        const result = await workspaceService.validate(path);
+        logger.debug('WORKSPACE_VALIDATE completed', { path, isValid: result.isValid });
+        return result;
+    });
+    ipcMain.handle(shared_1.IPC_CHANNELS.WORKSPACE_INIT, async (_event, path) => {
+        logger.info('WORKSPACE_INIT called', { path });
+        const result = await workspaceService.init(path);
+        logger.info('WORKSPACE_INIT completed', { path, workspaceName: result.name });
+        return result;
     });
     // Features handlers
     ipcMain.handle(shared_1.IPC_CHANNELS.FEATURES_LIST, async () => {
@@ -105,6 +139,6 @@ function registerIpcHandlers(ipcMain, dialog, shell, options) {
     ipcMain.handle(shared_1.IPC_CHANNELS.SETTINGS_RESET, async () => {
         await settingsService.reset();
     });
-    console.log(`[IPC] Handlers registered (testMode: ${isTestMode})`);
+    logger.info('IPC handlers registered', { isTestMode });
 }
 //# sourceMappingURL=handlers.js.map

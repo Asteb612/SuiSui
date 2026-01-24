@@ -8,6 +8,7 @@ const api: ElectronAPI = {
     set: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SET, path),
     select: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SELECT),
     validate: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_VALIDATE, path),
+    init: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_INIT, path),
   },
 
   features: {

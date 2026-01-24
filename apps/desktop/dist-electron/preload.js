@@ -8,6 +8,7 @@ const api = {
         set: (path) => electron_1.ipcRenderer.invoke(shared_1.IPC_CHANNELS.WORKSPACE_SET, path),
         select: () => electron_1.ipcRenderer.invoke(shared_1.IPC_CHANNELS.WORKSPACE_SELECT),
         validate: (path) => electron_1.ipcRenderer.invoke(shared_1.IPC_CHANNELS.WORKSPACE_VALIDATE, path),
+        init: (path) => electron_1.ipcRenderer.invoke(shared_1.IPC_CHANNELS.WORKSPACE_INIT, path),
     },
     features: {
         list: () => electron_1.ipcRenderer.invoke(shared_1.IPC_CHANNELS.FEATURES_LIST),
