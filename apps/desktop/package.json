@@ -11,6 +11,7 @@
     "dev:electron:watch": "tsc -p electron/tsconfig.json --watch",
     "build": "nuxt build && pnpm build:electron",
     "build:electron": "tsc -p electron/tsconfig.json",
+    "dist": "pnpm build && electron-builder --publish=never",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
@@ -45,5 +46,39 @@
     "vue-router": "^4.5.0",
     "vue-tsc": "^3.2.3",
     "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.suisui.desktop",
+    "productName": "SuiSui",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      ".output/public/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "dist-electron/main.js"
+    },
+    "asar": true,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
   }
 }
