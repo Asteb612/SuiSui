@@ -80,6 +80,9 @@
       ]
     },
     "linux": {
+      "executableName": "suisui",
+      "category": "Utility",
+      "packageName": "suisui",
       "target": [
         "AppImage",
         "deb"
