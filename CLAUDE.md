@@ -205,12 +205,14 @@ ScenarioStore handles bidirectional conversion:
 - `toGherkin()` - Scenario object → .feature content
 - `parseGherkin()` - .feature content → Scenario object
 
-## Generic Steps
+## Default Steps
 
-The app includes 10 built-in generic steps in `@suisui/shared`:
+When a workspace is initialized, the app creates `features/steps/generic.steps.ts` with 10 default step definitions that can be used by bddgen and Playwright:
 - Given: "I am on the {string} page", "I am logged in as {string}"
 - When: "I click on {string}", "I fill {string} with {string}", etc.
 - Then: "I should see {string}", "the URL should contain {string}", etc.
+
+These are real playwright-bdd step definitions that users can customize or extend.
 
 ## Do Not
 

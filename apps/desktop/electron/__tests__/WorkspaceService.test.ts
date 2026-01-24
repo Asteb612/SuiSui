@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { vol } from 'memfs'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { WorkspaceService } from '../services/WorkspaceService'
 import type { AppSettings } from '@suisui/shared'
 import { DEFAULT_SETTINGS } from '@suisui/shared'
@@ -26,12 +27,20 @@ vi.mock('../services/SettingsService', () => ({
   }),
 }))
 
+// Read the actual asset file content for mocking
+const assetFilePath = path.join(__dirname, '..', 'assets', 'generic.steps.ts')
+const defaultStepsContent = readFileSync(assetFilePath, 'utf-8')
+
 describe('WorkspaceService', () => {
   let service: WorkspaceService
 
   beforeEach(() => {
     // Reset memfs volume
     vol.reset()
+    // Add the asset file to the mock filesystem
+    vol.fromJSON({
+      [assetFilePath]: defaultStepsContent,
+    })
     // Reset mocks
     vi.clearAllMocks()
     mockGet.mockResolvedValue({ ...DEFAULT_SETTINGS })
@@ -139,6 +148,39 @@ describe('WorkspaceService', () => {
       const configPath = path.join(workspacePath, 'playwright.config.ts')
       const configContent = await vol.promises.readFile(configPath, 'utf-8')
       expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should create generic.steps.ts when missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.set(workspacePath)
+
+      const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
+      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
+      expect(String(stepsContent)).toContain('createBdd')
+      expect(String(stepsContent)).toContain('I am on the {string} page')
+      expect(String(stepsContent)).toContain('I click on {string}')
+      expect(String(stepsContent)).toContain('I should see {string}')
+    })
+
+    it('should not overwrite existing generic.steps.ts', async () => {
+      const workspacePath = '/test/workspace'
+      const existingSteps = '// Custom steps'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/features/steps/generic.steps.ts`]: existingSteps,
+      })
+
+      await service.set(workspacePath)
+
+      const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
+      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
+      expect(String(stepsContent)).toBe(existingSteps)
     })
 
     it('should not set workspace when validation fails', async () => {
@@ -357,6 +399,52 @@ describe('WorkspaceService', () => {
       const configPath = path.join(workspacePath, 'playwright.config.ts')
       const configContent = await vol.promises.readFile(configPath, 'utf-8')
       expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should create generic.steps.ts with default step definitions', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
+      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
+
+      // Check imports
+      expect(String(stepsContent)).toContain("import { createBdd } from 'playwright-bdd'")
+
+      // Check Given steps
+      expect(String(stepsContent)).toContain("Given('I am on the {string} page'")
+      expect(String(stepsContent)).toContain("Given('I am logged in as {string}'")
+
+      // Check When steps
+      expect(String(stepsContent)).toContain("When('I click on {string}'")
+      expect(String(stepsContent)).toContain("When('I fill {string} with {string}'")
+      expect(String(stepsContent)).toContain("When('I select {string} from {string}'")
+      expect(String(stepsContent)).toContain("When('I wait for {int} seconds'")
+
+      // Check Then steps
+      expect(String(stepsContent)).toContain("Then('I should see {string}'")
+      expect(String(stepsContent)).toContain("Then('I should not see {string}'")
+      expect(String(stepsContent)).toContain("Then('the URL should contain {string}'")
+      expect(String(stepsContent)).toContain("Then('the element {string} should be visible'")
+    })
+
+    it('should not overwrite existing generic.steps.ts', async () => {
+      const workspacePath = '/test/workspace'
+      const existingSteps = '// Custom user steps'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/steps/generic.steps.ts`]: existingSteps,
+      })
+
+      await service.init(workspacePath)
+
+      const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
+      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
+      expect(String(stepsContent)).toBe(existingSteps)
     })
 
     it('should not overwrite existing playwright.config.ts', async () => {

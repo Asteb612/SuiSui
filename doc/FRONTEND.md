@@ -100,8 +100,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 
 **Features:**
 - Categorized step display (Given/When/Then)
-- Project steps from bddgen export
-- Generic steps from `GENERIC_STEPS` constant
+- Steps from bddgen export (includes generic steps from workspace)
 - Clickable step items
 - Search/filter functionality
 
@@ -242,7 +241,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 | `givenSteps` | StepDefinition[] | Filter by Given keyword |
 | `whenSteps` | StepDefinition[] | Filter by When keyword |
 | `thenSteps` | StepDefinition[] | Filter by Then keyword |
-| `allStepsWithGeneric` | StepDefinition[] | Includes built-in steps |
+| `allSteps` | StepDefinition[] | All steps from workspace |
 | `stepsByKeyword` | (kw) => StepDefinition[] | Filter function |
 
 ---

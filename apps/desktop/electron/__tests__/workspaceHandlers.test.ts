@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { vol } from 'memfs'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { IPC_CHANNELS } from '@suisui/shared'
 import { registerIpcHandlers } from '../ipc/handlers'
 import { resetWorkspaceService } from '../services/WorkspaceService'
 import type { AppSettings } from '@suisui/shared'
 import { DEFAULT_SETTINGS } from '@suisui/shared'
+
+// Read the actual asset file content for mocking
+const assetFilePath = path.join(__dirname, '..', 'assets', 'generic.steps.ts')
+const defaultStepsContent = readFileSync(assetFilePath, 'utf-8')
 
 // Mock fs/promises with memfs
 vi.mock('node:fs/promises', async () => {
@@ -70,6 +75,10 @@ describe('Workspace IPC Handlers', () => {
   beforeEach(() => {
     // Reset memfs volume
     vol.reset()
+    // Add the asset file to the mock filesystem
+    vol.fromJSON({
+      [assetFilePath]: defaultStepsContent,
+    })
     // Reset workspace service singleton
     resetWorkspaceService()
     // Reset mocks

@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import type { StepDefinition, DecoratorDefinition, StepKeyword } from '@suisui/shared'
-import { GENERIC_STEPS } from '@suisui/shared'
 
 export const useStepsStore = defineStore('steps', {
   state: () => ({
@@ -16,31 +15,13 @@ export const useStepsStore = defineStore('steps', {
     whenSteps: (state) => state.steps.filter((s) => s.keyword === 'When'),
     thenSteps: (state) => state.steps.filter((s) => s.keyword === 'Then'),
 
-    allStepsWithGeneric: (state) => {
-      const genericStepDefs: StepDefinition[] = GENERIC_STEPS.map((gs) => ({
-        id: gs.id,
-        keyword: gs.keyword,
-        pattern: gs.pattern,
-        location: 'generic',
-        args: gs.args,
-        isGeneric: true,
-      }))
-      return [...state.steps, ...genericStepDefs]
-    },
+    // All steps are now real steps from the workspace (including generic steps from generic.steps.ts)
+    allSteps: (state) => state.steps,
 
     stepsByKeyword:
       (state) =>
       (keyword: StepKeyword): StepDefinition[] => {
-        const projectSteps = state.steps.filter((s) => s.keyword === keyword)
-        const genericSteps = GENERIC_STEPS.filter((s) => s.keyword === keyword).map((gs) => ({
-          id: gs.id,
-          keyword: gs.keyword,
-          pattern: gs.pattern,
-          location: 'generic',
-          args: gs.args,
-          isGeneric: true,
-        }))
-        return [...projectSteps, ...genericSteps]
+        return state.steps.filter((s) => s.keyword === keyword)
       },
   },
 
