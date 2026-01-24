@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "description": "SuiSui Desktop - BDD Test Builder",
+  "homepage": "https://github.com/Asteb612/SuiSui",
+  "author": {
+    "name": "Arthur Grosso",
+    "email": "arthur.grosso@gmail.com"
+  },
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron\"",

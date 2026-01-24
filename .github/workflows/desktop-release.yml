@@ -34,7 +34,9 @@ jobs:
         run: pnpm -C packages/shared build
 
       - name: Build desktop
-        run: NUXT_TYPECHECK=false pnpm --filter @suisui/desktop build
+        env:
+          NUXT_TYPECHECK: false
+        run: pnpm --filter @suisui/desktop build
 
       - name: Package app
         run: pnpm --filter @suisui/desktop exec electron-builder --publish=never
