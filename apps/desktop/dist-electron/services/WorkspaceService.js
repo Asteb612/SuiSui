@@ -61,7 +61,7 @@ class WorkspaceService {
             await promises_1.default.access(packageJsonPath);
             hasPackageJson = true;
         }
-        catch (error) {
+        catch {
             errors.push('Missing package.json');
             logger.debug('Missing package.json', { packageJsonPath });
         }
@@ -71,7 +71,7 @@ class WorkspaceService {
             const stat = await promises_1.default.stat(featuresPath);
             hasFeaturesDir = stat.isDirectory();
         }
-        catch (error) {
+        catch {
             errors.push('Missing features/ directory');
             logger.debug('Missing features/ directory', { featuresPath });
         }
@@ -147,7 +147,7 @@ class WorkspaceService {
             await promises_1.default.access(packageJsonPath);
             logger.debug('package.json already exists', { packageJsonPath });
         }
-        catch (error) {
+        catch {
             logger.info('Creating package.json', { packageJsonPath });
             const packageJson = {
                 name: node_path_1.default.basename(workspacePath),
@@ -170,7 +170,7 @@ class WorkspaceService {
             await promises_1.default.access(featuresPath);
             logger.debug('features/ directory already exists', { featuresPath });
         }
-        catch (error) {
+        catch {
             logger.info('Creating features/ directory', { featuresPath });
             await promises_1.default.mkdir(featuresPath, { recursive: true });
             logger.info('features/ directory created', { featuresPath });
