@@ -31,7 +31,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build shared
-        run: pnpm -w --filter @suisui/shared build
+        run: pnpm -C packages/shared build
 
       - name: Build desktop
         run: NUXT_TYPECHECK=false pnpm --filter @suisui/desktop build

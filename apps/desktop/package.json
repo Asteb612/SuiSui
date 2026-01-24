@@ -9,7 +9,7 @@
     "dev:nuxt": "nuxt dev --port 3000",
     "dev:electron": "wait-on http://localhost:3000 && electron .",
     "dev:electron:watch": "tsc -p electron/tsconfig.json --watch",
-    "build": "pnpm -w --filter @suisui/shared build && nuxt build && pnpm build:electron",
+    "build": "pnpm -C ../../packages/shared build && nuxt build && pnpm build:electron",
     "build:electron": "tsc -p electron/tsconfig.json",
     "dist": "NUXT_TYPECHECK=false pnpm build && electron-builder --publish=never",
     "preview": "nuxt preview",
