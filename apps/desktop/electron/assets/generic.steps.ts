@@ -4,7 +4,22 @@ const { Given, When, Then } = createBdd();
 
 // Navigation steps
 Given('I am on the {string} page', async ({ page }, pageName: string) => {
-  await page.goto(`/${pageName}`);
+  const trimmed = pageName.trim();
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
+    await page.goto(trimmed);
+    return;
+  }
+  if (trimmed.startsWith('//')) {
+    await page.goto(`https:${trimmed}`);
+    return;
+  }
+  const target =
+    trimmed === '' || trimmed === '/'
+      ? '/'
+      : trimmed.startsWith('/')
+        ? trimmed
+        : `/${trimmed}`;
+  await page.goto(target);
 });
 
 Given('I am logged in as {string}', async ({ page }, username: string) => {

@@ -11,6 +11,16 @@ const promises_1 = __importDefault(require("node:fs/promises"));
 const SettingsService_1 = require("./SettingsService");
 const logger_1 = require("../utils/logger");
 const logger = (0, logger_1.createLogger)('WorkspaceService');
+/**
+ * Path to the default step definitions asset file.
+ * In development: electron/assets/generic.steps.ts
+ * In production: dist-electron/assets/generic.steps.ts (after build)
+ */
+function getDefaultStepsAssetPath() {
+    // __dirname points to electron/services/ in dev, dist-electron/services/ after build
+    // Go up from services/ to electron/, then into assets/
+    return node_path_1.default.join(__dirname, '..', 'assets', 'generic.steps.ts');
+}
 class WorkspaceService {
     currentWorkspace = null;
     async ensurePlaywrightConfig(workspacePath) {
@@ -30,13 +40,47 @@ class WorkspaceService {
                 "  steps: ['features/**/*.ts', 'features/**/*.js'],",
                 '})',
                 '',
+                'const rawBaseUrl = process.env.BASE_URL',
+                'const baseURL = rawBaseUrl && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\\/\\//.test(rawBaseUrl)',
+                "  ? `https://${rawBaseUrl}`",
+                '  : rawBaseUrl',
+                '',
                 'export default defineConfig({',
                 '  testDir,',
+                '  use: {',
+                '    // Base URL is set via BASE_URL environment variable from SuiSui',
+                '    baseURL,',
+                '  },',
                 '})',
                 '',
             ].join('\n');
             await promises_1.default.writeFile(playwrightConfigPath, playwrightConfig, 'utf-8');
             logger.info('playwright.config.ts created', { playwrightConfigPath });
+        }
+    }
+    async ensureDefaultSteps(workspacePath) {
+        const stepsPath = node_path_1.default.join(workspacePath, 'features', 'steps');
+        const defaultStepsPath = node_path_1.default.join(stepsPath, 'generic.steps.ts');
+        try {
+            await promises_1.default.access(defaultStepsPath);
+            logger.debug('generic.steps.ts already exists', { defaultStepsPath });
+        }
+        catch {
+            // Ensure steps directory exists
+            try {
+                await promises_1.default.access(stepsPath);
+            }
+            catch {
+                logger.info('Creating features/steps/ directory', { stepsPath });
+                await promises_1.default.mkdir(stepsPath, { recursive: true });
+            }
+            // Read the default steps from the asset file
+            const assetPath = getDefaultStepsAssetPath();
+            logger.info('Reading default steps from asset', { assetPath });
+            const defaultStepsContent = await promises_1.default.readFile(assetPath, 'utf-8');
+            logger.info('Creating generic.steps.ts', { defaultStepsPath });
+            await promises_1.default.writeFile(defaultStepsPath, defaultStepsContent, 'utf-8');
+            logger.info('generic.steps.ts created', { defaultStepsPath });
         }
     }
     async validate(workspacePath) {
@@ -94,6 +138,7 @@ class WorkspaceService {
                 hasFeaturesDir: true,
             };
             await this.ensurePlaywrightConfig(workspacePath);
+            await this.ensureDefaultSteps(workspacePath);
             const settingsService = (0, SettingsService_1.getSettingsService)();
             await settingsService.save({ workspacePath });
             await settingsService.addRecentWorkspace(workspacePath);
@@ -123,6 +168,7 @@ class WorkspaceService {
                     hasFeaturesDir: true,
                 };
                 await this.ensurePlaywrightConfig(settings.workspacePath);
+                await this.ensureDefaultSteps(settings.workspacePath);
                 logger.info('Workspace loaded from settings', { path: this.currentWorkspace.path });
                 return this.currentWorkspace;
             }
@@ -176,6 +222,7 @@ class WorkspaceService {
             logger.info('features/ directory created', { featuresPath });
         }
         await this.ensurePlaywrightConfig(workspacePath);
+        await this.ensureDefaultSteps(workspacePath);
         // Now set the workspace
         await this.set(workspacePath);
         const result = {

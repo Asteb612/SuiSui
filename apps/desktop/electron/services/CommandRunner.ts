@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process'
 import type { CommandResult, CommandOptions } from '@suisui/shared'
+import { createLogger } from '../utils/logger'
+
+const logger = createLogger('CommandRunner')
 
 export interface ICommandRunner {
   exec(cmd: string, args: string[], options?: CommandOptions): Promise<CommandResult>
@@ -10,6 +13,7 @@ export class CommandRunner implements ICommandRunner {
     const { cwd, env, timeout = 60000 } = options
 
     return new Promise((resolve) => {
+      const fullCmd = `${cmd} ${args.join(' ')}`
       const child = spawn(cmd, args, {
         cwd,
         env: { ...process.env, ...env },
@@ -20,10 +24,13 @@ export class CommandRunner implements ICommandRunner {
       let stderr = ''
       let timedOut = false
 
-      const timer = setTimeout(() => {
-        timedOut = true
-        child.kill('SIGTERM')
-      }, timeout)
+      const timer =
+        timeout > 0
+          ? setTimeout(() => {
+              timedOut = true
+              child.kill('SIGTERM')
+            }, timeout)
+          : null
 
       child.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -34,7 +41,19 @@ export class CommandRunner implements ICommandRunner {
       })
 
       child.on('close', (code) => {
-        clearTimeout(timer)
+        if (timer) {
+          clearTimeout(timer)
+        }
+        if (timedOut || code !== 0) {
+          logger.warn('Command execution issue', {
+            cmd: fullCmd,
+            cwd,
+            timedOut,
+            exitCode: code ?? 1,
+            stdoutLength: stdout.length,
+            stderrLength: stderr.length,
+          })
+        }
         resolve({
           code: timedOut ? -1 : (code ?? 1),
           stdout,
@@ -43,7 +62,10 @@ export class CommandRunner implements ICommandRunner {
       })
 
       child.on('error', (err) => {
-        clearTimeout(timer)
+        if (timer) {
+          clearTimeout(timer)
+        }
+        logger.error('Command spawn error', err, { cmd: fullCmd, cwd })
         resolve({
           code: 1,
           stdout,

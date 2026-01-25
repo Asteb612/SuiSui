@@ -4,10 +4,13 @@ exports.FakeCommandRunner = exports.CommandRunner = void 0;
 exports.getCommandRunner = getCommandRunner;
 exports.setCommandRunner = setCommandRunner;
 const node_child_process_1 = require("node:child_process");
+const logger_1 = require("../utils/logger");
+const logger = (0, logger_1.createLogger)('CommandRunner');
 class CommandRunner {
     async exec(cmd, args, options = {}) {
         const { cwd, env, timeout = 60000 } = options;
         return new Promise((resolve) => {
+            const fullCmd = `${cmd} ${args.join(' ')}`;
             const child = (0, node_child_process_1.spawn)(cmd, args, {
                 cwd,
                 env: { ...process.env, ...env },
@@ -16,10 +19,12 @@ class CommandRunner {
             let stdout = '';
             let stderr = '';
             let timedOut = false;
-            const timer = setTimeout(() => {
-                timedOut = true;
-                child.kill('SIGTERM');
-            }, timeout);
+            const timer = timeout > 0
+                ? setTimeout(() => {
+                    timedOut = true;
+                    child.kill('SIGTERM');
+                }, timeout)
+                : null;
             child.stdout?.on('data', (data) => {
                 stdout += data.toString();
             });
@@ -27,7 +32,19 @@ class CommandRunner {
                 stderr += data.toString();
             });
             child.on('close', (code) => {
-                clearTimeout(timer);
+                if (timer) {
+                    clearTimeout(timer);
+                }
+                if (timedOut || code !== 0) {
+                    logger.warn('Command execution issue', {
+                        cmd: fullCmd,
+                        cwd,
+                        timedOut,
+                        exitCode: code ?? 1,
+                        stdoutLength: stdout.length,
+                        stderrLength: stderr.length,
+                    });
+                }
                 resolve({
                     code: timedOut ? -1 : (code ?? 1),
                     stdout,
@@ -35,7 +52,10 @@ class CommandRunner {
                 });
             });
             child.on('error', (err) => {
-                clearTimeout(timer);
+                if (timer) {
+                    clearTimeout(timer);
+                }
+                logger.error('Command spawn error', err, { cmd: fullCmd, cwd });
                 resolve({
                     code: 1,
                     stdout,

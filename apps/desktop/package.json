@@ -25,10 +25,12 @@
   },
   "dependencies": {
     "@cucumber/cucumber": "10.3.1",
+    "@playwright/test": "^1.58.0",
     "@pinia/nuxt": "^0.11.3",
     "@suisui/shared": "workspace:*",
     "bddgen": "^1.0.5",
     "keytar": "^7.9.0",
+    "playwright": "^1.58.0",
     "playwright-bdd": "^6.0.0"
   },
   "devDependencies": {

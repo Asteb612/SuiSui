@@ -7,16 +7,28 @@ export const useRunnerStore = defineStore('runner', {
     lastResult: null as RunResult | null,
     logs: [] as string[],
     isRunning: false,
+    baseUrl: '' as string,
   }),
 
   actions: {
+    setBaseUrl(url: string) {
+      this.baseUrl = url
+    },
+
     async runHeadless(featurePath?: string, scenarioName?: string) {
       this.isRunning = true
       this.status = 'running'
       this.logs = ['Starting headless test run...']
+      if (this.baseUrl) {
+        this.logs.push(`Base URL: ${this.baseUrl}`)
+      }
 
       try {
-        const result = await window.api.runner.runHeadless({ featurePath, scenarioName })
+        const result = await window.api.runner.runHeadless({
+          featurePath,
+          scenarioName,
+          baseUrl: this.baseUrl || undefined,
+        })
         this.lastResult = result
         this.status = result.status
         this.logs.push(result.stdout)
@@ -36,9 +48,16 @@ export const useRunnerStore = defineStore('runner', {
       this.isRunning = true
       this.status = 'running'
       this.logs = ['Starting Playwright UI...']
+      if (this.baseUrl) {
+        this.logs.push(`Base URL: ${this.baseUrl}`)
+      }
 
       try {
-        const result = await window.api.runner.runUI({ featurePath, scenarioName })
+        const result = await window.api.runner.runUI({
+          featurePath,
+          scenarioName,
+          baseUrl: this.baseUrl || undefined,
+        })
         this.lastResult = result
         this.status = result.status
         this.logs.push('Playwright UI session ended')

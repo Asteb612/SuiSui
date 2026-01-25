@@ -10,6 +10,7 @@ out/
 
 # Electron
 release/
+dist-electron/
 *.dmg
 *.AppImage
 *.exe

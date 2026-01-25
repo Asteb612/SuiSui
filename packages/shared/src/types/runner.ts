@@ -15,4 +15,5 @@ export interface RunOptions {
   mode: RunMode
   featurePath?: string
   scenarioName?: string
+  baseUrl?: string
 }

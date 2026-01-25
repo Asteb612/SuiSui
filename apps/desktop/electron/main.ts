@@ -1,11 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'node:path'
+import { watch } from 'node:fs'
 import { registerIpcHandlers } from './ipc/handlers'
 
 const isDev = process.env.NODE_ENV !== 'production'
 const isTestMode = process.env.APP_TEST_MODE === '1'
 
 let mainWindow: BrowserWindow | null = null
+let reloadTimeout: NodeJS.Timeout | null = null
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -39,9 +41,38 @@ function createWindow() {
   })
 }
 
+function setupAutoReload() {
+  if (!isDev || isTestMode) return
+
+  const distElectronPath = path.join(__dirname)
+  
+  try {
+    watch(distElectronPath, { recursive: true }, (eventType, filename) => {
+      // Ignore changes to preload.js to avoid reload loops
+      if (filename && filename.includes('preload.js')) return
+      
+      // Debounce reload to avoid multiple rapid reloads
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout)
+      }
+      
+      reloadTimeout = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log(`[Auto-reload] Reloading window after ${filename} changed`)
+          mainWindow.reload()
+        }
+      }, 300)
+    })
+    console.log('[Auto-reload] Watching for file changes in', distElectronPath)
+  } catch (error) {
+    console.warn('[Auto-reload] Failed to setup file watcher:', error)
+  }
+}
+
 app.whenReady().then(() => {
   registerIpcHandlers(ipcMain, dialog, shell, { isTestMode })
   createWindow()
+  setupAutoReload()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

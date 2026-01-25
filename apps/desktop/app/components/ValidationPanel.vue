@@ -69,6 +69,18 @@ const statusColors: Record<string, string> = {
         </span>
       </div>
 
+      <div class="base-url-input">
+        <label for="baseUrl">Base URL</label>
+        <InputText
+          id="baseUrl"
+          :model-value="runnerStore.baseUrl"
+          placeholder="http://localhost:3000"
+          size="small"
+          :disabled="runnerStore.isRunning"
+          @update:model-value="runnerStore.setBaseUrl($event ?? '')"
+        />
+      </div>
+
       <div class="runner-buttons">
         <Button
           label="Headless"
@@ -203,6 +215,23 @@ h4 {
   font-size: 0.75rem;
   color: var(--text-color-secondary);
   margin-left: auto;
+}
+
+.base-url-input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.base-url-input label {
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+}
+
+.base-url-input :deep(input) {
+  width: 100%;
+  font-size: 0.875rem;
 }
 
 .runner-buttons {
