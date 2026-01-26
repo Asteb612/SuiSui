@@ -57,6 +57,7 @@
   "build": {
     "appId": "com.suisui.desktop",
     "productName": "SuiSui",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
