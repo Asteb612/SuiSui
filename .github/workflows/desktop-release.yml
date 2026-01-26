@@ -38,8 +38,17 @@ jobs:
           NUXT_TYPECHECK: false
         run: pnpm --filter @suisui/desktop build
 
-      - name: Package app
-        run: pnpm --filter @suisui/desktop exec electron-builder --publish=never
+      - name: Package app (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm --filter @suisui/desktop exec electron-builder --linux --publish=never
+
+      - name: Package app (macOS)
+        if: matrix.os == 'macos-latest'
+        run: pnpm --filter @suisui/desktop exec electron-builder --mac --publish=never
+
+      - name: Package app (Windows)
+        if: matrix.os == 'windows-latest'
+        run: pnpm --filter @suisui/desktop exec electron-builder --win --publish=never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
