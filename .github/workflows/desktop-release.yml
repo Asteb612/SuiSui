@@ -50,6 +50,19 @@ jobs:
           ls -la dist-electron/public || echo "public folder not found!"
           pnpm exec electron-builder --${{ matrix.platform }} --publish=never
 
+      - name: Debug - Check packaged app contents
+        shell: bash
+        run: |
+          cd apps/desktop
+          echo "=== Checking if public folder is in the packaged app ==="
+          if [ "${{ matrix.platform }}" = "win" ]; then
+            npx asar list release/win-unpacked/resources/app.asar | grep -E "dist-electron/public" || echo "public folder NOT found in app.asar!"
+          elif [ "${{ matrix.platform }}" = "mac" ]; then
+            npx asar list release/mac*/SuiSui.app/Contents/Resources/app.asar | grep -E "dist-electron/public" || echo "public folder NOT found in app.asar!"
+          else
+            npx asar list release/linux-unpacked/resources/app.asar | grep -E "dist-electron/public" || echo "public folder NOT found in app.asar!"
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
