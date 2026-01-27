@@ -15,7 +15,7 @@
     "dev:electron": "wait-on http://localhost:3000 && electron .",
     "dev:electron:watch": "cp -r electron/assets dist-electron/ 2>/dev/null || mkdir -p dist-electron && cp -r electron/assets dist-electron/ && tsc -p electron/tsconfig.json --watch",
     "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
-    "build:electron": "tsc -p electron/tsconfig.json && cp -r electron/assets dist-electron/",
+    "build:electron": "tsc -p electron/tsconfig.json && cp -r electron/assets dist-electron/ && cp -r .output/public dist-electron/public",
     "dist": "cross-env NUXT_TYPECHECK=false pnpm build && electron-builder --publish=never",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
@@ -64,7 +64,6 @@
     },
     "files": [
       "dist-electron/**/*",
-      ".output/public/**/*",
       "package.json"
     ],
     "extraMetadata": {
