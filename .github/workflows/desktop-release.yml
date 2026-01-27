@@ -44,6 +44,13 @@ jobs:
           NUXT_TYPECHECK: false
         run: pnpm --filter @suisui/desktop build
 
+      - name: Debug - List dist-electron contents
+        run: |
+          echo "Contents of apps/desktop/dist-electron:"
+          ls -la apps/desktop/dist-electron
+          echo "Contents of apps/desktop/dist-electron/public:"
+          ls -la apps/desktop/dist-electron/public || echo "public folder not found!"
+
       - name: Package app
         run: pnpm --filter @suisui/desktop exec electron-builder --${{ matrix.platform }} --publish=never
 
