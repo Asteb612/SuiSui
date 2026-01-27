@@ -64,6 +64,7 @@
     },
     "files": [
       "dist-electron/**/*",
+      "!dist-electron/__tests__",
       "package.json"
     ],
     "extraMetadata": {
