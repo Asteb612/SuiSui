@@ -3,7 +3,7 @@ import path from 'node:path'
 import { watch } from 'node:fs'
 import { registerIpcHandlers } from './ipc/handlers'
 
-const isDev = process.env.NODE_ENV !== 'production'
+const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
 
 let mainWindow: BrowserWindow | null = null
