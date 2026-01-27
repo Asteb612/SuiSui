@@ -39,6 +39,7 @@ jobs:
       - name: Build and package desktop
         env:
           NUXT_TYPECHECK: false
+        shell: bash
         run: |
           cd apps/desktop
           pnpm -C ../../packages/shared build
