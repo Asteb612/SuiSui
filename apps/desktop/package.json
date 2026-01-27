@@ -63,8 +63,11 @@
       "output": "release"
     },
     "files": [
-      "dist-electron/**/*",
-      "!dist-electron/__tests__",
+      {
+        "from": "dist-electron",
+        "to": "dist-electron",
+        "filter": ["**/*", "!__tests__/**"]
+      },
       "package.json"
     ],
     "extraMetadata": {
