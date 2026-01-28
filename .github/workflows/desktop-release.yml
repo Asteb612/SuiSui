@@ -44,42 +44,21 @@ jobs:
           cd apps/desktop
           pnpm -C ../../packages/shared build
           pnpm build
-          echo "=== Contents of dist-electron after build ==="
-          ls -la dist-electron
-          echo "=== Contents of .output/public (Nuxt build output) ==="
-          ls -la .output/public || echo ".output/public folder not found!"
-          echo "=== Looking for index.html in .output/public ==="
-          find .output/public -name "index.html" -type f || echo "index.html NOT found in .output/public!"
-          echo "=== Contents of dist-electron/public ==="
-          ls -la dist-electron/public || echo "public folder not found!"
-          echo "=== Looking for index.html in dist-electron/public ==="
-          find dist-electron/public -name "index.html" -type f || echo "index.html NOT found in dist-electron/public!"
-          DEBUG=electron-builder pnpm exec electron-builder --${{ matrix.platform }} --publish=never
-
-      - name: Debug - Check packaged app contents
-        shell: bash
-        run: |
-          cd apps/desktop
-          echo "=== Full contents of app.asar ==="
-          if [ "${{ matrix.platform }}" = "win" ]; then
-            npx asar list release/win-unpacked/resources/app.asar
-            echo ""
-            echo "=== Checking for public folder ==="
-            npx asar list release/win-unpacked/resources/app.asar | grep -E "public" || echo "public folder NOT found!"
-          elif [ "${{ matrix.platform }}" = "mac" ]; then
-            npx asar list release/mac*/SuiSui.app/Contents/Resources/app.asar
-            echo ""
-            echo "=== Checking for public folder ==="
-            npx asar list release/mac*/SuiSui.app/Contents/Resources/app.asar | grep -E "public" || echo "public folder NOT found!"
-          else
-            npx asar list release/linux-unpacked/resources/app.asar
-            echo ""
-            echo "=== Checking for public folder ==="
-            npx asar list release/linux-unpacked/resources/app.asar | grep -E "public" || echo "public folder NOT found!"
-          fi
+          pnpm exec electron-builder --${{ matrix.platform }} --publish=never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.platform }}
-          path: apps/desktop/release/**
+          # Only upload distributable files, not intermediate build artifacts
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.tar.gz
+            apps/desktop/release/latest*.yml
+          # 1 day retention for manual runs, default (repo settings) for tagged releases
+          retention-days: ${{ github.ref_type == 'tag' && 0 || 1 }}
