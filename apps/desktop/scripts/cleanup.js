@@ -3,20 +3,41 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const appRoot = path.resolve(__dirname, '..');
-const targets = [
+const repoRoot = path.resolve(appRoot, '..', '..');
+
+// Desktop app build artifacts
+const desktopTargets = [
   'dist-electron',
   'release',
   'bundled-deps',
   'playwright-browsers',
+  'playwright-browsers-win',
+  'playwright-browsers-mac',
+  'playwright-browsers-linux',
   '.pnpm-deploy',
   'dist',
   '.output',
   '.nuxt'
 ].map((p) => path.join(appRoot, p));
 
-for (const target of targets) {
+// Root-level build artifacts
+const rootTargets = [
+  '.pnpm-deploy',
+  'package'
+].map((p) => path.join(repoRoot, p));
+
+// Shared package build artifacts
+const sharedTargets = [
+  'packages/shared/dist'
+].map((p) => path.join(repoRoot, p));
+
+const allTargets = [...desktopTargets, ...rootTargets, ...sharedTargets];
+
+for (const target of allTargets) {
   if (fs.existsSync(target)) {
     fs.rmSync(target, { recursive: true, force: true });
-    console.log(`[cleanup] removed ${target}`);
+    console.log(`[cleanup] removed ${path.relative(repoRoot, target)}`);
   }
 }
+
+console.log('[cleanup] done');

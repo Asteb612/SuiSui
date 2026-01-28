@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 .pnpm-store/
+.pnpm-deploy/
 
 # Build outputs
 dist/
@@ -11,12 +12,21 @@ out/
 # Electron
 release/
 dist-electron/
+bundled-deps/
 *.dmg
 *.AppImage
 *.exe
 *.deb
 *.rpm
+*.zip
+
+# Playwright browsers (downloaded at build time)
 apps/desktop/playwright-browsers/
+apps/desktop/playwright-browsers-*/
+playwright-browsers/
+
+# Packaged app output
+package/
 
 # IDE
 .idea/
