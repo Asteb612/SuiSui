@@ -19,17 +19,17 @@ on:
 
 jobs:
   build:
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || matrix.platform == github.event.inputs.platform }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: macos-latest
-            platform: mac
-          - os: windows-latest
-            platform: win
+      matrix: ${{ fromJson(
+        (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all')
+          && '{"include":[{"os":"ubuntu-latest","platform":"linux"},{"os":"macos-latest","platform":"mac"},{"os":"windows-latest","platform":"win"}]}'
+          || github.event.inputs.platform == 'linux'
+          && '{"include":[{"os":"ubuntu-latest","platform":"linux"}]}'
+          || github.event.inputs.platform == 'mac'
+          && '{"include":[{"os":"macos-latest","platform":"mac"}]}'
+          || '{"include":[{"os":"windows-latest","platform":"win"}]}'
+      ) }}
     runs-on: ${{ matrix.os }}
 
     steps:
