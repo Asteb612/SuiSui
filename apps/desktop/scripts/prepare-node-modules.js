@@ -20,11 +20,20 @@ if (fs.existsSync(deployDir)) {
 }
 
 console.log('[prepare-node-modules] Running pnpm deploy (prod)...');
-const result = spawnSync(
-  'pnpm',
-  ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir],
-  { cwd: repoRoot, stdio: 'inherit', env: process.env }
-);
+const pnpmArgs = ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir];
+let command = 'pnpm';
+let args = pnpmArgs;
+
+if (process.env.npm_execpath) {
+  command = process.execPath;
+  args = [process.env.npm_execpath, ...pnpmArgs];
+}
+
+const result = spawnSync(command, args, {
+  cwd: repoRoot,
+  stdio: 'inherit',
+  env: process.env
+});
 
 if (result.error) {
   console.error('[prepare-node-modules] Failed to run pnpm.', result.error);
