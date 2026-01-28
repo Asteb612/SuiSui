@@ -64,11 +64,11 @@
     },
     "files": [
       "package.json",
-      "dist-electron/**/*.js",
-      "dist-electron/**/*.js.map",
-      "dist-electron/public/**/*",
-      "dist-electron/assets/**/*",
-      "!dist-electron/__tests__/**"
+      {
+        "from": "dist-electron",
+        "to": "dist-electron",
+        "filter": ["**/*", "!__tests__/**"]
+      }
     ],
     "extraMetadata": {
       "main": "dist-electron/main.js"

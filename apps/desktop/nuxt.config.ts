@@ -7,6 +7,10 @@ export default defineNuxtConfig({
 
   ssr: false,
 
+  nitro: {
+    preset: 'static',
+  },
+
   modules: ['@primevue/nuxt-module', '@pinia/nuxt'],
 
   primevue: {
