@@ -3,6 +3,7 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
+  injectWorkspacePackages: true
 
 importers:
 
@@ -80,7 +81,7 @@ importers:
         version: 33.4.11
       electron-builder:
         specifier: ^25.0.0
-        version: 25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+        version: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       esbuild:
         specifier: ^0.27.2
         version: 0.27.2
@@ -89,7 +90,7 @@ importers:
         version: 3.6.0
       nuxt:
         specifier: ^3.15.0
-        version: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
+        version: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
       primeflex:
         specifier: ^3.3.1
         version: 3.3.1
@@ -969,7 +970,6 @@ packages:
   '@oxc-minify/binding-linux-x64-gnu@0.110.0':
     resolution: {integrity: sha512-XJdA4mmmXOjJxSRgNJXsDP7Xe8h3gQhmb56hUcCrvq5d+h5UcEi2pR8rxsdIrS8QmkLuBA3eHkGK8E27D7DTgQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [linux]
 
   '@oxc-minify/binding-linux-x64-musl@0.110.0':
@@ -1088,7 +1088,6 @@ packages:
   '@oxc-parser/binding-linux-x64-gnu@0.110.0':
     resolution: {integrity: sha512-+e6ws5JLpFehdK+wh6q8icx1iM3Ao+9dtItVWFcRiXxSvGcIlS9viWcMvXKrmcsyVDUf81dnvuMSBigNslxhIQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [linux]
 
   '@oxc-parser/binding-linux-x64-musl@0.110.0':
@@ -1210,7 +1209,6 @@ packages:
   '@oxc-transform/binding-linux-x64-gnu@0.110.0':
     resolution: {integrity: sha512-YQ2joGWCVDZVEU2cD/r/w49hVjDm/Qu1BvC/7zs8LvprzdLS/HyMXGF2oA0puw0b+AqgYaz3bhwKB2xexHyITQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    cpu: [x64]
     os: [linux]
 
   '@oxc-transform/binding-linux-x64-musl@0.110.0':
@@ -5710,11 +5708,10 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@bomb.sh/tab@0.0.11(cac@6.7.14)(citty@0.1.6)(commander@12.1.0)':
+  '@bomb.sh/tab@0.0.11(cac@6.7.14)(citty@0.1.6)':
     optionalDependencies:
       cac: 6.7.14
       citty: 0.1.6
-      commander: 12.1.0
 
   '@clack/core@1.0.0-alpha.7':
     dependencies:
@@ -6266,9 +6263,9 @@ snapshots:
       mkdirp: 1.0.4
       rimraf: 3.0.2
 
-  '@nuxt/cli@3.32.0(cac@6.7.14)(commander@12.1.0)(magicast@0.5.1)':
+  '@nuxt/cli@3.32.0(cac@6.7.14)(magicast@0.5.1)':
     dependencies:
-      '@bomb.sh/tab': 0.0.11(cac@6.7.14)(citty@0.1.6)(commander@12.1.0)
+      '@bomb.sh/tab': 0.0.11(cac@6.7.14)(citty@0.1.6)
       '@clack/prompts': 1.0.0-alpha.9
       c12: 3.3.3(magicast@0.5.1)
       citty: 0.1.6
@@ -6414,7 +6411,7 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  '@nuxt/nitro-server@3.21.0(db0@0.3.4)(encoding@0.1.13)(ioredis@5.9.2)(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(typescript@5.9.3)':
+  '@nuxt/nitro-server@3.21.0(db0@0.3.4)(encoding@0.1.13)(ioredis@5.9.2)(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(typescript@5.9.3)':
     dependencies:
       '@nuxt/devalue': 2.0.2
       '@nuxt/kit': 3.21.0(magicast@0.5.1)
@@ -6432,7 +6429,7 @@ snapshots:
       klona: 2.0.6
       mocked-exports: 0.1.1
       nitropack: 2.13.1(encoding@0.1.13)
-      nuxt: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
+      nuxt: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
       ohash: 2.0.11
       pathe: 2.0.3
       pkg-types: 2.3.0
@@ -6504,7 +6501,7 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  '@nuxt/vite-builder@3.21.0(@types/node@20.19.30)(eslint@9.39.2(jiti@2.6.1))(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vue-tsc@3.2.3(typescript@5.9.3))(vue@3.5.27(typescript@5.9.3))(yaml@2.8.2)':
+  '@nuxt/vite-builder@3.21.0(@types/node@20.19.30)(eslint@9.39.2(jiti@2.6.1))(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vue-tsc@3.2.3(typescript@5.9.3))(vue@3.5.27(typescript@5.9.3))(yaml@2.8.2)':
     dependencies:
       '@nuxt/kit': 3.21.0(magicast@0.5.1)
       '@rollup/plugin-replace': 6.0.3(rollup@4.56.0)
@@ -6524,7 +6521,7 @@ snapshots:
       magic-string: 0.30.21
       mlly: 1.8.0
       mocked-exports: 0.1.1
-      nuxt: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
+      nuxt: 3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2)
       ohash: 2.0.11
       pathe: 2.0.3
       perfect-debounce: 2.1.0
@@ -7535,7 +7532,7 @@ snapshots:
 
   app-builder-bin@5.0.0-alpha.10: {}
 
-  app-builder-lib@25.1.8(dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)))(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)):
+  app-builder-lib@25.1.8(dmg-builder@25.1.8)(electron-builder-squirrel-windows@25.1.8):
     dependencies:
       '@develar/schema-utils': 2.6.5
       '@electron/notarize': 2.5.0
@@ -7551,7 +7548,7 @@ snapshots:
       chromium-pickle-js: 0.2.0
       config-file-ts: 0.2.8-rc1
       debug: 4.4.3(supports-color@8.1.1)
-      dmg-builder: 25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+      dmg-builder: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       dotenv: 16.6.1
       dotenv-expand: 11.0.7
       ejs: 3.1.10
@@ -8254,9 +8251,9 @@ snapshots:
       minimatch: 3.1.2
       p-limit: 3.1.0
 
-  dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)):
+  dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8):
     dependencies:
-      app-builder-lib: 25.1.8(dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)))(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+      app-builder-lib: 25.1.8(dmg-builder@25.1.8)(electron-builder-squirrel-windows@25.1.8)
       builder-util: 25.1.7
       builder-util-runtime: 9.2.10
       fs-extra: 10.1.0
@@ -8329,7 +8326,7 @@ snapshots:
 
   electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8):
     dependencies:
-      app-builder-lib: 25.1.8(dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)))(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+      app-builder-lib: 25.1.8(dmg-builder@25.1.8)(electron-builder-squirrel-windows@25.1.8)
       archiver: 5.3.2
       builder-util: 25.1.7
       fs-extra: 10.1.0
@@ -8338,13 +8335,13 @@ snapshots:
       - dmg-builder
       - supports-color
 
-  electron-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)):
+  electron-builder@25.1.8(electron-builder-squirrel-windows@25.1.8):
     dependencies:
-      app-builder-lib: 25.1.8(dmg-builder@25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8)))(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+      app-builder-lib: 25.1.8(dmg-builder@25.1.8)(electron-builder-squirrel-windows@25.1.8)
       builder-util: 25.1.7
       builder-util-runtime: 9.2.10
       chalk: 4.1.2
-      dmg-builder: 25.1.8(electron-builder-squirrel-windows@25.1.8(dmg-builder@25.1.8))
+      dmg-builder: 25.1.8(electron-builder-squirrel-windows@25.1.8)
       fs-extra: 10.1.0
       is-ci: 3.0.1
       lazy-val: 1.0.5
@@ -9754,16 +9751,16 @@ snapshots:
     dependencies:
       boolbase: 1.0.0
 
-  nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2):
+  nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2):
     dependencies:
       '@dxup/nuxt': 0.3.2(magicast@0.5.1)
-      '@nuxt/cli': 3.32.0(cac@6.7.14)(commander@12.1.0)(magicast@0.5.1)
+      '@nuxt/cli': 3.32.0(cac@6.7.14)(magicast@0.5.1)
       '@nuxt/devtools': 3.1.1(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue@3.5.27(typescript@5.9.3))
       '@nuxt/kit': 3.21.0(magicast@0.5.1)
-      '@nuxt/nitro-server': 3.21.0(db0@0.3.4)(encoding@0.1.13)(ioredis@5.9.2)(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(typescript@5.9.3)
+      '@nuxt/nitro-server': 3.21.0(db0@0.3.4)(encoding@0.1.13)(ioredis@5.9.2)(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(typescript@5.9.3)
       '@nuxt/schema': 3.21.0
       '@nuxt/telemetry': 2.6.6(magicast@0.5.1)
-      '@nuxt/vite-builder': 3.21.0(@types/node@20.19.30)(eslint@9.39.2(jiti@2.6.1))(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(commander@12.1.0)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vue-tsc@3.2.3(typescript@5.9.3))(vue@3.5.27(typescript@5.9.3))(yaml@2.8.2)
+      '@nuxt/vite-builder': 3.21.0(@types/node@20.19.30)(eslint@9.39.2(jiti@2.6.1))(magicast@0.5.1)(nuxt@3.21.0(@parcel/watcher@2.5.6)(@types/node@20.19.30)(@vue/compiler-sfc@3.5.27)(cac@6.7.14)(db0@0.3.4)(encoding@0.1.13)(eslint@9.39.2(jiti@2.6.1))(ioredis@5.9.2)(magicast@0.5.1)(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.30)(terser@5.46.0))(vue-tsc@3.2.3(typescript@5.9.3))(yaml@2.8.2))(optionator@0.9.4)(rollup@4.56.0)(terser@5.46.0)(typescript@5.9.3)(vue-tsc@3.2.3(typescript@5.9.3))(vue@3.5.27(typescript@5.9.3))(yaml@2.8.2)
       '@unhead/vue': 2.1.2(vue@3.5.27(typescript@5.9.3))
       '@vue/shared': 3.5.27
       c12: 3.3.3(magicast@0.5.1)

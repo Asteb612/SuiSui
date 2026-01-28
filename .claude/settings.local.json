@@ -23,7 +23,11 @@
       "Bash(npx tsc:*)",
       "Bash(pnpm build:electron:*)",
       "Bash(node scripts/bundle-deps.js:*)",
-      "Bash(wine:*)"
+      "Bash(wine:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pnpm.io)",
+      "Bash(node /home/grosso_a/Workspace/SuiSui/apps/desktop/scripts/prepare-node-modules.js:*)"
     ]
   }
 }

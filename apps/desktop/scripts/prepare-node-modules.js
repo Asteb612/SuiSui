@@ -9,14 +9,6 @@ const distElectronDir = path.join(appRoot, 'dist-electron');
 const packDir = path.join(distElectronDir, 'node_modules');
 const deployDir = path.join(appRoot, '.pnpm-deploy');
 
-// Critical packages that must exist in node_modules for the app to work
-// These are marked as "external" in bundle-deps.js and need to be available at runtime
-const CRITICAL_PACKAGES = [
-  'playwright',
-  'playwright-core',
-  '@playwright/test',
-];
-
 if (!fs.existsSync(distElectronDir)) {
   console.error(`[prepare-node-modules] dist-electron not found: ${distElectronDir}`);
   console.error('[prepare-node-modules] Run the electron build step first.');
@@ -27,7 +19,7 @@ if (fs.existsSync(deployDir)) {
   fs.rmSync(deployDir, { recursive: true, force: true });
 }
 
-console.log('[prepare-node-modules] Running pnpm deploy (prod)...');
+console.log('[prepare-node-modules] Running pnpm deploy with node-linker=hoisted...');
 const pnpmArgs = ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir];
 let command = 'pnpm';
 let args = pnpmArgs;
@@ -37,10 +29,18 @@ if (process.env.npm_execpath) {
   args = [process.env.npm_execpath, ...pnpmArgs];
 }
 
+// Use hoisted node-linker to create a flat node_modules structure
+// This ensures all packages are accessible via standard Node.js module resolution
+// Requires pnpm 10+ (see https://github.com/pnpm/pnpm/issues/6682)
+const env = {
+  ...process.env,
+  npm_config_node_linker: 'hoisted'
+};
+
 const result = spawnSync(command, args, {
   cwd: repoRoot,
   stdio: 'inherit',
-  env: process.env
+  env
 });
 
 if (result.error) {
@@ -66,50 +66,6 @@ if (fs.existsSync(packDir)) {
 fs.mkdirSync(path.dirname(packDir), { recursive: true });
 console.log(`[prepare-node-modules] Copying ${sourceDir} -> ${packDir}`);
 fs.cpSync(sourceDir, packDir, { recursive: true, dereference: true });
-
-// Verify and fix critical packages
-// On Windows, pnpm deploy may use junctions that fs.cpSync doesn't handle correctly
-console.log('[prepare-node-modules] Verifying critical packages...');
-const pnpmStoreDir = path.join(sourceDir, '.pnpm');
-
-for (const pkgName of CRITICAL_PACKAGES) {
-  const pkgPath = path.join(packDir, pkgName);
-  const hasPackageJson = fs.existsSync(path.join(pkgPath, 'package.json'));
-
-  if (!fs.existsSync(pkgPath) || !hasPackageJson) {
-    console.log(`[prepare-node-modules] Missing or incomplete: ${pkgName}, attempting recovery...`);
-
-    // Find the package in .pnpm store
-    const pnpmEntries = fs.existsSync(pnpmStoreDir) ? fs.readdirSync(pnpmStoreDir) : [];
-    const pkgBaseName = pkgName.replace('@', '').replace('/', '+');
-    const matchingEntry = pnpmEntries.find(entry =>
-      entry.startsWith(pkgBaseName + '@') || entry.startsWith(pkgName.replace('/', '+') + '@')
-    );
-
-    if (matchingEntry) {
-      const sourcePkgPath = path.join(pnpmStoreDir, matchingEntry, 'node_modules', pkgName);
-      if (fs.existsSync(sourcePkgPath)) {
-        console.log(`[prepare-node-modules] Copying from .pnpm store: ${matchingEntry}`);
-        if (fs.existsSync(pkgPath)) {
-          fs.rmSync(pkgPath, { recursive: true, force: true });
-        }
-        // Ensure parent directory exists for scoped packages
-        const pkgParentDir = path.dirname(pkgPath);
-        if (!fs.existsSync(pkgParentDir)) {
-          fs.mkdirSync(pkgParentDir, { recursive: true });
-        }
-        fs.cpSync(sourcePkgPath, pkgPath, { recursive: true, dereference: true });
-        console.log(`[prepare-node-modules] Recovered: ${pkgName}`);
-      } else {
-        console.warn(`[prepare-node-modules] Could not find ${pkgName} in .pnpm store entry`);
-      }
-    } else {
-      console.warn(`[prepare-node-modules] Could not find .pnpm store entry for: ${pkgName}`);
-    }
-  } else {
-    console.log(`[prepare-node-modules] OK: ${pkgName}`);
-  }
-}
 
 fs.rmSync(deployDir, { recursive: true, force: true });
 console.log('[prepare-node-modules] Done');
