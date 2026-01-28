@@ -16,6 +16,7 @@ dist-electron/
 *.exe
 *.deb
 *.rpm
+apps/desktop/playwright-browsers/
 
 # IDE
 .idea/

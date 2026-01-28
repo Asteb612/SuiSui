@@ -1,11 +1,11 @@
 import type { RunResult, RunOptions, RunStatus } from '@suisui/shared'
+import { app } from 'electron'
 import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
 import type { ChildProcess } from 'node:child_process'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
-import { app } from 'electron'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('RunnerService')
@@ -35,17 +35,22 @@ export class RunnerService {
     }
   }
 
-  private resolvePlaywrightCliPath(appRoot: string): string | null {
+  private resolvePlaywrightCliPath(appRoot: string, workspacePath?: string | null): string | null {
     const appNodeModules = path.join(appRoot, 'node_modules')
     const monorepoRoot = path.resolve(appRoot, '..', '..')
     const rootNodeModules = path.join(monorepoRoot, 'node_modules')
+    const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
 
     const candidates = [
+      path.join(appNodeModules, '@playwright/test', 'cli.js'),
       path.join(appNodeModules, 'playwright', 'cli.js'),
+      workspaceNodeModules ? path.join(workspaceNodeModules, '@playwright/test', 'cli.js') : null,
+      workspaceNodeModules ? path.join(workspaceNodeModules, 'playwright', 'cli.js') : null,
       path.join(rootNodeModules, 'playwright', 'cli.js'),
     ]
 
     for (const candidate of candidates) {
+      if (!candidate) continue
       if (fs.existsSync(candidate)) {
         return candidate
       }
@@ -54,23 +59,39 @@ export class RunnerService {
     return null
   }
 
-  private resolveBddgenCliPath(appRoot: string): string | null {
+  private resolveBddgenCliPath(appRoot: string, workspacePath?: string | null): string | null {
     const appNodeModules = path.join(appRoot, 'node_modules')
     const monorepoRoot = path.resolve(appRoot, '..', '..')
     const rootNodeModules = path.join(monorepoRoot, 'node_modules')
+    const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
 
     const candidates = [
       path.join(appNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js'),
+      workspaceNodeModules
+        ? path.join(workspaceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
+        : null,
       path.join(rootNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js'),
     ]
 
     for (const candidate of candidates) {
+      if (!candidate) continue
       if (fs.existsSync(candidate)) {
         return candidate
       }
     }
 
     return null
+  }
+
+  private resolveBundledBrowsersPath(appRoot: string): string | null {
+    const packagedPath =
+      typeof process.resourcesPath === 'string'
+        ? path.join(process.resourcesPath, 'playwright-browsers')
+        : null
+    const devPath = path.join(appRoot, 'playwright-browsers')
+    const candidate = packagedPath && fs.existsSync(packagedPath) ? packagedPath : devPath
+
+    return fs.existsSync(candidate) ? candidate : null
   }
 
   async runHeadless(options: Partial<RunOptions> = {}): Promise<RunResult> {
@@ -121,10 +142,30 @@ export class RunnerService {
     const appNodeModules = path.join(appRoot, 'node_modules')
     const monorepoRoot = path.resolve(appRoot, '..', '..')
     const rootNodeModules = path.join(monorepoRoot, 'node_modules')
-    const playwrightCliPath = this.resolvePlaywrightCliPath(appRoot)
-    const bddgenCliPath = this.resolveBddgenCliPath(appRoot)
+    const playwrightCliPath = this.resolvePlaywrightCliPath(appRoot, workspacePath)
+    const bddgenCliPath = this.resolveBddgenCliPath(appRoot, workspacePath)
+    const bundledBrowsersPath = this.resolveBundledBrowsersPath(appRoot)
 
-    const nodePathParts = [appNodeModules]
+    const nodePathParts = []
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
+    if (fs.existsSync(workspaceNodeModules)) {
+      nodePathParts.push(workspaceNodeModules)
+    }
+    nodePathParts.push(appNodeModules)
+    const resourceNodeModules =
+      typeof process.resourcesPath === 'string'
+        ? path.join(process.resourcesPath, 'node_modules')
+        : null
+    const unpackedNodeModules =
+      typeof process.resourcesPath === 'string'
+        ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
+        : null
+    if (resourceNodeModules && fs.existsSync(resourceNodeModules)) {
+      nodePathParts.push(resourceNodeModules)
+    }
+    if (unpackedNodeModules && fs.existsSync(unpackedNodeModules)) {
+      nodePathParts.push(unpackedNodeModules)
+    }
     if (fs.existsSync(rootNodeModules)) {
       nodePathParts.push(rootNodeModules)
     }
@@ -138,10 +179,20 @@ export class RunnerService {
         : options.baseUrl
 
 
+    const pathParts = []
+    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
+      pathParts.push(path.join(workspaceNodeModules, '.bin'))
+    }
+    pathParts.push(path.join(appNodeModules, '.bin'))
+    if (process.env.PATH) {
+      pathParts.push(process.env.PATH)
+    }
+
     const env: Record<string, string> = {
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
+      ...(bundledBrowsersPath ? { PLAYWRIGHT_BROWSERS_PATH: bundledBrowsersPath } : {}),
       NODE_PATH: nodePathParts.join(path.delimiter),
-      PATH: `${path.join(appNodeModules, '.bin')}${path.delimiter}${process.env.PATH || ''}`,
+      PATH: pathParts.join(path.delimiter),
     }
 
     if (debugRunner) {
@@ -157,6 +208,8 @@ export class RunnerService {
         rootNodeModules,
         playwrightCliPath,
         bddgenCliPath,
+        bundledBrowsersPath,
+        nodeExec: process.execPath,
       })
     } else {
       logger.info('Starting Playwright run', {
@@ -172,20 +225,30 @@ export class RunnerService {
     const startTime = Date.now()
 
     if (!bddgenCliPath) {
-      logger.error('bddgen CLI not found', undefined, { appRoot, appNodeModules, rootNodeModules })
+      logger.error('bddgen CLI not found', undefined, {
+        appRoot,
+        appNodeModules,
+        rootNodeModules,
+        workspacePath,
+      })
       return {
         status: 'error',
         exitCode: 1,
         stdout: '',
-        stderr: 'bddgen CLI not found. Please ensure playwright-bdd is installed in the app.',
+        stderr: 'bddgen CLI not found. Please install playwright-bdd in your workspace.',
         duration: 0,
       }
     }
 
-    const bddgenResult = await this.commandRunner.exec('node', [bddgenCliPath], {
+    const nodeExec = process.execPath
+    const runAsNodeEnv: Record<string, string> = process.versions.electron
+      ? { ELECTRON_RUN_AS_NODE: '1' }
+      : {}
+
+    const bddgenResult = await this.commandRunner.exec(nodeExec, [bddgenCliPath], {
       cwd: workspacePath,
       timeout: 60000,
-      env,
+      env: { ...env, ...runAsNodeEnv },
     })
 
     if (bddgenResult.code !== 0) {
@@ -203,13 +266,26 @@ export class RunnerService {
       }
     }
 
-    const cmd = playwrightCliPath ? 'node' : 'npx'
-    const cmdArgs = playwrightCliPath ? [playwrightCliPath, ...args.slice(1)] : args
+    if (!playwrightCliPath) {
+      logger.error('Playwright CLI not found', undefined, {
+        appRoot,
+        appNodeModules,
+        rootNodeModules,
+        workspacePath,
+      })
+      return {
+        status: 'error',
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Playwright CLI not found. Please install @playwright/test in your workspace.',
+        duration: Date.now() - startTime,
+      }
+    }
 
-    const result = await this.commandRunner.exec(cmd, cmdArgs, {
+    const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...args.slice(1)], {
       cwd: workspacePath,
       timeout: options.mode === 'ui' ? 0 : 300000,
-      env,
+      env: { ...env, ...runAsNodeEnv },
     })
 
     const duration = Date.now() - startTime

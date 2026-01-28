@@ -2,12 +2,24 @@ name: desktop-release
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platform to build"
+        type: choice
+        required: false
+        default: "all"
+        options:
+          - all
+          - linux
+          - mac
+          - win
   push:
     tags:
       - "desktop-v*"
 
 jobs:
   build:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || matrix.platform == github.event.inputs.platform }}
     strategy:
       fail-fast: false
       matrix:

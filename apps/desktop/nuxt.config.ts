@@ -30,9 +30,17 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
 
   app: {
+    baseURL: './',
+    buildAssetsDir: '_nuxt/',
     head: {
       title: 'SuiSui - BDD Test Builder',
       meta: [{ name: 'description', content: 'BDD Test Builder with Electron' }],
+    },
+  },
+
+  router: {
+    options: {
+      hashMode: true,
     },
   },
 
@@ -41,6 +49,7 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    base: './',
     build: {
       target: 'esnext',
     },

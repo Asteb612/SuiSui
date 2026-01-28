@@ -16,7 +16,14 @@
       "Bash(pnpm lint:fix:*)",
       "Bash(eslint:*)",
       "Bash(pnpm eslint:*)",
-      "Bash(pnpm --filter @suisui/shared build:*)"
+      "Bash(pnpm --filter @suisui/shared build:*)",
+      "Bash(pnpm why:*)",
+      "Bash(NUXT_TYPECHECK=false pnpm build:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm build:electron:*)",
+      "Bash(node scripts/bundle-deps.js:*)",
+      "Bash(wine:*)"
     ]
   }
 }

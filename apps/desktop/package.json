@@ -8,14 +8,15 @@
     "name": "Arthur Grosso",
     "email": "arthur.grosso@gmail.com"
   },
-  "main": "dist-electron/main.js",
+  "main": "main.js",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron\"",
     "dev:nuxt": "nuxt dev --port 3000",
     "dev:electron": "wait-on http://localhost:3000 && electron .",
     "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
+    "clean": "node scripts/cleanup.js",
     "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
-    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js",
+    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/ensure-playwright-browsers.js && cross-env PLAYWRIGHT_BROWSERS_PATH=playwright-browsers node node_modules/playwright/cli.js install chromium && node scripts/bundle-deps.js && node scripts/prepare-node-modules.js",
     "dist": "cross-env NUXT_TYPECHECK=false pnpm build && electron-builder --publish=never",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
@@ -24,8 +25,6 @@
     "prepare": "nuxt prepare"
   },
   "dependencies": {
-    "@cucumber/cucumber": "10.3.1",
-    "@pinia/nuxt": "^0.11.3",
     "@playwright/test": "^1.58.0",
     "@suisui/shared": "workspace:*",
     "bddgen": "^1.0.5",
@@ -37,12 +36,14 @@
     "@oxc-minify/binding-linux-x64-gnu": "^0.110.0",
     "@oxc-parser/binding-linux-x64-gnu": "^0.110.0",
     "@oxc-transform/binding-linux-x64-gnu": "^0.110.0",
+    "@pinia/nuxt": "^0.11.3",
     "@primevue/nuxt-module": "^4.2.0",
     "@types/node": "^20.11.0",
     "concurrently": "^9.0.0",
     "cross-env": "^10.1.0",
     "electron": "^33.4.11",
     "electron-builder": "^25.0.0",
+    "esbuild": "^0.27.2",
     "memfs": "^3.5.3",
     "nuxt": "^3.15.0",
     "primeflex": "^3.3.1",
@@ -59,21 +60,46 @@
     "appId": "com.suisui.desktop",
     "productName": "SuiSui",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "npmRebuild": false,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "app": "dist-electron"
     },
     "files": [
-      "package.json",
+      "**/*",
+      "!__tests__/**",
+      "!node_modules/**"
+    ],
+    "extraResources": [
       {
-        "from": "dist-electron",
-        "to": "dist-electron",
-        "filter": ["**/*", "!__tests__/**"]
+        "from": "bundled-deps",
+        "to": "bundled-deps",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "playwright-browsers",
+        "to": "playwright-browsers",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist-electron/node_modules",
+        "to": "node_modules",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "extraMetadata": {
-      "main": "dist-electron/main.js"
+      "main": "main.js"
     },
     "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
     "mac": {
       "target": [
         "dmg",
