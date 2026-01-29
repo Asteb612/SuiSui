@@ -18,6 +18,10 @@
     "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
     "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/ensure-playwright-browsers.js && cross-env PLAYWRIGHT_BROWSERS_PATH=playwright-browsers node node_modules/playwright/cli.js install chromium && node scripts/bundle-deps.js && node scripts/prepare-node-modules.js",
     "dist": "cross-env NUXT_TYPECHECK=false pnpm build && electron-builder --publish=never",
+    "test:deps": "node scripts/test-deps.js",
+    "test:deps:build": "node scripts/test-deps.js --dist-electron",
+    "test:deps:release": "node scripts/test-deps.js --packaged ./release/linux-unpacked/resources",
+    "test:deps:appimage": "./release/SuiSui-0.1.0-x86_64.AppImage --appimage-extract >/dev/null 2>&1 && node scripts/test-deps.js --packaged ./squashfs-root/resources; rm -rf squashfs-root",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
@@ -70,6 +74,7 @@
       "!__tests__/**",
       "!node_modules/**"
     ],
+    "afterPack": "scripts/after-pack.js",
     "extraResources": [
       {
         "from": "bundled-deps",

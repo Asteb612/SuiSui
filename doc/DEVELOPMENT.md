@@ -4,8 +4,8 @@
 
 | Requirement | Version | Check Command |
 |-------------|---------|---------------|
-| Node.js | 20.0.0+ | `node --version` |
-| pnpm | 9.0.0+ | `pnpm --version` |
+| Node.js | 21.0.0+ | `node --version` |
+| pnpm | 10.0.0+ | `pnpm --version` |
 | Git | Latest | `git --version` |
 
 ## Getting Started
@@ -353,6 +353,57 @@ Recommended extensions:
 | Electron Main | Full Restart | Automatic |
 | Preload Script | Full Restart | Automatic |
 | Shared Package | Manual Rebuild | Run `pnpm build` |
+
+---
+
+## Building & Packaging
+
+### Production Build
+
+```bash
+cd apps/desktop
+
+# Full build (Nuxt + Electron + dependencies)
+pnpm build
+
+# Create distributable packages (AppImage, deb)
+pnpm dist
+```
+
+### Dependency Testing
+
+The app bundles `playwright`, `playwright-bdd`, and `bddgen` for test execution. Use these commands to verify dependencies are correctly packaged:
+
+| Command | Description |
+|---------|-------------|
+| `pnpm test:deps` | Test dependencies in development mode |
+| `pnpm test:deps:build` | Test dependencies in `dist-electron/` (simulates packaged app) |
+| `pnpm test:deps:release` | Test dependencies in `release/linux-unpacked/` |
+| `pnpm test:deps:appimage` | Extract and test dependencies in the AppImage |
+
+Example output:
+```
+========================================
+  SuiSui Dependency Check Report
+========================================
+
+Dependency Status:
+------------------
+[OK] playwright-bdd-bundle
+[OK] bddgen-cli
+[OK] playwright-cli
+[OK] playwright-browsers
+[OK] playwright-module
+[OK] playwright-bdd-module
+
+Summary: 6/6 OK, 0 missing, 0 errors
+```
+
+### Linux Packaging Notes
+
+- The build process removes `chrome-sandbox` to avoid SUID permission issues
+- AppImage and deb packages run without requiring system configuration
+- Chromium browser is bundled in `playwright-browsers/` (extraResources)
 
 ---
 

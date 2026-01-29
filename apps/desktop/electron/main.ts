@@ -3,9 +3,11 @@ import path from 'node:path'
 import { watch } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { registerIpcHandlers } from './ipc/handlers'
+import { runDepCheck, printDepCheckReport } from './utils/depChecker'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
+const isTestDepsMode = process.argv.includes('--test-deps')
 
 // Register custom protocol scheme before app is ready
 protocol.registerSchemesAsPrivileged([
@@ -99,6 +101,18 @@ function registerAppProtocol() {
 }
 
 app.whenReady().then(() => {
+  // Handle --test-deps mode: check dependencies and exit without UI
+  if (isTestDepsMode) {
+    console.log('Running in dependency test mode...')
+    const report = runDepCheck()
+    printDepCheckReport(report)
+
+    // Exit with appropriate code
+    const exitCode = report.summary.missing > 0 || report.summary.error > 0 ? 1 : 0
+    app.exit(exitCode)
+    return
+  }
+
   if (!isDev) {
     registerAppProtocol()
   }

@@ -27,7 +27,13 @@
       "WebSearch",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pnpm.io)",
-      "Bash(node /home/grosso_a/Workspace/SuiSui/apps/desktop/scripts/prepare-node-modules.js:*)"
+      "Bash(pnpm test:deps:*)",
+      "Bash(pnpm dist:*)",
+      "Bash(pnpm test:deps:dist:*)",
+      "Bash(pnpm test:deps:packaged:*)",
+      "Bash(./release/SuiSui-0.1.0-x86_64.AppImage:*)",
+      "Bash(node scripts/test-deps.js:*)",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -24,7 +24,9 @@ const pnpmArgs = ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir];
 let command = 'pnpm';
 let args = pnpmArgs;
 
-if (process.env.npm_execpath) {
+// Check if npm_execpath is a JS file (not a native binary)
+// Native pnpm binaries (ELF on Linux) cannot be run via Node.js
+if (process.env.npm_execpath && process.env.npm_execpath.endsWith('.js')) {
   command = process.execPath;
   args = [process.env.npm_execpath, ...pnpmArgs];
 }

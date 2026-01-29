@@ -40,8 +40,15 @@ export class RunnerService {
     const monorepoRoot = path.resolve(appRoot, '..', '..')
     const rootNodeModules = path.join(monorepoRoot, 'node_modules')
     const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
+    // In packaged app, node_modules are in extraResources
+    const resourceNodeModules = app.isPackaged && process.resourcesPath
+      ? path.join(process.resourcesPath, 'node_modules')
+      : null
 
     const candidates = [
+      // Check packaged extraResources first
+      resourceNodeModules ? path.join(resourceNodeModules, '@playwright/test', 'cli.js') : null,
+      resourceNodeModules ? path.join(resourceNodeModules, 'playwright', 'cli.js') : null,
       path.join(appNodeModules, '@playwright/test', 'cli.js'),
       path.join(appNodeModules, 'playwright', 'cli.js'),
       workspaceNodeModules ? path.join(workspaceNodeModules, '@playwright/test', 'cli.js') : null,
@@ -64,8 +71,16 @@ export class RunnerService {
     const monorepoRoot = path.resolve(appRoot, '..', '..')
     const rootNodeModules = path.join(monorepoRoot, 'node_modules')
     const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
+    // In packaged app, node_modules are in extraResources
+    const resourceNodeModules = app.isPackaged && process.resourcesPath
+      ? path.join(process.resourcesPath, 'node_modules')
+      : null
 
     const candidates = [
+      // Check packaged extraResources first
+      resourceNodeModules
+        ? path.join(resourceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
+        : null,
       path.join(appNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js'),
       workspaceNodeModules
         ? path.join(workspaceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
@@ -151,7 +166,7 @@ export class RunnerService {
     if (fs.existsSync(workspaceNodeModules)) {
       nodePathParts.push(workspaceNodeModules)
     }
-    nodePathParts.push(appNodeModules)
+    // In packaged app, node_modules are in extraResources (check first)
     const resourceNodeModules =
       typeof process.resourcesPath === 'string'
         ? path.join(process.resourcesPath, 'node_modules')
@@ -165,6 +180,10 @@ export class RunnerService {
     }
     if (unpackedNodeModules && fs.existsSync(unpackedNodeModules)) {
       nodePathParts.push(unpackedNodeModules)
+    }
+    // Only add appNodeModules if it exists (won't exist in packaged app)
+    if (fs.existsSync(appNodeModules)) {
+      nodePathParts.push(appNodeModules)
     }
     if (fs.existsSync(rootNodeModules)) {
       nodePathParts.push(rootNodeModules)
@@ -183,7 +202,13 @@ export class RunnerService {
     if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
       pathParts.push(path.join(workspaceNodeModules, '.bin'))
     }
-    pathParts.push(path.join(appNodeModules, '.bin'))
+    // In packaged app, check extraResources .bin first
+    if (resourceNodeModules && fs.existsSync(path.join(resourceNodeModules, '.bin'))) {
+      pathParts.push(path.join(resourceNodeModules, '.bin'))
+    }
+    if (fs.existsSync(path.join(appNodeModules, '.bin'))) {
+      pathParts.push(path.join(appNodeModules, '.bin'))
+    }
     if (process.env.PATH) {
       pathParts.push(process.env.PATH)
     }
