@@ -16,7 +16,7 @@
     "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
     "clean": "node scripts/cleanup.js",
     "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
-    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/prepare-node-modules.js",
+    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/prepare-node-modules.mjs",
     "dist": "cross-env NUXT_TYPECHECK=false pnpm prebuild:nodejs && pnpm build && electron-builder --publish=never",
     "test:deps": "node scripts/test-deps.js",
     "test:deps:build": "node scripts/test-deps.js --dist-electron",
