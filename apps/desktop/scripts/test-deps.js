@@ -47,13 +47,6 @@ function getAppRoot() {
   return path.resolve(__dirname, '..')
 }
 
-function getBundledDepsPath() {
-  if (isPackaged) {
-    return path.join(absoluteResourcesPath, 'bundled-deps')
-  }
-  return path.resolve(__dirname, '..', 'bundled-deps')
-}
-
 function getNodeModulesPaths() {
   const appRoot = getAppRoot()
   const paths = []
@@ -96,30 +89,6 @@ function findInNodeModules(modulePath) {
     }
   }
   return null
-}
-
-function checkBundledDepsMarker() {
-  // We no longer bundle playwright-bdd - we use CLI subprocess instead
-  // Just check that the marker file exists to confirm build ran
-  const markerPath = path.join(getBundledDepsPath(), 'marker.js')
-
-  if (!fs.existsSync(markerPath)) {
-    return {
-      name: 'bundled-deps-marker',
-      status: 'missing',
-      path: markerPath,
-      error: 'Marker file not found (bundle-deps.js may not have run)'
-    }
-  }
-
-  return {
-    name: 'bundled-deps-marker',
-    status: 'ok',
-    path: markerPath,
-    details: {
-      note: 'playwright-bdd is now used via CLI subprocess, not bundled'
-    }
-  }
 }
 
 function checkBddgenCli() {
@@ -336,7 +305,6 @@ function checkPlaywrightBddModule() {
 
 function runDepCheck() {
   const results = [
-    checkBundledDepsMarker(),
     checkBddgenCli(),
     checkPlaywrightCli(),
     checkPlaywrightBrowsers(),

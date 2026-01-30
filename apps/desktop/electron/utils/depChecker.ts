@@ -31,13 +31,6 @@ function getAppRoot(): string {
   return path.resolve(__dirname, '..', '..')
 }
 
-function getBundledDepsPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'bundled-deps')
-  }
-  return path.resolve(__dirname, '..', '..', 'bundled-deps')
-}
-
 function getNodeModulesPaths(): string[] {
   const appRoot = getAppRoot()
   const paths: string[] = []
@@ -82,59 +75,6 @@ function findInNodeModules(modulePath: string): string | null {
     }
   }
   return null
-}
-
-function checkPlaywrightBddBundle(): DepCheckResult {
-  const bundlePath = path.join(getBundledDepsPath(), 'playwright-bdd-bundle.js')
-
-  if (!fs.existsSync(bundlePath)) {
-    return {
-      name: 'playwright-bdd-bundle',
-      status: 'missing',
-      path: bundlePath,
-      error: 'Bundle file not found'
-    }
-  }
-
-  try {
-    // Try to require the bundle
-    const bundleExports = require(bundlePath)
-    const hasLoadConfig = typeof bundleExports.loadConfig === 'function'
-    const hasGetEnvConfigs = typeof bundleExports.getEnvConfigs === 'function'
-    const hasTestFilesGenerator = typeof bundleExports.TestFilesGenerator === 'function'
-
-    if (!hasLoadConfig || !hasGetEnvConfigs || !hasTestFilesGenerator) {
-      return {
-        name: 'playwright-bdd-bundle',
-        status: 'error',
-        path: bundlePath,
-        error: 'Bundle missing required exports',
-        details: {
-          hasLoadConfig,
-          hasGetEnvConfigs,
-          hasTestFilesGenerator
-        }
-      }
-    }
-
-    const stats = fs.statSync(bundlePath)
-    return {
-      name: 'playwright-bdd-bundle',
-      status: 'ok',
-      path: bundlePath,
-      details: {
-        size: stats.size,
-        exports: Object.keys(bundleExports)
-      }
-    }
-  } catch (err) {
-    return {
-      name: 'playwright-bdd-bundle',
-      status: 'error',
-      path: bundlePath,
-      error: `Failed to load bundle: ${(err as Error).message}`
-    }
-  }
 }
 
 function checkBddgenCli(): DepCheckResult {
@@ -356,7 +296,6 @@ function checkPlaywrightBddModule(): DepCheckResult {
 
 export function runDepCheck(): DepCheckReport {
   const results: DepCheckResult[] = [
-    checkPlaywrightBddBundle(),
     checkBddgenCli(),
     checkPlaywrightCli(),
     checkPlaywrightBrowsers(),

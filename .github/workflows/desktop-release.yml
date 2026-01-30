@@ -40,6 +40,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download Node.js runtime
+        shell: bash
+        run: node apps/desktop/scripts/download-nodejs.js --current-only
+
       - name: Build and package desktop
         env:
           NUXT_TYPECHECK: false

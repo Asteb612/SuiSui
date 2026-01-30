@@ -9,11 +9,7 @@ const repoRoot = path.resolve(appRoot, '..', '..');
 const desktopTargets = [
   'dist-electron',
   'release',
-  'bundled-deps',
   'playwright-browsers',
-  'playwright-browsers-win',
-  'playwright-browsers-mac',
-  'playwright-browsers-linux',
   '.pnpm-deploy',
   'dist',
   '.output',
