@@ -1,9 +1,9 @@
 import type { RunResult, RunOptions, RunStatus } from '@suisui/shared'
-import { app } from 'electron'
 import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
+import { getDependencyService } from './DependencyService'
+import { getNodeService } from './NodeService'
 import type { ChildProcess } from 'node:child_process'
-import { spawn } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 import { createLogger } from '../utils/logger'
@@ -19,45 +19,15 @@ export class RunnerService {
     this.commandRunner = commandRunner ?? getCommandRunner()
   }
 
-  private getAppRoot(): string {
-    const appRoot = path.resolve(__dirname, '..', '..')
-
-    const packageJsonPath = path.join(appRoot, 'package.json')
-    try {
-      fs.accessSync(packageJsonPath)
-      return appRoot
-    } catch {
-      try {
-        return app.getAppPath()
-      } catch {
-        return appRoot
-      }
-    }
-  }
-
-  private resolvePlaywrightCliPath(appRoot: string, workspacePath?: string | null): string | null {
-    const appNodeModules = path.join(appRoot, 'node_modules')
-    const monorepoRoot = path.resolve(appRoot, '..', '..')
-    const rootNodeModules = path.join(monorepoRoot, 'node_modules')
-    const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
-    // In packaged app, node_modules are in extraResources
-    const resourceNodeModules = app.isPackaged && process.resourcesPath
-      ? path.join(process.resourcesPath, 'node_modules')
-      : null
+  private resolvePlaywrightCliPath(workspacePath: string): string | null {
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
 
     const candidates = [
-      // Check packaged extraResources first
-      resourceNodeModules ? path.join(resourceNodeModules, '@playwright/test', 'cli.js') : null,
-      resourceNodeModules ? path.join(resourceNodeModules, 'playwright', 'cli.js') : null,
-      path.join(appNodeModules, '@playwright/test', 'cli.js'),
-      path.join(appNodeModules, 'playwright', 'cli.js'),
-      workspaceNodeModules ? path.join(workspaceNodeModules, '@playwright/test', 'cli.js') : null,
-      workspaceNodeModules ? path.join(workspaceNodeModules, 'playwright', 'cli.js') : null,
-      path.join(rootNodeModules, 'playwright', 'cli.js'),
+      path.join(workspaceNodeModules, '@playwright/test', 'cli.js'),
+      path.join(workspaceNodeModules, 'playwright', 'cli.js'),
     ]
 
     for (const candidate of candidates) {
-      if (!candidate) continue
       if (fs.existsSync(candidate)) {
         return candidate
       }
@@ -66,47 +36,15 @@ export class RunnerService {
     return null
   }
 
-  private resolveBddgenCliPath(appRoot: string, workspacePath?: string | null): string | null {
-    const appNodeModules = path.join(appRoot, 'node_modules')
-    const monorepoRoot = path.resolve(appRoot, '..', '..')
-    const rootNodeModules = path.join(monorepoRoot, 'node_modules')
-    const workspaceNodeModules = workspacePath ? path.join(workspacePath, 'node_modules') : null
-    // In packaged app, node_modules are in extraResources
-    const resourceNodeModules = app.isPackaged && process.resourcesPath
-      ? path.join(process.resourcesPath, 'node_modules')
-      : null
+  private resolveBddgenCliPath(workspacePath: string): string | null {
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
 
-    const candidates = [
-      // Check packaged extraResources first
-      resourceNodeModules
-        ? path.join(resourceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
-        : null,
-      path.join(appNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js'),
-      workspaceNodeModules
-        ? path.join(workspaceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
-        : null,
-      path.join(rootNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js'),
-    ]
-
-    for (const candidate of candidates) {
-      if (!candidate) continue
-      if (fs.existsSync(candidate)) {
-        return candidate
-      }
+    const candidate = path.join(workspaceNodeModules, 'playwright-bdd', 'dist', 'cli', 'index.js')
+    if (fs.existsSync(candidate)) {
+      return candidate
     }
 
     return null
-  }
-
-  private resolveBundledBrowsersPath(appRoot: string): string | null {
-    const packagedPath =
-      typeof process.resourcesPath === 'string'
-        ? path.join(process.resourcesPath, 'playwright-browsers')
-        : null
-    const devPath = path.join(appRoot, 'playwright-browsers')
-    const candidate = packagedPath && fs.existsSync(packagedPath) ? packagedPath : devPath
-
-    return fs.existsSync(candidate) ? candidate : null
   }
 
   async runHeadless(options: Partial<RunOptions> = {}): Promise<RunResult> {
@@ -132,6 +70,35 @@ export class RunnerService {
       }
     }
 
+    // Check and install dependencies if needed
+    const depService = getDependencyService()
+    const depStatus = await depService.checkStatus(workspacePath)
+
+    if (depStatus.needsInstall) {
+      logger.info('Installing dependencies before run', {
+        reason: depStatus.reason,
+        workspacePath,
+      })
+
+      const installResult = await depService.install(workspacePath)
+      if (!installResult.success) {
+        logger.error('Dependency installation failed', undefined, {
+          error: installResult.error,
+        })
+        return {
+          status: 'error',
+          exitCode: 1,
+          stdout: installResult.stdout,
+          stderr: installResult.error || 'Failed to install dependencies',
+          duration: installResult.duration,
+        }
+      }
+
+      logger.info('Dependencies installed successfully', {
+        duration: installResult.duration,
+      })
+    }
+
     const args = ['playwright', 'test']
 
     if (options.mode === 'ui') {
@@ -153,61 +120,20 @@ export class RunnerService {
       args.push('--grep', options.scenarioName)
     }
 
-    const appRoot = this.getAppRoot()
-    const appNodeModules = path.join(appRoot, 'node_modules')
-    const monorepoRoot = path.resolve(appRoot, '..', '..')
-    const rootNodeModules = path.join(monorepoRoot, 'node_modules')
-    const playwrightCliPath = this.resolvePlaywrightCliPath(appRoot, workspacePath)
-    const bddgenCliPath = this.resolveBddgenCliPath(appRoot, workspacePath)
-    const bundledBrowsersPath = this.resolveBundledBrowsersPath(appRoot)
-
-    const nodePathParts = []
+    // Use only workspace binaries
     const workspaceNodeModules = path.join(workspacePath, 'node_modules')
-    if (fs.existsSync(workspaceNodeModules)) {
-      nodePathParts.push(workspaceNodeModules)
-    }
-    // In packaged app, node_modules are in extraResources (check first)
-    const resourceNodeModules =
-      typeof process.resourcesPath === 'string'
-        ? path.join(process.resourcesPath, 'node_modules')
-        : null
-    const unpackedNodeModules =
-      typeof process.resourcesPath === 'string'
-        ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
-        : null
-    if (resourceNodeModules && fs.existsSync(resourceNodeModules)) {
-      nodePathParts.push(resourceNodeModules)
-    }
-    if (unpackedNodeModules && fs.existsSync(unpackedNodeModules)) {
-      nodePathParts.push(unpackedNodeModules)
-    }
-    // Only add appNodeModules if it exists (won't exist in packaged app)
-    if (fs.existsSync(appNodeModules)) {
-      nodePathParts.push(appNodeModules)
-    }
-    if (fs.existsSync(rootNodeModules)) {
-      nodePathParts.push(rootNodeModules)
-    }
-    if (process.env.NODE_PATH) {
-      nodePathParts.push(process.env.NODE_PATH)
-    }
+    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
+    const bddgenCliPath = this.resolveBddgenCliPath(workspacePath)
 
     const normalizedBaseUrl =
       options.baseUrl && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(options.baseUrl)
         ? `https://${options.baseUrl}`
         : options.baseUrl
 
-
+    // Set up environment with workspace's node_modules
     const pathParts = []
     if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
       pathParts.push(path.join(workspaceNodeModules, '.bin'))
-    }
-    // In packaged app, check extraResources .bin first
-    if (resourceNodeModules && fs.existsSync(path.join(resourceNodeModules, '.bin'))) {
-      pathParts.push(path.join(resourceNodeModules, '.bin'))
-    }
-    if (fs.existsSync(path.join(appNodeModules, '.bin'))) {
-      pathParts.push(path.join(appNodeModules, '.bin'))
     }
     if (process.env.PATH) {
       pathParts.push(process.env.PATH)
@@ -215,8 +141,7 @@ export class RunnerService {
 
     const env: Record<string, string> = {
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
-      ...(bundledBrowsersPath ? { PLAYWRIGHT_BROWSERS_PATH: bundledBrowsersPath } : {}),
-      NODE_PATH: nodePathParts.join(path.delimiter),
+      NODE_PATH: workspaceNodeModules,
       PATH: pathParts.join(path.delimiter),
     }
 
@@ -228,12 +153,9 @@ export class RunnerService {
         featurePath: options.featurePath,
         scenarioName: options.scenarioName,
         baseUrl: normalizedBaseUrl,
-        appRoot,
-        appNodeModules,
-        rootNodeModules,
+        workspaceNodeModules,
         playwrightCliPath,
         bddgenCliPath,
-        bundledBrowsersPath,
         nodeExec: process.execPath,
       })
     } else {
@@ -251,10 +173,8 @@ export class RunnerService {
 
     if (!bddgenCliPath) {
       logger.error('bddgen CLI not found', undefined, {
-        appRoot,
-        appNodeModules,
-        rootNodeModules,
         workspacePath,
+        workspaceNodeModules,
       })
       return {
         status: 'error',
@@ -265,15 +185,32 @@ export class RunnerService {
       }
     }
 
-    const nodeExec = process.execPath
-    const runAsNodeEnv: Record<string, string> = process.versions.electron
-      ? { ELECTRON_RUN_AS_NODE: '1' }
-      : {}
+    // Use embedded Node.js runtime instead of Electron's process.execPath
+    const nodeService = getNodeService()
+    const nodeExec = await nodeService.getNodePath()
+
+    if (!nodeExec) {
+      logger.error('Node.js runtime not found')
+      return {
+        status: 'error',
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Node.js runtime not available. Please restart the application.',
+        duration: 0,
+      }
+    }
+
+    // Add embedded Node.js bin directory to PATH
+    const nodeDir = path.dirname(nodeExec)
+    if (!pathParts.includes(nodeDir)) {
+      pathParts.unshift(nodeDir)
+      env.PATH = pathParts.join(path.delimiter)
+    }
 
     const bddgenResult = await this.commandRunner.exec(nodeExec, [bddgenCliPath], {
       cwd: workspacePath,
       timeout: 60000,
-      env: { ...env, ...runAsNodeEnv },
+      env,
     })
 
     if (bddgenResult.code !== 0) {
@@ -293,10 +230,8 @@ export class RunnerService {
 
     if (!playwrightCliPath) {
       logger.error('Playwright CLI not found', undefined, {
-        appRoot,
-        appNodeModules,
-        rootNodeModules,
         workspacePath,
+        workspaceNodeModules,
       })
       return {
         status: 'error',
@@ -310,7 +245,7 @@ export class RunnerService {
     const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...args.slice(1)], {
       cwd: workspacePath,
       timeout: options.mode === 'ui' ? 0 : 300000,
-      env: { ...env, ...runAsNodeEnv },
+      env,
     })
 
     const duration = Date.now() - startTime

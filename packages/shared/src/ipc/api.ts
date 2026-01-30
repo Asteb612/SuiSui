@@ -5,6 +5,8 @@ import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions } from '../types/runner'
 import type { GitStatusResult, GitOperationResult } from '../types/git'
 import type { AppSettings } from '../types/settings'
+import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
+import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -59,6 +61,18 @@ export interface ElectronAPI {
   app: {
     getVersion: () => Promise<string>
     openExternal: (url: string) => Promise<void>
+  }
+
+  node: {
+    ensureRuntime: () => Promise<NodeExtractionResult>
+    getInfo: () => Promise<NodeRuntimeInfo | null>
+  }
+
+  deps: {
+    checkStatus: () => Promise<DependencyStatus>
+    checkPackageJson: () => Promise<PackageJsonCheckResult>
+    ensureRequired: () => Promise<PackageJsonCheckResult>
+    install: () => Promise<DependencyInstallResult>
   }
 }
 

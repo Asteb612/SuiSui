@@ -8,6 +8,8 @@ export * from './types/git'
 export * from './types/github'
 export * from './types/command'
 export * from './types/settings'
+export * from './types/node'
+export * from './types/dependency'
 
 // IPC
 export * from './ipc/channels'

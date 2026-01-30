@@ -27,6 +27,14 @@ vi.mock('../services/SettingsService', () => ({
   }),
 }))
 
+// Mock DependencyService
+vi.mock('../services/DependencyService', () => ({
+  getDependencyService: () => ({
+    checkStatus: vi.fn().mockResolvedValue({ needsInstall: false }),
+    install: vi.fn().mockResolvedValue({ success: true, duration: 0, stdout: '', stderr: '' }),
+  }),
+}))
+
 // Read the actual asset file content for mocking
 const assetFilePath = path.join(__dirname, '..', 'assets', 'generic.steps.ts')
 const defaultStepsContent = readFileSync(assetFilePath, 'utf-8')
@@ -367,7 +375,7 @@ describe('WorkspaceService', () => {
       expect(packageJson.name).toBe('workspace')
       expect(packageJson.version).toBe('1.0.0')
       expect(packageJson.description).toBe('BDD Test Project')
-      expect(packageJson.scripts.test).toBe('npx bddgen && npx playwright test')
+      expect(packageJson.scripts.test).toBe('bddgen && playwright test')
       expect(packageJson.devDependencies).toBeDefined()
     })
 

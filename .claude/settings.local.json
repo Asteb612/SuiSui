@@ -33,7 +33,11 @@
       "Bash(pnpm test:deps:packaged:*)",
       "Bash(./release/SuiSui-0.1.0-x86_64.AppImage:*)",
       "Bash(node scripts/test-deps.js:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(npx bddgen:*)",
+      "Bash(pnpm --filter @suisui/desktop electron:build:*)",
+      "Bash(ELECTRON_RUN_AS_NODE=1 /home/grosso_a/Workspace/SuiSui/apps/desktop/release/linux-unpacked/suisui:*)"
     ]
   }
 }

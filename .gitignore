@@ -13,6 +13,7 @@ out/
 release/
 dist-electron/
 bundled-deps/
+apps/desktop/dist/
 *.dmg
 *.AppImage
 *.exe
@@ -24,6 +25,9 @@ bundled-deps/
 apps/desktop/playwright-browsers/
 apps/desktop/playwright-browsers-*/
 playwright-browsers/
+
+# Node.js runtime (downloaded at build time)
+apps/desktop/nodejs-runtime/
 
 # Packaged app output
 package/

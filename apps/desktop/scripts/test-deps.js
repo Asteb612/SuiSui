@@ -98,55 +98,26 @@ function findInNodeModules(modulePath) {
   return null
 }
 
-function checkPlaywrightBddBundle() {
-  const bundlePath = path.join(getBundledDepsPath(), 'playwright-bdd-bundle.js')
+function checkBundledDepsMarker() {
+  // We no longer bundle playwright-bdd - we use CLI subprocess instead
+  // Just check that the marker file exists to confirm build ran
+  const markerPath = path.join(getBundledDepsPath(), 'marker.js')
 
-  if (!fs.existsSync(bundlePath)) {
+  if (!fs.existsSync(markerPath)) {
     return {
-      name: 'playwright-bdd-bundle',
+      name: 'bundled-deps-marker',
       status: 'missing',
-      path: bundlePath,
-      error: 'Bundle file not found'
+      path: markerPath,
+      error: 'Marker file not found (bundle-deps.js may not have run)'
     }
   }
 
-  try {
-    // Try to require the bundle
-    const bundleExports = require(bundlePath)
-    const hasLoadConfig = typeof bundleExports.loadConfig === 'function'
-    const hasGetEnvConfigs = typeof bundleExports.getEnvConfigs === 'function'
-    const hasTestFilesGenerator = typeof bundleExports.TestFilesGenerator === 'function'
-
-    if (!hasLoadConfig || !hasGetEnvConfigs || !hasTestFilesGenerator) {
-      return {
-        name: 'playwright-bdd-bundle',
-        status: 'error',
-        path: bundlePath,
-        error: 'Bundle missing required exports',
-        details: {
-          hasLoadConfig,
-          hasGetEnvConfigs,
-          hasTestFilesGenerator
-        }
-      }
-    }
-
-    const stats = fs.statSync(bundlePath)
-    return {
-      name: 'playwright-bdd-bundle',
-      status: 'ok',
-      path: bundlePath,
-      details: {
-        size: stats.size,
-        exports: Object.keys(bundleExports)
-      }
-    }
-  } catch (err) {
-    return {
-      name: 'playwright-bdd-bundle',
-      status: 'error',
-      path: bundlePath,
-      error: `Failed to load bundle: ${err.message}`
+  return {
+    name: 'bundled-deps-marker',
+    status: 'ok',
+    path: markerPath,
+    details: {
+      note: 'playwright-bdd is now used via CLI subprocess, not bundled'
     }
   }
 }
@@ -365,7 +336,7 @@ function checkPlaywrightBddModule() {
 
 function runDepCheck() {
   const results = [
-    checkPlaywrightBddBundle(),
+    checkBundledDepsMarker(),
     checkBddgenCli(),
     checkPlaywrightCli(),
     checkPlaywrightBrowsers(),

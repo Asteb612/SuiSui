@@ -2,6 +2,8 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import type { WorkspaceInfo, WorkspaceValidation } from '@suisui/shared'
 import { getSettingsService } from './SettingsService'
+import { getDependencyService } from './DependencyService'
+import { getStepService } from './StepService'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('WorkspaceService')
@@ -82,6 +84,18 @@ export class WorkspaceService {
     }
   }
 
+  private async exportSteps(): Promise<void> {
+    try {
+      logger.info('Exporting steps for workspace')
+      const stepService = getStepService()
+      const result = await stepService.export()
+      logger.info('Steps exported successfully', { stepCount: result.steps.length })
+    } catch (error) {
+      // Don't fail workspace setup if step export fails
+      logger.warn('Failed to export steps', { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
   async validate(workspacePath: string): Promise<WorkspaceValidation> {
     logger.debug('Validating workspace', { workspacePath })
     const errors: string[] = []
@@ -143,6 +157,25 @@ export class WorkspaceService {
       await this.ensurePlaywrightConfig(workspacePath)
       await this.ensureDefaultSteps(workspacePath)
 
+      // Install workspace dependencies using embedded Node.js
+      const depService = getDependencyService()
+      const depStatus = await depService.checkStatus(workspacePath)
+      if (depStatus.needsInstall) {
+        logger.info('Installing workspace dependencies', { reason: depStatus.reason })
+        const installResult = await depService.install(workspacePath)
+        if (!installResult.success) {
+          logger.error('Failed to install dependencies', undefined, { error: installResult.error })
+        } else {
+          logger.info('Dependencies installed', { duration: installResult.duration })
+
+          // Export steps after installation
+          await this.exportSteps()
+        }
+      } else {
+        // Dependencies already installed, still export steps to ensure cache is populated
+        await this.exportSteps()
+      }
+
       const settingsService = getSettingsService()
       await settingsService.save({ workspacePath })
       await settingsService.addRecentWorkspace(workspacePath)
@@ -176,6 +209,23 @@ export class WorkspaceService {
         }
         await this.ensurePlaywrightConfig(settings.workspacePath)
         await this.ensureDefaultSteps(settings.workspacePath)
+
+        // Install workspace dependencies using embedded Node.js
+        const depService = getDependencyService()
+        const depStatus = await depService.checkStatus(settings.workspacePath)
+        if (depStatus.needsInstall) {
+          logger.info('Installing workspace dependencies', { reason: depStatus.reason })
+          const installResult = await depService.install(settings.workspacePath)
+          if (!installResult.success) {
+            logger.error('Failed to install dependencies', undefined, { error: installResult.error })
+          } else {
+            logger.info('Dependencies installed', { duration: installResult.duration })
+          }
+        }
+
+        // Export steps after installation or if already installed
+        await this.exportSteps()
+
         logger.info('Workspace loaded from settings', { path: this.currentWorkspace.path })
         return this.currentWorkspace
       } else {
@@ -210,11 +260,15 @@ export class WorkspaceService {
         version: '1.0.0',
         description: 'BDD Test Project',
         scripts: {
-          test: 'npx bddgen && npx playwright test',
+          'test': 'bddgen && playwright test',
+          'test:ui': 'bddgen && playwright test --ui',
+          'test:headed': 'bddgen && playwright test --headed',
+          'bddgen': 'bddgen',
+          'bddgen:export': 'bddgen export',
         },
         devDependencies: {
           '@playwright/test': '^1.40.0',
-          'playwright-bdd': '^6.0.0',
+          'playwright-bdd': '^8.0.0',
         },
       }
       await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2))

@@ -51,6 +51,18 @@ const api: ElectronAPI = {
     getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_VERSION),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, url),
   },
+
+  node: {
+    ensureRuntime: () => ipcRenderer.invoke(IPC_CHANNELS.NODE_ENSURE_RUNTIME),
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.NODE_GET_INFO),
+  },
+
+  deps: {
+    checkStatus: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_CHECK_STATUS),
+    checkPackageJson: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_CHECK_PACKAGE_JSON),
+    ensureRequired: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_ENSURE_REQUIRED),
+    install: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_INSTALL),
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

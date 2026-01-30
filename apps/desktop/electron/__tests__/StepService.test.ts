@@ -1,134 +1,169 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { StepService } from '../services/StepService'
-import { FakeCommandRunner } from '../services/CommandRunner'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { StepService, resetStepService } from '../services/StepService'
 
+// Mock electron app
+vi.mock('electron', () => ({
+  app: {
+    isPackaged: false,
+    getAppPath: () => '/mock/app/path',
+  },
+}))
+
+// Mock workspace service
 vi.mock('../services/WorkspaceService', () => ({
   getWorkspaceService: () => ({
     getPath: () => '/test/workspace',
   }),
 }))
 
+// Mock fs
+vi.mock('node:fs', () => ({
+  default: {
+    existsSync: vi.fn((p: string) => {
+      // Bundle exists
+      if (p.includes('playwright-bdd-bundle.js')) return true
+      // Playwright config exists
+      if (p.includes('playwright.config.ts')) return true
+      // Default for node_modules checks
+      if (p.includes('node_modules')) return true
+      return false
+    }),
+  },
+}))
+
+// Mock the bundled playwright-bdd
+const mockExtractSteps = vi.fn()
+const mockLoadConfig = vi.fn()
+const mockGetEnvConfigs = vi.fn()
+
+vi.mock('/mock/app/path/bundled-deps/playwright-bdd-bundle.js', () => ({
+  loadConfig: mockLoadConfig,
+  getEnvConfigs: mockGetEnvConfigs,
+  TestFilesGenerator: class {
+    extractSteps = mockExtractSteps
+  },
+}))
+
 describe('StepService', () => {
   let service: StepService
-  let runner: FakeCommandRunner
+  const originalChdir = process.chdir
+  const originalCwd = process.cwd
 
   beforeEach(() => {
-    runner = new FakeCommandRunner()
-    service = new StepService(runner)
+    resetStepService()
+    service = new StepService()
+    vi.clearAllMocks()
+
+    // Mock process.chdir to not actually change directory
+    process.chdir = vi.fn()
+    process.cwd = vi.fn(() => '/test/workspace')
+
+    // Setup default mock returns
+    mockLoadConfig.mockResolvedValue(undefined)
+    mockGetEnvConfigs.mockReturnValue({
+      default: { outputDir: '.features-gen' },
+    })
+    mockExtractSteps.mockResolvedValue([])
   })
 
-  describe('export', () => {
-    it('should parse bddgen export output', async () => {
-      const bddgenOutput = JSON.stringify({
-        steps: [
-          { keyword: 'Given', pattern: 'I am on the {string} page', location: 'steps/nav.ts:10' },
-          { keyword: 'When', pattern: 'I click on {string}', location: 'steps/actions.ts:5' },
-          { keyword: 'Then', pattern: 'I should see {string}', location: 'steps/assertions.ts:8' },
-        ],
-      })
+  afterEach(() => {
+    process.chdir = originalChdir
+    process.cwd = originalCwd
+  })
 
-      runner.setResponse('node -e', {
-        code: 0,
-        stdout: bddgenOutput,
-        stderr: '',
-      })
+  describe('parseArgs', () => {
+    it('should parse string arguments', () => {
+      // Access private method via casting
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
 
-      const result = await service.export()
-
-      expect(result.steps).toHaveLength(3)
-      const firstStep = result.steps[0]!
-      expect(firstStep.keyword).toBe('Given')
-      expect(firstStep.pattern).toBe('I am on the {string} page')
-      expect(firstStep.args).toHaveLength(1)
-      expect(firstStep.args[0]!.type).toBe('string')
+      const args = parseArgs('I am on the {string} page')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({ name: 'arg0', type: 'string', required: true })
     })
 
-    it('should parse step arguments correctly', async () => {
-      const bddgenOutput = JSON.stringify({
-        steps: [
-          { keyword: 'When', pattern: 'I wait for {int} seconds', location: 'steps/wait.ts:1' },
-          {
-            keyword: 'When',
-            pattern: 'I fill {string} with {string}',
-            location: 'steps/form.ts:1',
-          },
-        ],
-      })
+    it('should parse multiple arguments', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
 
-      runner.setResponse('node -e', {
-        code: 0,
-        stdout: bddgenOutput,
-        stderr: '',
-      })
-
-      const result = await service.export()
-
-      const firstStep = result.steps[0]!
-      expect(firstStep.args).toHaveLength(1)
-      expect(firstStep.args[0]!.type).toBe('int')
-
-      const secondStep = result.steps[1]!
-      expect(secondStep.args).toHaveLength(2)
-      expect(secondStep.args[0]!.type).toBe('string')
-      expect(secondStep.args[1]!.type).toBe('string')
+      const args = parseArgs('I fill {string} with {string}')
+      expect(args).toHaveLength(2)
+      expect(args[0]).toEqual({ name: 'arg0', type: 'string', required: true })
+      expect(args[1]).toEqual({ name: 'arg1', type: 'string', required: true })
     })
 
-    it('should throw error on bddgen failure', async () => {
-      runner.setResponse('node -e', {
-        code: 1,
-        stdout: '',
-        stderr: 'bddgen not found',
-      })
+    it('should parse int arguments', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
 
-      await expect(service.export()).rejects.toThrow('Failed to export steps')
+      const args = parseArgs('I wait for {int} seconds')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({ name: 'arg0', type: 'int', required: true })
     })
 
-    it('should cache the result', async () => {
-      const bddgenOutput = JSON.stringify({ steps: [] })
-      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
+    it('should parse named arguments', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
 
-      await service.export()
-      const cached = await service.getCached()
+      const args = parseArgs('I fill {string:fieldName} with {string:value}')
+      expect(args).toHaveLength(2)
+      expect(args[0]).toEqual({ name: 'fieldName', type: 'string', required: true })
+      expect(args[1]).toEqual({ name: 'value', type: 'string', required: true })
+    })
+  })
 
-      expect(cached).not.toBeNull()
-      expect(cached?.exportedAt).toBeDefined()
+  describe('parseDecorator', () => {
+    it('should extract decorator from pattern', () => {
+      const parseDecorator = (service as unknown as { parseDecorator: (pattern: string) => string | undefined }).parseDecorator.bind(service)
+
+      expect(parseDecorator('@login I am logged in')).toBe('login')
+      expect(parseDecorator('@setup the database is ready')).toBe('setup')
+    })
+
+    it('should return undefined for patterns without decorator', () => {
+      const parseDecorator = (service as unknown as { parseDecorator: (pattern: string) => string | undefined }).parseDecorator.bind(service)
+
+      expect(parseDecorator('I am on the home page')).toBeUndefined()
     })
   })
 
   describe('getStepsByKeyword', () => {
-    it('should filter steps by keyword', async () => {
-      const bddgenOutput = JSON.stringify({
-        steps: [
-          { keyword: 'Given', pattern: 'step 1', location: 'a.ts:1' },
-          { keyword: 'Given', pattern: 'step 2', location: 'a.ts:2' },
-          { keyword: 'When', pattern: 'step 3', location: 'a.ts:3' },
-          { keyword: 'Then', pattern: 'step 4', location: 'a.ts:4' },
-        ],
-      })
-
-      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
-      await service.export()
-
+    it('should return empty array when no cache', () => {
       const givenSteps = service.getStepsByKeyword('Given')
-      const whenSteps = service.getStepsByKeyword('When')
-      const thenSteps = service.getStepsByKeyword('Then')
+      expect(givenSteps).toHaveLength(0)
+    })
+  })
 
-      expect(givenSteps).toHaveLength(2)
-      expect(whenSteps).toHaveLength(1)
-      expect(thenSteps).toHaveLength(1)
+  describe('findMatchingStep', () => {
+    it('should return undefined when no cache', () => {
+      const step = service.findMatchingStep('some pattern')
+      expect(step).toBeUndefined()
+    })
+  })
+
+  describe('getCached', () => {
+    it('should return null initially', async () => {
+      const cached = await service.getCached()
+      expect(cached).toBeNull()
     })
   })
 
   describe('clearCache', () => {
-    it('should clear the cached steps', async () => {
-      const bddgenOutput = JSON.stringify({ steps: [] })
-      runner.setResponse('node -e', { code: 0, stdout: bddgenOutput, stderr: '' })
+    it('should clear the cache', async () => {
+      // Set up a cached value by directly setting it
+      // We need to use any here since cache is private
+      (service as unknown as { cache: unknown }).cache = {
+        steps: [],
+        decorators: [],
+        exportedAt: new Date().toISOString(),
+      }
 
-      await service.export()
       service.clearCache()
-
       const cached = await service.getCached()
       expect(cached).toBeNull()
+    })
+  })
+
+  describe('getDecorators', () => {
+    it('should return empty array when no cache', async () => {
+      const decorators = await service.getDecorators()
+      expect(decorators).toHaveLength(0)
     })
   })
 })

@@ -38,6 +38,16 @@ export const IPC_CHANNELS = {
   // App
   APP_GET_VERSION: 'app:getVersion',
   APP_OPEN_EXTERNAL: 'app:openExternal',
+
+  // Node Runtime
+  NODE_ENSURE_RUNTIME: 'node:ensureRuntime',
+  NODE_GET_INFO: 'node:getInfo',
+
+  // Dependencies
+  DEPS_CHECK_STATUS: 'deps:checkStatus',
+  DEPS_CHECK_PACKAGE_JSON: 'deps:checkPackageJson',
+  DEPS_ENSURE_REQUIRED: 'deps:ensureRequired',
+  DEPS_INSTALL: 'deps:install',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

@@ -16,8 +16,8 @@
     "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
     "clean": "node scripts/cleanup.js",
     "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
-    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/ensure-playwright-browsers.js && cross-env PLAYWRIGHT_BROWSERS_PATH=playwright-browsers node node_modules/playwright/cli.js install chromium && node scripts/bundle-deps.js && node scripts/prepare-node-modules.js",
-    "dist": "cross-env NUXT_TYPECHECK=false pnpm build && electron-builder --publish=never",
+    "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/prepare-node-modules.js",
+    "dist": "cross-env NUXT_TYPECHECK=false pnpm prebuild:nodejs && pnpm build && electron-builder --publish=never",
     "test:deps": "node scripts/test-deps.js",
     "test:deps:build": "node scripts/test-deps.js --dist-electron",
     "test:deps:release": "node scripts/test-deps.js --packaged ./release/linux-unpacked/resources",
@@ -26,15 +26,13 @@
     "typecheck": "nuxt typecheck && tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepare": "nuxt prepare"
+    "prepare": "nuxt prepare",
+    "prebuild:nodejs": "node scripts/download-nodejs.js --current-only",
+    "prebuild:nodejs:all": "node scripts/download-nodejs.js"
   },
   "dependencies": {
-    "@playwright/test": "^1.58.0",
     "@suisui/shared": "workspace:*",
-    "bddgen": "^1.0.5",
-    "keytar": "^7.9.0",
-    "playwright": "^1.58.0",
-    "playwright-bdd": "^6.0.0"
+    "keytar": "^7.9.0"
   },
   "devDependencies": {
     "@oxc-minify/binding-linux-x64-gnu": "^0.110.0",
@@ -71,28 +69,13 @@
     },
     "files": [
       "**/*",
-      "!__tests__/**",
-      "!node_modules/**"
+      "!__tests__/**"
     ],
     "afterPack": "scripts/after-pack.js",
     "extraResources": [
       {
-        "from": "bundled-deps",
-        "to": "bundled-deps",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "playwright-browsers",
-        "to": "playwright-browsers",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "dist-electron/node_modules",
-        "to": "node_modules",
+        "from": "nodejs-runtime/${os}-${arch}",
+        "to": "nodejs/${os}-${arch}",
         "filter": [
           "**/*"
         ]
@@ -103,7 +86,8 @@
     },
     "asar": true,
     "asarUnpack": [
-      "**/*.node"
+      "**/*.node",
+      "scripts/**"
     ],
     "mac": {
       "target": [

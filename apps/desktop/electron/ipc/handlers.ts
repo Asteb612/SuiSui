@@ -10,6 +10,8 @@ import {
   getRunnerService,
   getGitService,
   getSettingsService,
+  getNodeService,
+  getDependencyService,
   FakeCommandRunner,
   setCommandRunner,
 } from '../services'
@@ -40,6 +42,8 @@ export function registerIpcHandlers(
   const runnerService = getRunnerService()
   const gitService = getGitService()
   const settingsService = getSettingsService()
+  const nodeService = getNodeService()
+  const dependencyService = getDependencyService()
 
   // App handlers
   ipcMain.handle(IPC_CHANNELS.APP_GET_VERSION, () => {
@@ -192,6 +196,32 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_RESET, async () => {
     await settingsService.reset()
+  })
+
+  // Node runtime handlers
+  ipcMain.handle(IPC_CHANNELS.NODE_ENSURE_RUNTIME, async () => {
+    return nodeService.ensureRuntime()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.NODE_GET_INFO, async () => {
+    return nodeService.getRuntimeInfo()
+  })
+
+  // Dependency handlers
+  ipcMain.handle(IPC_CHANNELS.DEPS_CHECK_STATUS, async () => {
+    return dependencyService.checkStatus()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DEPS_CHECK_PACKAGE_JSON, async () => {
+    return dependencyService.checkPackageJson()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DEPS_ENSURE_REQUIRED, async () => {
+    return dependencyService.ensureRequiredDependencies()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DEPS_INSTALL, async () => {
+    return dependencyService.install()
   })
 
   logger.info('IPC handlers registered', { isTestMode })

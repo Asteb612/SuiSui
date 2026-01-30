@@ -26,14 +26,26 @@ function copyRecursive(src, dest) {
   }
 }
 
-const sourceDir = path.join(__dirname, '..', 'electron', 'assets');
-const destDir = path.join(__dirname, '..', 'dist-electron', 'assets');
+// Copy assets directory
+const assetsSourceDir = path.join(__dirname, '..', 'electron', 'assets');
+const assetsDestDir = path.join(__dirname, '..', 'dist-electron', 'assets');
 
-if (!fs.existsSync(sourceDir)) {
-  console.log(`Assets directory not found: ${sourceDir} (skipping)`);
-  process.exit(0);
+if (fs.existsSync(assetsSourceDir)) {
+  console.log(`Copying ${assetsSourceDir} to ${assetsDestDir}...`);
+  copyRecursive(assetsSourceDir, assetsDestDir);
+  console.log('Assets copied successfully!');
+} else {
+  console.log(`Assets directory not found: ${assetsSourceDir} (skipping)`);
 }
 
-console.log(`Copying ${sourceDir} to ${destDir}...`);
-copyRecursive(sourceDir, destDir);
-console.log('Assets copied successfully!');
+// Copy scripts directory (for bddgen-export.js wrapper)
+const scriptsSourceDir = path.join(__dirname, '..', 'electron', 'scripts');
+const scriptsDestDir = path.join(__dirname, '..', 'dist-electron', 'scripts');
+
+if (fs.existsSync(scriptsSourceDir)) {
+  console.log(`Copying ${scriptsSourceDir} to ${scriptsDestDir}...`);
+  copyRecursive(scriptsSourceDir, scriptsDestDir);
+  console.log('Scripts copied successfully!');
+} else {
+  console.log(`Scripts directory not found: ${scriptsSourceDir} (skipping)`);
+}

@@ -1,7 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { app } from 'electron'
-import { createRequire } from 'node:module'
+import { spawn } from 'node:child_process'
 import type {
   StepDefinition,
   StepExportResult,
@@ -9,17 +9,19 @@ import type {
   StepArgDefinition,
 } from '@suisui/shared'
 import { getWorkspaceService } from './WorkspaceService'
+import { getNodeService } from './NodeService'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('StepService')
 
-function getBundledDepsPath(): string {
+function getExportScriptPath(): string {
   if (app.isPackaged) {
-    // In packaged app, extraResources are in the resources folder next to app.asar
-    return path.join(process.resourcesPath, 'bundled-deps')
+    // In packaged app, scripts are unpacked to app.asar.unpacked/scripts
+    // This is needed because the embedded Node.js can't read from inside asar
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'scripts', 'bddgen-export.js')
   }
-  // In development, use the local bundled-deps
-  return path.resolve(__dirname, '..', '..', 'bundled-deps')
+  // In development, use the local script
+  return path.resolve(__dirname, '..', 'scripts', 'bddgen-export.js')
 }
 
 interface BddgenStep {
@@ -36,7 +38,7 @@ export class StepService {
   private cache: StepExportResult | null = null
 
   constructor() {
-    // No dependencies needed - runs in-process
+    // No dependencies needed
   }
 
   private parseArgs(pattern: string): StepArgDefinition[] {
@@ -67,6 +69,152 @@ export class StepService {
     return `step-${Math.abs(hash).toString(16)}`
   }
 
+  private async runBddgenExport(workspacePath: string, configPath: string): Promise<string> {
+    const scriptPath = getExportScriptPath()
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
+
+    logger.debug('Running bddgen export', { scriptPath, workspacePath, configPath })
+
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(
+        `Export script not found at: ${scriptPath}\n` +
+        `This is an installation error. Please reinstall the application.`
+      )
+    }
+
+    if (!fs.existsSync(workspaceNodeModules)) {
+      throw new Error(
+        `Workspace node_modules not found at: ${workspaceNodeModules}\n` +
+        `Please ensure dependencies are installed in your workspace.`
+      )
+    }
+
+    // Get embedded Node.js path
+    const nodeService = getNodeService()
+    const nodeExecPath = await nodeService.getNodePath()
+
+    if (!nodeExecPath) {
+      throw new Error(
+        'Node.js runtime not available.\n' +
+        'Please restart the application.'
+      )
+    }
+
+    return new Promise((resolve, reject) => {
+      // Use only workspace's node_modules
+      const combinedNodePath = workspaceNodeModules
+
+      // Add embedded Node.js bin directory to PATH
+      const nodeDir = path.dirname(nodeExecPath)
+      const pathParts = [nodeDir, path.join(workspaceNodeModules, '.bin')]
+      if (process.env.PATH) {
+        pathParts.push(process.env.PATH)
+      }
+
+      // Set up environment with NODE_PATH pointing to workspace's node_modules
+      const env = {
+        ...process.env,
+        NODE_PATH: combinedNodePath,
+        PATH: pathParts.join(path.delimiter),
+      }
+
+      // Run our wrapper script that calls playwright-bdd programmatically
+      // This bypasses Commander.js argument parsing issues
+      // Pass the workspace's node_modules path so the script can find playwright-bdd
+      const args = [scriptPath, configPath, workspaceNodeModules]
+
+      logger.debug('Spawning process', { execPath: nodeExecPath, args, cwd: workspacePath, NODE_PATH: combinedNodePath })
+
+      const child = spawn(nodeExecPath, args, {
+        cwd: workspacePath,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let stdout = ''
+      let stderr = ''
+
+      child.stdout?.on('data', (data) => {
+        stdout += data.toString()
+      })
+
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString()
+      })
+
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM')
+        reject(new Error('Step export timed out after 60 seconds'))
+      }, 60000)
+
+      child.on('close', (code) => {
+        clearTimeout(timeout)
+
+        if (code !== 0) {
+          logger.error('bddgen export failed', undefined, { code, stdout, stderr })
+
+          // Check for common error patterns and provide helpful messages
+          if (stderr.includes('importTestFrom')) {
+            reject(new Error(
+              `playwright-bdd configuration error.\n\n` +
+              `The "importTestFrom" option in your playwright.config.ts should point to a fixtures file ` +
+              `that does NOT contain step definitions (no Given, When, Then calls).\n\n` +
+              `Step definitions should be in separate files under your steps directory.\n\n` +
+              `Details:\n${stderr}`
+            ))
+          } else if (stderr.includes('Cannot find module')) {
+            reject(new Error(
+              `Module resolution error during step export.\n\n` +
+              `Please ensure your workspace has the required dependencies installed.\n\n` +
+              `Details:\n${stderr}`
+            ))
+          } else {
+            reject(new Error(`Step export failed (exit code ${code}):\n${stderr || stdout}`))
+          }
+          return
+        }
+
+        resolve(stdout)
+      })
+
+      child.on('error', (err) => {
+        clearTimeout(timeout)
+        logger.error('Failed to spawn bddgen export', err)
+        reject(new Error(`Failed to run step export: ${err.message}`))
+      })
+    })
+  }
+
+  private parseExportOutput(output: string): BddgenStep[] {
+    // bddgen export outputs step definitions in a text format like:
+    // * Given I am on todo page
+    // * When I add todo {string}
+    // * Then visible todos count is {int}
+
+    const steps: BddgenStep[] = []
+    const lines = output.split('\n').filter(line => line.trim())
+
+    for (const line of lines) {
+      // Match patterns like: * Given <pattern> or * When <pattern>
+      const match = line.match(/^\*\s*(Given|When|Then)\s+(.+)$/i)
+      if (match && match[1] && match[2]) {
+        const keyword = match[1]
+        const pattern = match[2].trim()
+
+        // Capitalize first letter of keyword
+        const normalizedKeyword = (keyword.charAt(0).toUpperCase() + keyword.slice(1).toLowerCase()) as 'Given' | 'When' | 'Then'
+
+        steps.push({
+          keyword: normalizedKeyword,
+          pattern,
+          location: '', // v8 output doesn't include location in this format
+        })
+      }
+    }
+
+    return steps
+  }
+
   async export(): Promise<StepExportResult> {
     logger.info('Starting step export')
     const workspaceService = getWorkspaceService()
@@ -78,20 +226,6 @@ export class StepService {
     }
 
     logger.debug('Workspace path', { workspacePath })
-
-    // Use the app's bundled playwright-bdd from extraResources
-    const bundledDepsPath = getBundledDepsPath()
-    const bundlePath = path.join(bundledDepsPath, 'playwright-bdd-bundle.js')
-
-    logger.debug('Using bundled playwright-bdd', { bundlePath })
-
-    if (!fs.existsSync(bundlePath)) {
-      logger.error('Bundled playwright-bdd not found', undefined, { bundlePath })
-      throw new Error(
-        `playwright-bdd bundle not found. This is an installation error.\n` +
-        `Expected at: ${bundlePath}`
-      )
-    }
 
     // Find Playwright config
     const configCandidates = [
@@ -117,95 +251,18 @@ export class StepService {
 
     logger.debug('Found Playwright config', { resolvedConfig })
 
-    // Set environment for playwright-bdd
-    const originalCwd = process.cwd()
-    const originalConfigDir = process.env.PLAYWRIGHT_BDD_CONFIG_DIR
-    const originalNodePath = process.env.NODE_PATH
-
     try {
-      // Change to workspace directory for proper module resolution
-      process.chdir(workspacePath)
-      process.env.PLAYWRIGHT_BDD_CONFIG_DIR = path.dirname(resolvedConfig)
+      // Run bddgen export via subprocess
+      const output = await this.runBddgenExport(workspacePath, resolvedConfig)
 
-      const appRoot = app.isPackaged ? app.getAppPath() : path.resolve(__dirname, '..', '..')
-      const appNodeModules = path.join(appRoot, 'node_modules')
-      const resourceNodeModules =
-        app.isPackaged && typeof process.resourcesPath === 'string'
-          ? path.join(process.resourcesPath, 'node_modules')
-          : null
-      const unpackedNodeModules =
-        app.isPackaged && typeof process.resourcesPath === 'string'
-          ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules')
-          : null
-      const monorepoRoot = path.resolve(appRoot, '..', '..')
-      const rootNodeModules = path.join(monorepoRoot, 'node_modules')
-      const nodePathParts = [appNodeModules]
+      logger.debug('bddgen export output', { outputLength: output.length })
 
-      if (resourceNodeModules && fs.existsSync(resourceNodeModules)) {
-        nodePathParts.push(resourceNodeModules)
-      }
-      if (unpackedNodeModules && fs.existsSync(unpackedNodeModules)) {
-        nodePathParts.push(unpackedNodeModules)
-      }
-      if (fs.existsSync(rootNodeModules)) {
-        nodePathParts.push(rootNodeModules)
-      }
-      if (originalNodePath) {
-        nodePathParts.push(originalNodePath)
-      }
-
-      process.env.NODE_PATH = nodePathParts.join(path.delimiter)
-      require('module').Module._initPaths()
-
-      logger.debug('Set up environment', {
-        PLAYWRIGHT_BDD_CONFIG_DIR: process.env.PLAYWRIGHT_BDD_CONFIG_DIR,
-        cwd: process.cwd(),
-        NODE_PATH: process.env.NODE_PATH,
-      })
-
-      // Clear require cache for the bundle to ensure fresh load
-      delete require.cache[bundlePath]
-
-      // Load from our bundled single file
-      const { loadConfig, getEnvConfigs, TestFilesGenerator } = require(bundlePath)
-
-      // Load the Playwright config
-      logger.debug('Loading Playwright config', { resolvedConfig })
-      await loadConfig(resolvedConfig)
-
-      // Get BDD configs
-      const configs = Object.values(getEnvConfigs())
-      if (!configs.length) {
-        throw new Error(
-          'No BDD configs found. Ensure defineBddConfig() is called in your Playwright config.'
-        )
-      }
-
-      logger.debug('Found BDD configs', { count: configs.length })
-
-      // Extract steps from all configs
-      const extractedSteps: BddgenStep[] = []
-      for (const config of configs) {
-        const generator = new TestFilesGenerator(config as object)
-        const stepDefinitions = await generator.extractSteps()
-        stepDefinitions.forEach((step: { keyword: string; pattern: string | RegExp; uri?: string; line?: number }) => {
-          const pattern = typeof step.pattern === 'string' ? step.pattern : step.pattern.source
-          const uri = step.uri || ''
-          const line = step.line || ''
-          const location = uri && line ? `${uri}:${line}` : uri
-          extractedSteps.push({
-            keyword: step.keyword as 'Given' | 'When' | 'Then',
-            pattern,
-            location
-          })
-        })
-      }
+      // Parse the output
+      const extractedSteps = this.parseExportOutput(output)
 
       logger.info('Extracted steps', { count: extractedSteps.length })
 
-      const bddgenExport: BddgenExport = { steps: extractedSteps }
-
-      const steps: StepDefinition[] = bddgenExport.steps.map((step) => ({
+      const steps: StepDefinition[] = extractedSteps.map((step) => ({
         id: this.generateStepId(step.keyword, step.pattern, step.location),
         keyword: step.keyword,
         pattern: step.pattern,
@@ -227,21 +284,6 @@ export class StepService {
     } catch (err) {
       logger.error('Step export failed', err as Error)
       throw err
-    } finally {
-      // Restore original state
-      process.chdir(originalCwd)
-      if (originalConfigDir !== undefined) {
-        process.env.PLAYWRIGHT_BDD_CONFIG_DIR = originalConfigDir
-      } else {
-        delete process.env.PLAYWRIGHT_BDD_CONFIG_DIR
-      }
-      if (originalNodePath !== undefined) {
-        process.env.NODE_PATH = originalNodePath
-      } else {
-        delete process.env.NODE_PATH
-      }
-      // Re-init module paths
-      require('module').Module._initPaths()
     }
   }
 
