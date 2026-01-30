@@ -8,6 +8,18 @@ const logger = createLogger('NodeService')
 
 const NODE_VERSION = '22.13.1'
 
+/**
+ * Get the folder name for the current platform.
+ * electron-builder uses 'win' instead of 'win32' for Windows.
+ */
+function getPlatformFolder(): string {
+  const platform = process.platform
+  const arch = process.arch
+  // Match electron-builder's ${os} naming: 'win' instead of 'win32'
+  const osName = platform === 'win32' ? 'win' : platform
+  return `${osName}-${arch}`
+}
+
 export interface INodeService {
   ensureRuntime(): Promise<NodeExtractionResult>
   getRuntimeInfo(): Promise<NodeRuntimeInfo | null>
@@ -45,26 +57,25 @@ export class NodeService implements INodeService {
   }
 
   getBundledRuntimePath(): string | null {
-    const platform = process.platform
-    const arch = process.arch
+    const platformFolder = getPlatformFolder()
 
     // In packaged app, check resources directory
     if (app.isPackaged && process.resourcesPath) {
-      const packagedPath = path.join(process.resourcesPath, 'nodejs', `${platform}-${arch}`)
+      const packagedPath = path.join(process.resourcesPath, 'nodejs', platformFolder)
       if (fs.existsSync(packagedPath)) {
         return packagedPath
       }
     }
 
     // In development, check local nodejs-runtime directory
-    const devPath = path.join(__dirname, '..', '..', 'nodejs-runtime', `${platform}-${arch}`)
+    const devPath = path.join(__dirname, '..', '..', 'nodejs-runtime', platformFolder)
     if (fs.existsSync(devPath)) {
       return devPath
     }
 
     // Also check from app root in development
     const appRoot = this.getAppRoot()
-    const devPath2 = path.join(appRoot, 'nodejs-runtime', `${platform}-${arch}`)
+    const devPath2 = path.join(appRoot, 'nodejs-runtime', platformFolder)
     if (fs.existsSync(devPath2)) {
       return devPath2
     }

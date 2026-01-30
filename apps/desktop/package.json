@@ -15,9 +15,10 @@
     "dev:electron": "wait-on http://localhost:3000 && electron .",
     "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
     "clean": "node scripts/cleanup.js",
-    "build": "pnpm -C ../../packages/shared build && cross-env NODE_ENV=production nuxt build && pnpm build:electron",
+    "build": "pnpm -C ../../packages/shared build && nuxt build && pnpm build:electron",
+    "build:dist": "pnpm -C ../../packages/shared build && cross-env NUXT_TYPECHECK=false nuxt build && pnpm build:electron",
     "build:electron": "tsc -p electron/tsconfig.json && node scripts/copy-assets.js && node scripts/copy-frontend.js && node scripts/copy-package-json.js && node scripts/prepare-node-modules.mjs",
-    "dist": "cross-env NUXT_TYPECHECK=false pnpm prebuild:nodejs && pnpm build && electron-builder --publish=never",
+    "dist": "pnpm prebuild:nodejs && pnpm build:dist && electron-builder --publish=never",
     "test:deps": "node scripts/test-deps.js",
     "test:deps:build": "node scripts/test-deps.js --dist-electron",
     "test:deps:release": "node scripts/test-deps.js --packaged ./release/linux-unpacked/resources",
@@ -54,7 +55,7 @@
     "vitest": "^2.0.0",
     "vue": "^3.5.0",
     "vue-router": "^4.5.0",
-    "vue-tsc": "^3.2.3",
+    "vue-tsc": "^3.2.4",
     "wait-on": "^8.0.0"
   },
   "build": {

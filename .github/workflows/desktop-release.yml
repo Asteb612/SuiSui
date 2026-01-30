@@ -40,10 +40,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download Node.js runtime
-        shell: bash
-        run: node apps/desktop/scripts/download-nodejs.js --current-only
-
       - name: Build and package desktop
         env:
           NUXT_TYPECHECK: false
@@ -51,6 +47,7 @@ jobs:
         run: |
           cd apps/desktop
           pnpm -C ../../packages/shared build
+          pnpm prebuild:nodejs
           pnpm build
           pnpm exec electron-builder --${{ matrix.platform }} --publish=never
 

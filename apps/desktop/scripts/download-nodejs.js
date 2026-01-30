@@ -12,8 +12,54 @@ const https = require('https')
 const fs = require('fs')
 const path = require('path')
 const { execSync, spawn } = require('child_process')
-const { createGunzip } = require('zlib')
-const { pipeline } = require('stream/promises')
+
+/**
+ * Recursively copy a directory (works better than rename on Windows)
+ */
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true })
+  const entries = fs.readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      copyDirSync(srcPath, destPath)
+    } else {
+      fs.copyFileSync(srcPath, destPath)
+    }
+  }
+}
+
+/**
+ * Move a file or directory with fallback to copy+delete on Windows
+ */
+function moveSync(src, dest) {
+  try {
+    // First, remove destination if it exists
+    if (fs.existsSync(dest)) {
+      fs.rmSync(dest, { recursive: true, force: true })
+    }
+    fs.renameSync(src, dest)
+  } catch (err) {
+    if (err.code === 'EPERM' || err.code === 'EXDEV') {
+      // Fallback: copy then delete (handles cross-device moves and Windows locks)
+      const stat = fs.statSync(src)
+      if (stat.isDirectory()) {
+        copyDirSync(src, dest)
+      } else {
+        fs.copyFileSync(src, dest)
+      }
+      // Try to remove source, but don't fail if we can't
+      try {
+        fs.rmSync(src, { recursive: true, force: true })
+      } catch {
+        // Ignore cleanup errors
+      }
+    } else {
+      throw err
+    }
+  }
+}
 
 const NODE_VERSION = '22.13.1'
 const BASE_URL = `https://nodejs.org/dist/v${NODE_VERSION}`
@@ -22,7 +68,8 @@ const PLATFORMS = [
   { platform: 'linux', arch: 'x64', ext: 'tar.xz', folder: 'linux-x64' },
   { platform: 'darwin', arch: 'x64', ext: 'tar.gz', folder: 'darwin-x64' },
   { platform: 'darwin', arch: 'arm64', ext: 'tar.gz', folder: 'darwin-arm64' },
-  { platform: 'win32', arch: 'x64', ext: 'zip', folder: 'win32-x64' },
+  // electron-builder uses 'win' not 'win32' for ${os} variable
+  { platform: 'win32', arch: 'x64', ext: 'zip', folder: 'win-x64' },
 ]
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'nodejs-runtime')
@@ -150,11 +197,15 @@ async function extractZip(archivePath, destDir) {
       const srcDir = path.join(tempDir, nodeFolder)
       const files = fs.readdirSync(srcDir)
       for (const file of files) {
-        fs.renameSync(path.join(srcDir, file), path.join(destDir, file))
+        moveSync(path.join(srcDir, file), path.join(destDir, file))
       }
 
       // Cleanup temp dir
-      fs.rmSync(tempDir, { recursive: true, force: true })
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch {
+        // Ignore cleanup errors on Windows
+      }
       resolve()
     })
 
@@ -173,9 +224,13 @@ async function extractZip(archivePath, destDir) {
             const srcDir = path.join(tempDir, nodeFolder)
             const files = fs.readdirSync(srcDir)
             for (const file of files) {
-              fs.renameSync(path.join(srcDir, file), path.join(destDir, file))
+              moveSync(path.join(srcDir, file), path.join(destDir, file))
             }
-            fs.rmSync(tempDir, { recursive: true, force: true })
+            try {
+              fs.rmSync(tempDir, { recursive: true, force: true })
+            } catch {
+              // Ignore cleanup errors on Windows
+            }
             resolve()
             return
           }

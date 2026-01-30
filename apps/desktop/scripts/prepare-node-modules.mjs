@@ -24,16 +24,7 @@ if (fs.existsSync(deployDir)) {
 }
 
 console.log('[prepare-node-modules] Running pnpm deploy with node-linker=hoisted...');
-const pnpmArgs = ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir];
-let command = 'pnpm';
-let args = pnpmArgs;
-
-// Check if npm_execpath is a JS file (not a native binary)
-// Native pnpm binaries (ELF on Linux) cannot be run via Node.js
-if (process.env.npm_execpath && process.env.npm_execpath.endsWith('.js')) {
-  command = process.execPath;
-  args = [process.env.npm_execpath, ...pnpmArgs];
-}
+console.log(`[prepare-node-modules] Deploy target: ${deployDir}`);
 
 // Use hoisted node-linker to create a flat node_modules structure
 // This ensures all packages are accessible via standard Node.js module resolution
@@ -43,12 +34,38 @@ const env = {
   npm_config_node_linker: 'hoisted'
 };
 
-const result = spawnSync(command, args, {
-  cwd: repoRoot,
-  stdio: 'inherit',
-  env,
-  shell: process.platform === 'win32'
-});
+let result;
+
+if (process.platform === 'win32') {
+  // On Windows, use shell with properly quoted paths to handle spaces
+  const quotedDeployDir = `"${deployDir}"`;
+  const cmdLine = `pnpm --filter @suisui/desktop --prod deploy ${quotedDeployDir}`;
+  console.log(`[prepare-node-modules] Running: ${cmdLine}`);
+  result = spawnSync(cmdLine, [], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env,
+    shell: true
+  });
+} else {
+  // On Unix, pass args as array (no shell needed)
+  const pnpmArgs = ['--filter', '@suisui/desktop', '--prod', 'deploy', deployDir];
+  let command = 'pnpm';
+  let args = pnpmArgs;
+
+  // Check if npm_execpath is a JS file (not a native binary)
+  // Native pnpm binaries (ELF on Linux) cannot be run via Node.js
+  if (process.env.npm_execpath && process.env.npm_execpath.endsWith('.js')) {
+    command = process.execPath;
+    args = [process.env.npm_execpath, ...pnpmArgs];
+  }
+
+  result = spawnSync(command, args, {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env
+  });
+}
 
 if (result.error) {
   console.error('[prepare-node-modules] Failed to run pnpm.', result.error);

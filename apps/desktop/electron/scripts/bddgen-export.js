@@ -28,7 +28,7 @@ async function main() {
       playwrightBddPath = path.dirname(require.resolve('playwright-bdd/package.json'));
     }
 
-    // Import playwright-bdd internals using absolute paths
+    // Import playwright-bdd internals using absolute paths (requires v8+)
     const { loadConfig } = require(path.join(playwrightBddPath, 'dist', 'playwright', 'loadConfig'));
     const { getEnvConfigs } = require(path.join(playwrightBddPath, 'dist', 'config', 'env'));
     const { TestFilesGenerator } = require(path.join(playwrightBddPath, 'dist', 'generate'));

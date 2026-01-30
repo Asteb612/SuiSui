@@ -21,6 +21,35 @@ const REQUIRED_DEPENDENCIES: RequiredDependency[] = [
   { name: 'playwright-bdd', version: '^8.0.0', type: 'devDependencies' },
 ]
 
+/**
+ * Extract major version from a semver range like "^8.0.0", "~6.6.0", "1.2.3", etc.
+ * Returns null if the version string can't be parsed.
+ */
+function extractMajorVersion(versionRange: string): number | null {
+  // Remove leading ^ or ~ or >= or other prefixes
+  const match = versionRange.match(/(\d+)\./)
+  if (match && match[1]) {
+    return parseInt(match[1], 10)
+  }
+  return null
+}
+
+/**
+ * Check if an installed version meets the minimum required version.
+ * For caret ranges like ^8.0.0, we check if the major version is >= required major.
+ */
+function meetsVersionRequirement(installedVersion: string, requiredVersion: string): boolean {
+  const installedMajor = extractMajorVersion(installedVersion)
+  const requiredMajor = extractMajorVersion(requiredVersion)
+
+  if (installedMajor === null || requiredMajor === null) {
+    // Can't parse, assume it's ok
+    return true
+  }
+
+  return installedMajor >= requiredMajor
+}
+
 export interface IDependencyService {
   checkStatus(workspacePath?: string): Promise<DependencyStatus>
   checkPackageJson(workspacePath?: string): Promise<PackageJsonCheckResult>
@@ -92,6 +121,7 @@ export class DependencyService implements IDependencyService {
       return {
         isValid: false,
         missingDeps: [],
+        outdatedDeps: [],
         packageJsonExists: false,
         wasModified: false,
       }
@@ -102,6 +132,7 @@ export class DependencyService implements IDependencyService {
       return {
         isValid: false,
         missingDeps: REQUIRED_DEPENDENCIES,
+        outdatedDeps: [],
         packageJsonExists: false,
         wasModified: false,
       }
@@ -111,24 +142,36 @@ export class DependencyService implements IDependencyService {
     const devDependencies = (packageJson.devDependencies || {}) as Record<string, string>
 
     const missingDeps: RequiredDependency[] = []
+    const outdatedDeps: RequiredDependency[] = []
 
     for (const required of REQUIRED_DEPENDENCIES) {
       const inDeps = dependencies[required.name]
       const inDevDeps = devDependencies[required.name]
+      const installedVersion = inDeps || inDevDeps
 
-      if (!inDeps && !inDevDeps) {
+      if (!installedVersion) {
         missingDeps.push(required)
+      } else if (!meetsVersionRequirement(installedVersion, required.version)) {
+        // Dependency exists but version is too old
+        outdatedDeps.push(required)
+        logger.info('Outdated dependency detected', {
+          name: required.name,
+          installed: installedVersion,
+          required: required.version,
+        })
       }
     }
 
     logger.debug('Package.json check result', {
       workspacePath: wsPath,
       missingDeps: missingDeps.map((d) => d.name),
+      outdatedDeps: outdatedDeps.map((d) => d.name),
     })
 
     return {
-      isValid: missingDeps.length === 0,
+      isValid: missingDeps.length === 0 && outdatedDeps.length === 0,
       missingDeps,
+      outdatedDeps,
       packageJsonExists: true,
       wasModified: false,
     }
@@ -140,6 +183,7 @@ export class DependencyService implements IDependencyService {
       return {
         isValid: false,
         missingDeps: [],
+        outdatedDeps: [],
         packageJsonExists: false,
         wasModified: false,
       }
@@ -156,14 +200,17 @@ export class DependencyService implements IDependencyService {
       return checkResult
     }
 
-    // Read package.json and add missing dependencies
+    // Read package.json and add/update dependencies
     const packageJson = await this.readPackageJson(wsPath)
     if (!packageJson) {
       return checkResult
     }
 
     let modified = false
+    const dependencies = (packageJson.dependencies || {}) as Record<string, string>
+    const devDependencies = (packageJson.devDependencies || {}) as Record<string, string>
 
+    // Add missing dependencies
     for (const missing of checkResult.missingDeps) {
       const targetSection = missing.type as 'dependencies' | 'devDependencies'
 
@@ -183,7 +230,37 @@ export class DependencyService implements IDependencyService {
       })
     }
 
+    // Update outdated dependencies
+    for (const outdated of checkResult.outdatedDeps || []) {
+      // Find which section the dependency is in and update it
+      if (dependencies[outdated.name]) {
+        const oldVersion = dependencies[outdated.name]
+        dependencies[outdated.name] = outdated.version
+        modified = true
+        logger.info('Updating outdated dependency', {
+          workspacePath: wsPath,
+          dependency: outdated.name,
+          oldVersion,
+          newVersion: outdated.version,
+          section: 'dependencies',
+        })
+      } else if (devDependencies[outdated.name]) {
+        const oldVersion = devDependencies[outdated.name]
+        devDependencies[outdated.name] = outdated.version
+        modified = true
+        logger.info('Updating outdated dependency', {
+          workspacePath: wsPath,
+          dependency: outdated.name,
+          oldVersion,
+          newVersion: outdated.version,
+          section: 'devDependencies',
+        })
+      }
+    }
+
     if (modified) {
+      packageJson.dependencies = dependencies
+      packageJson.devDependencies = devDependencies
       await this.writePackageJson(wsPath, packageJson)
       logger.info('Updated package.json with required dependencies', { workspacePath: wsPath })
     }
@@ -191,9 +268,36 @@ export class DependencyService implements IDependencyService {
     return {
       isValid: true,
       missingDeps: [],
+      outdatedDeps: [],
       packageJsonExists: true,
       wasModified: modified,
     }
+  }
+
+  /**
+   * Check if actually installed package versions in node_modules meet requirements.
+   * This catches cases where package.json was updated but npm install wasn't run.
+   */
+  private checkInstalledVersions(workspacePath: string): { needsUpdate: boolean; outdated: string[] } {
+    const nodeModulesPath = path.join(workspacePath, 'node_modules')
+    const outdated: string[] = []
+
+    for (const required of REQUIRED_DEPENDENCIES) {
+      const pkgJsonPath = path.join(nodeModulesPath, required.name, 'package.json')
+      try {
+        if (fs.existsSync(pkgJsonPath)) {
+          const content = fs.readFileSync(pkgJsonPath, 'utf-8')
+          const pkg = JSON.parse(content) as { version?: string }
+          if (pkg.version && !meetsVersionRequirement(pkg.version, required.version)) {
+            outdated.push(`${required.name}@${pkg.version} (requires ${required.version})`)
+          }
+        }
+      } catch {
+        // Ignore read errors
+      }
+    }
+
+    return { needsUpdate: outdated.length > 0, outdated }
   }
 
   async checkStatus(workspacePath?: string): Promise<DependencyStatus> {
@@ -215,6 +319,16 @@ export class DependencyService implements IDependencyService {
     // Check if node_modules exists
     if (!fs.existsSync(nodeModulesPath)) {
       logger.info('node_modules missing, install needed', { workspacePath: wsPath })
+      return { needsInstall: true, reason: 'missing' }
+    }
+
+    // Check if installed versions are outdated
+    const installedCheck = this.checkInstalledVersions(wsPath)
+    if (installedCheck.needsUpdate) {
+      logger.info('Outdated packages in node_modules, install needed', {
+        workspacePath: wsPath,
+        outdated: installedCheck.outdated,
+      })
       return { needsInstall: true, reason: 'missing' }
     }
 
@@ -314,9 +428,10 @@ export class DependencyService implements IDependencyService {
     }
 
     // Determine if we should use npm ci or npm install
+    // Use 'install' if package.json was modified (lockfile out of sync) or no lockfile exists
     const packageLockPath = path.join(wsPath, 'package-lock.json')
     const hasLockfile = fs.existsSync(packageLockPath)
-    const npmCommand = hasLockfile ? 'ci' : 'install'
+    const npmCommand = (packageJsonCheck.wasModified || !hasLockfile) ? 'install' : 'ci'
 
     logger.info('Installing dependencies', {
       workspacePath: wsPath,

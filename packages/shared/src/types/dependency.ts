@@ -28,6 +28,7 @@ export interface RequiredDependency {
 export interface PackageJsonCheckResult {
   isValid: boolean
   missingDeps: RequiredDependency[]
+  outdatedDeps?: RequiredDependency[]
   packageJsonExists: boolean
   wasModified: boolean
 }

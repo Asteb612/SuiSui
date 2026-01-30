@@ -13,8 +13,15 @@ export class CommandRunner implements ICommandRunner {
     const { cwd, env, timeout = 60000 } = options
 
     return new Promise((resolve) => {
-      const fullCmd = `${cmd} ${args.join(' ')}`
-      const child = spawn(cmd, args, {
+      // On Windows with shell: true, paths with spaces need to be quoted
+      const isWindows = process.platform === 'win32'
+      const quotedCmd = isWindows && cmd.includes(' ') ? `"${cmd}"` : cmd
+      const quotedArgs = isWindows
+        ? args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg))
+        : args
+
+      const fullCmd = `${quotedCmd} ${quotedArgs.join(' ')}`
+      const child = spawn(quotedCmd, quotedArgs, {
         cwd,
         env: { ...process.env, ...env },
         shell: true,

@@ -24,7 +24,9 @@ export default defineNuxtConfig({
 
   typescript: {
     strict: true,
-    typeCheck: process.env.NUXT_TYPECHECK !== 'false',
+    // Disabled due to vue-tsc 3.x compatibility issues with Nuxt 3.21
+    // Run `pnpm typecheck` separately for type checking
+    typeCheck: false,
   },
 
   devtools: { enabled: true },
