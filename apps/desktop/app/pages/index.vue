@@ -4,13 +4,16 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitStore } from '~/stores/git'
+import { useRunnerStore } from '~/stores/runner'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
 const gitStore = useGitStore()
+const runnerStore = useRunnerStore()
 
 const showNewScenarioDialog = ref(false)
+const showToolsDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 
 onMounted(async () => {
@@ -18,6 +21,7 @@ onMounted(async () => {
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
     await gitStore.refreshStatus()
+    await runnerStore.loadBaseUrl()
   }
 })
 
@@ -136,7 +140,7 @@ function cancelInit() {
         </div>
       </div>
 
-      <div v-else class="workspace-layout">
+      <div v-else class="workspace-layout workspace-two-panel">
         <!-- Left Panel: Features List -->
         <aside class="panel left-panel">
           <div class="panel-header">
@@ -163,6 +167,13 @@ function cancelInit() {
             <h3>Scenario Builder</h3>
             <div class="header-actions">
               <Button
+                icon="pi pi-cog"
+                label="Tools"
+                outlined
+                size="small"
+                @click="showToolsDialog = true"
+              />
+              <Button
                 v-if="scenarioStore.isDirty"
                 label="Save"
                 icon="pi pi-save"
@@ -181,15 +192,6 @@ function cancelInit() {
           </div>
         </section>
 
-        <!-- Right Panel: Validation & Runner -->
-        <aside class="panel right-panel">
-          <div class="panel-header">
-            <h3>Tools</h3>
-          </div>
-          <div class="panel-content">
-            <ValidationPanel />
-          </div>
-        </aside>
       </div>
     </main>
 
@@ -254,6 +256,17 @@ function cancelInit() {
           @click="initializeWorkspace"
         />
       </template>
+    </Dialog>
+
+    <!-- Tools Dialog -->
+    <Dialog
+      v-model:visible="showToolsDialog"
+      header="Tools"
+      :style="{ width: '450px' }"
+      modal
+      :draggable="true"
+    >
+      <ValidationPanel />
     </Dialog>
   </div>
 </template>
@@ -433,6 +446,10 @@ function cancelInit() {
   height: 100%;
   gap: 1px;
   background: var(--surface-border);
+}
+
+.workspace-layout.workspace-two-panel {
+  grid-template-columns: 280px 1fr;
 }
 
 .panel {

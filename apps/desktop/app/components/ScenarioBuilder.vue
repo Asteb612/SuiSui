@@ -90,17 +90,59 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
 
 <template>
   <div class="scenario-builder" data-testid="scenario-builder">
-    <div class="scenario-name" data-testid="scenario-name">
-      <label for="scenario-name">Scenario Name</label>
-      <InputText
-        id="scenario-name"
-        :model-value="scenarioStore.scenario.name"
-        placeholder="Enter scenario name..."
-        @update:model-value="scenarioStore.setName($event as string)"
-      />
+    <!-- Empty state when no scenario selected -->
+    <div v-if="!scenarioStore.currentFeaturePath && !scenarioStore.scenario.name" class="no-scenario-selected">
+      <div class="empty-state-icon">
+        <i class="pi pi-file-edit" />
+      </div>
+      <h3>No Scenario Selected</h3>
+      <p>Select a feature from the list on the left, or create a new scenario to get started.</p>
     </div>
 
-    <div class="steps-container">
+    <!-- Builder content when scenario exists -->
+    <template v-else>
+      <!-- Scenario Tabs -->
+      <div class="scenario-tabs">
+        <div
+          v-for="(scenario, index) in scenarioStore.scenarios"
+          :key="index"
+          class="scenario-tab"
+          :class="{ active: index === scenarioStore.activeScenarioIndex }"
+          @click="scenarioStore.setActiveScenario(index)"
+        >
+          <span class="tab-name">{{ scenario.name || `Scenario ${index + 1}` }}</span>
+          <Button
+            v-if="scenarioStore.scenarios.length > 1"
+            icon="pi pi-times"
+            text
+            rounded
+            size="small"
+            class="tab-close"
+            @click.stop="scenarioStore.removeScenario(index)"
+          />
+        </div>
+        <Button
+          icon="pi pi-plus"
+          text
+          rounded
+          size="small"
+          title="Add Scenario"
+          class="add-scenario-btn"
+          @click="scenarioStore.addScenario()"
+        />
+      </div>
+
+      <div class="scenario-name" data-testid="scenario-name">
+        <label for="scenario-name">Scenario Name</label>
+        <InputText
+          id="scenario-name"
+          :model-value="scenarioStore.scenario.name"
+          placeholder="Enter scenario name..."
+          @update:model-value="scenarioStore.setName($event as string)"
+        />
+      </div>
+
+      <div class="steps-container">
       <div v-if="scenarioStore.scenario.steps.length === 0" class="empty-steps">
         <i class="pi pi-plus-circle" />
         <p>No steps yet</p>
@@ -197,20 +239,21 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
       </div>
     </div>
 
-    <div class="builder-actions">
-      <Button
-        label="Validate"
-        icon="pi pi-check"
-        outlined
-        size="small"
-        data-testid="validate-button"
-        @click="validateScenario"
-      />
-      <span v-if="scenarioStore.isDirty" class="dirty-indicator">
-        <i class="pi pi-circle-fill" />
-        Unsaved changes
-      </span>
-    </div>
+      <div class="builder-actions">
+        <Button
+          label="Validate"
+          icon="pi pi-check"
+          outlined
+          size="small"
+          data-testid="validate-button"
+          @click="validateScenario"
+        />
+        <span v-if="scenarioStore.isDirty" class="dirty-indicator">
+          <i class="pi pi-circle-fill" />
+          Unsaved changes
+        </span>
+      </div>
+    </template>
 
     <!-- Edit Step Dialog -->
     <StepEditDialog
@@ -421,5 +464,104 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
 .dirty-indicator i {
   font-size: 0.5rem;
   color: #f59e0b;
+}
+
+/* Empty state styles */
+.no-scenario-selected {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-color-secondary);
+}
+
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--surface-ground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.empty-state-icon i {
+  font-size: 2.5rem;
+  opacity: 0.5;
+}
+
+.no-scenario-selected h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-color);
+}
+
+.no-scenario-selected p {
+  font-size: 0.875rem;
+  max-width: 300px;
+}
+
+/* Scenario tabs styles */
+.scenario-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--surface-border);
+  margin-bottom: 0.5rem;
+  overflow-x: auto;
+}
+
+.scenario-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px 6px 0 0;
+  background: var(--surface-ground);
+  border: 1px solid var(--surface-border);
+  border-bottom: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: var(--text-color-secondary);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.scenario-tab:hover {
+  background: var(--surface-card);
+  color: var(--text-color);
+}
+
+.scenario-tab.active {
+  background: var(--surface-card);
+  color: var(--primary-color);
+  font-weight: 500;
+  border-color: var(--primary-color);
+  border-bottom: 1px solid var(--surface-card);
+  margin-bottom: -1px;
+}
+
+.tab-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  padding: 0.125rem !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+.tab-close:hover {
+  color: #dc3545 !important;
+}
+
+.add-scenario-btn {
+  margin-left: 0.25rem;
 }
 </style>

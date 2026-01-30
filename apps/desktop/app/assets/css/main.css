@@ -18,14 +18,7 @@ body,
 #__nuxt {
   height: 100%;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background-color: var(--surface-ground);
   color: var(--text-color);
 }
@@ -58,4 +51,37 @@ body,
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-color-secondary);
+}
+
+/* Improve text button visibility */
+.p-button.p-button-text {
+  color: var(--text-color);
+}
+
+.p-button.p-button-text:hover {
+  background: var(--surface-border);
+  color: var(--primary-color);
+}
+
+.p-button.p-button-text:disabled {
+  color: var(--surface-border);
+}
+
+/* Panel header action buttons */
+.panel-header .p-button.p-button-text {
+  color: var(--text-color-secondary);
+}
+
+.panel-header .p-button.p-button-text:hover {
+  color: var(--primary-color);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Icon-only buttons */
+.p-button.p-button-icon-only.p-button-text {
+  color: var(--text-color-secondary);
+}
+
+.p-button.p-button-icon-only.p-button-text:hover {
+  color: var(--primary-color);
 }

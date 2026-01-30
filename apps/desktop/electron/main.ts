@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } from 'electron'
 import path from 'node:path'
 import { watch } from 'node:fs'
 import { pathToFileURL } from 'node:url'
@@ -112,6 +112,9 @@ app.whenReady().then(() => {
     app.exit(exitCode)
     return
   }
+
+  // Hide the application menu
+  Menu.setApplicationMenu(null)
 
   if (!isDev) {
     registerAppProtocol()

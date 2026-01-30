@@ -11,8 +11,14 @@ export const useRunnerStore = defineStore('runner', {
   }),
 
   actions: {
-    setBaseUrl(url: string) {
+    async setBaseUrl(url: string) {
       this.baseUrl = url
+      await window.api.settings.set({ baseUrl: url || null })
+    },
+
+    async loadBaseUrl() {
+      const settings = await window.api.settings.get()
+      this.baseUrl = settings.baseUrl ?? ''
     },
 
     async runHeadless(featurePath?: string, scenarioName?: string) {

@@ -21,5 +21,7 @@ if (!fs.existsSync(distDir)) {
 const raw = fs.readFileSync(sourcePath, 'utf-8');
 const json = JSON.parse(raw);
 delete json.build;
+// Fix main path for dist-electron (main.js is at root of dist-electron)
+json.main = 'main.js';
 fs.writeFileSync(distPath, JSON.stringify(json, null, 2));
-console.log(`[copy-package-json] Copied ${sourcePath} -> ${distPath} (build removed)`);
+console.log(`[copy-package-json] Copied ${sourcePath} -> ${distPath} (build removed, main fixed)`);

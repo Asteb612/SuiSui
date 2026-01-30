@@ -7,78 +7,132 @@ function generateStepId(): string {
 
 export const useScenarioStore = defineStore('scenario', {
   state: () => ({
-    scenario: {
-      name: '',
-      steps: [],
-    } as Scenario,
+    featureName: '' as string,
+    scenarios: [] as Scenario[],
+    activeScenarioIndex: 0 as number,
     validation: null as ValidationResult | null,
     isDirty: false,
     currentFeaturePath: null as string | null,
   }),
 
   getters: {
-    hasSteps: (state) => state.scenario.steps.length > 0,
+    scenario: (state): Scenario => {
+      return state.scenarios[state.activeScenarioIndex] ?? { name: '', steps: [] }
+    },
+    scenarioCount: (state) => state.scenarios.length,
+    hasSteps(): boolean {
+      return this.scenario.steps.length > 0
+    },
     isValid: (state) => state.validation?.isValid ?? true,
     errors: (state) => state.validation?.issues.filter((i) => i.severity === 'error') ?? [],
     warnings: (state) => state.validation?.issues.filter((i) => i.severity === 'warning') ?? [],
   },
 
   actions: {
-    setName(name: string) {
-      this.scenario.name = name
-      this.isDirty = true
-    },
-
-    addStep(keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
-      const step: ScenarioStep = {
-        id: generateStepId(),
-        keyword,
-        pattern,
-        args: args.map((arg) => ({ name: arg.name, type: arg.type, value: '' })),
+    // Tab management actions
+    setActiveScenario(index: number) {
+      if (index >= 0 && index < this.scenarios.length) {
+        this.activeScenarioIndex = index
+        this.validation = null
       }
-      this.scenario.steps.push(step)
+    },
+
+    addScenario(name: string = 'New Scenario') {
+      this.scenarios.push({ name, steps: [] })
+      this.activeScenarioIndex = this.scenarios.length - 1
       this.isDirty = true
     },
 
-    updateStep(stepId: string, updates: Partial<ScenarioStep>) {
-      const index = this.scenario.steps.findIndex((s) => s.id === stepId)
-      if (index !== -1) {
-        const existingStep = this.scenario.steps[index]!
-        this.scenario.steps[index] = { ...existingStep, ...updates }
+    removeScenario(index: number) {
+      if (this.scenarios.length > 1) {
+        this.scenarios.splice(index, 1)
+        if (this.activeScenarioIndex >= this.scenarios.length) {
+          this.activeScenarioIndex = this.scenarios.length - 1
+        }
         this.isDirty = true
       }
     },
 
-    updateStepArg(stepId: string, argName: string, value: string) {
-      const step = this.scenario.steps.find((s) => s.id === stepId)
-      if (step) {
-        const arg = step.args.find((a) => a.name === argName)
-        if (arg) {
-          arg.value = value
+    setFeatureName(name: string) {
+      this.featureName = name
+      this.isDirty = true
+    },
+
+    setName(name: string) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        current.name = name
+        this.isDirty = true
+      }
+    },
+
+    addStep(keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const step: ScenarioStep = {
+          id: generateStepId(),
+          keyword,
+          pattern,
+          args: args.map((arg) => ({ name: arg.name, type: arg.type, value: '' })),
+        }
+        current.steps.push(step)
+        this.isDirty = true
+      }
+    },
+
+    updateStep(stepId: string, updates: Partial<ScenarioStep>) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const index = current.steps.findIndex((s) => s.id === stepId)
+        if (index !== -1) {
+          const existingStep = current.steps[index]!
+          current.steps[index] = { ...existingStep, ...updates }
           this.isDirty = true
         }
       }
     },
 
+    updateStepArg(stepId: string, argName: string, value: string) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const step = current.steps.find((s) => s.id === stepId)
+        if (step) {
+          const arg = step.args.find((a) => a.name === argName)
+          if (arg) {
+            arg.value = value
+            this.isDirty = true
+          }
+        }
+      }
+    },
+
     removeStep(stepId: string) {
-      const index = this.scenario.steps.findIndex((s) => s.id === stepId)
-      if (index !== -1) {
-        this.scenario.steps.splice(index, 1)
-        this.isDirty = true
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const index = current.steps.findIndex((s) => s.id === stepId)
+        if (index !== -1) {
+          current.steps.splice(index, 1)
+          this.isDirty = true
+        }
       }
     },
 
     moveStep(fromIndex: number, toIndex: number) {
-      const step = this.scenario.steps.splice(fromIndex, 1)[0]
-      if (step) {
-        this.scenario.steps.splice(toIndex, 0, step)
-        this.isDirty = true
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const step = current.steps.splice(fromIndex, 1)[0]
+        if (step) {
+          current.steps.splice(toIndex, 0, step)
+          this.isDirty = true
+        }
       }
     },
 
     async validate() {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (!current) return
       try {
-        this.validation = await window.api.validate.scenario(this.scenario)
+        this.validation = await window.api.validate.scenario(current)
       } catch {
         this.validation = {
           isValid: false,
@@ -96,21 +150,25 @@ export const useScenarioStore = defineStore('scenario', {
 
     toGherkin(): string {
       const lines: string[] = []
-      lines.push(`Feature: ${this.scenario.name || 'Untitled'}`)
+      lines.push(`Feature: ${this.featureName || 'Untitled'}`)
       lines.push('')
-      lines.push(`  Scenario: ${this.scenario.name || 'Untitled'}`)
 
-      for (const step of this.scenario.steps) {
-        let text = step.pattern
-        for (const arg of step.args) {
-          const placeholder = `{${arg.type}}`
-          const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
-          text = text.replace(placeholder, value)
+      for (const scenario of this.scenarios) {
+        lines.push(`  Scenario: ${scenario.name || 'Untitled'}`)
+
+        for (const step of scenario.steps) {
+          let text = step.pattern
+          for (const arg of step.args) {
+            const placeholder = `{${arg.type}}`
+            const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
+            text = text.replace(placeholder, value)
+          }
+          lines.push(`    ${step.keyword} ${text}`)
         }
-        lines.push(`    ${step.keyword} ${text}`)
+        lines.push('')
       }
 
-      return lines.join('\n') + '\n'
+      return lines.join('\n')
     },
 
     async loadFromFeature(featurePath: string) {
@@ -125,15 +183,26 @@ export const useScenarioStore = defineStore('scenario', {
     },
 
     parseGherkin(content: string) {
-      this.scenario = { name: '', steps: [] }
+      this.scenarios = []
+      this.featureName = ''
+      let currentScenario: Scenario | null = null
 
       const lines = content.split('\n')
       for (const line of lines) {
         const trimmed = line.trim()
 
-        if (trimmed.startsWith('Scenario:')) {
-          this.scenario.name = trimmed.replace('Scenario:', '').trim()
-        } else if (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But ')) {
+        if (trimmed.startsWith('Feature:')) {
+          this.featureName = trimmed.replace('Feature:', '').trim()
+        } else if (trimmed.startsWith('Scenario:')) {
+          // Save previous scenario if exists
+          if (currentScenario) {
+            this.scenarios.push(currentScenario)
+          }
+          currentScenario = {
+            name: trimmed.replace('Scenario:', '').trim(),
+            steps: [],
+          }
+        } else if (currentScenario && (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But '))) {
           const match = trimmed.match(/^(Given|When|Then|And|But)\s+(.*)$/)
           if (match) {
             const keyword = match[1] as StepKeyword
@@ -153,7 +222,7 @@ export const useScenarioStore = defineStore('scenario', {
 
             const pattern = text.replace(/"[^"]*"/g, '{string}').replace(/\d+/g, '{int}')
 
-            this.scenario.steps.push({
+            currentScenario.steps.push({
               id: generateStepId(),
               keyword,
               pattern,
@@ -162,26 +231,45 @@ export const useScenarioStore = defineStore('scenario', {
           }
         }
       }
+
+      // Push last scenario
+      if (currentScenario) {
+        this.scenarios.push(currentScenario)
+      }
+
+      // Ensure at least one scenario
+      if (this.scenarios.length === 0) {
+        this.scenarios.push({ name: '', steps: [] })
+      }
+
+      this.activeScenarioIndex = 0
     },
 
     clear() {
-      this.scenario = { name: '', steps: [] }
+      this.featureName = ''
+      this.scenarios = []
+      this.activeScenarioIndex = 0
       this.validation = null
       this.isDirty = false
       this.currentFeaturePath = null
     },
 
     createNew(name: string) {
-      this.scenario = { name, steps: [] }
+      this.featureName = name
+      this.scenarios = [{ name, steps: [] }]
+      this.activeScenarioIndex = 0
       this.validation = null
       this.isDirty = true
       this.currentFeaturePath = null
     },
 
     replaceStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
-      const index = this.scenario.steps.findIndex((s) => s.id === stepId)
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (!current) return
+
+      const index = current.steps.findIndex((s) => s.id === stepId)
       if (index !== -1) {
-        const oldStep = this.scenario.steps[index]!
+        const oldStep = current.steps[index]!
         // Preserve argument values for matching names and types
         const newArgs = args.map((arg) => {
           const existingArg = oldStep.args.find((a) => a.name === arg.name && a.type === arg.type)
@@ -192,7 +280,7 @@ export const useScenarioStore = defineStore('scenario', {
           }
         })
 
-        this.scenario.steps[index] = {
+        current.steps[index] = {
           id: oldStep.id,
           keyword,
           pattern,

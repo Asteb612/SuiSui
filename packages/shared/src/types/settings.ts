@@ -5,6 +5,7 @@ export interface AppSettings {
   editorFontSize: number
   autoSave: boolean
   showLineNumbers: boolean
+  baseUrl: string | null
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -14,4 +15,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   editorFontSize: 14,
   autoSave: true,
   showLineNumbers: true,
+  baseUrl: null,
 }

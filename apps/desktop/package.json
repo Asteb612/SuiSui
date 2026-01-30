@@ -8,7 +8,7 @@
     "name": "Arthur Grosso",
     "email": "arthur.grosso@gmail.com"
   },
-  "main": "main.js",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron\"",
     "dev:nuxt": "nuxt dev --port 3000",
@@ -32,6 +32,7 @@
     "prebuild:nodejs:all": "node scripts/download-nodejs.js"
   },
   "dependencies": {
+    "@primevue/themes": "^4.5.4",
     "@suisui/shared": "workspace:*",
     "keytar": "^7.9.0"
   },

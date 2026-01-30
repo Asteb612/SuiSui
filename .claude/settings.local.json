@@ -37,7 +37,9 @@
       "Bash(pnpm vitest run:*)",
       "Bash(npx bddgen:*)",
       "Bash(pnpm --filter @suisui/desktop electron:build:*)",
-      "Bash(ELECTRON_RUN_AS_NODE=1 /home/grosso_a/Workspace/SuiSui/apps/desktop/release/linux-unpacked/suisui:*)"
+      "Bash(ELECTRON_RUN_AS_NODE=1 /home/grosso_a/Workspace/SuiSui/apps/desktop/release/linux-unpacked/suisui:*)",
+      "Bash(cross-env NUXT_TYPECHECK=false nuxt build:*)",
+      "Bash(pnpm exec cross-env:*)"
     ]
   }
 }

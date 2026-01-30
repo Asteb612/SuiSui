@@ -13,18 +13,21 @@ const desktopTargets = [
   '.pnpm-deploy',
   'dist',
   '.output',
-  '.nuxt'
+  '.nuxt',
+  'node_modules'
 ].map((p) => path.join(appRoot, p));
 
 // Root-level build artifacts
 const rootTargets = [
   '.pnpm-deploy',
-  'package'
+  'package',
+  'node_modules'
 ].map((p) => path.join(repoRoot, p));
 
 // Shared package build artifacts
 const sharedTargets = [
-  'packages/shared/dist'
+  'packages/shared/dist',
+  'packages/shared/node_modules'
 ].map((p) => path.join(repoRoot, p));
 
 const allTargets = [...desktopTargets, ...rootTargets, ...sharedTargets];
