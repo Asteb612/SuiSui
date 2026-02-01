@@ -1,0 +1,11 @@
+- Add cucumber.json as required files
+- Rename Tools + UI as primary
+- Check if validate is really required...
+- bug on features management
+- folder management
+- add the avility to copy an existing feature
+- duplicate scenario
+- save user as env vars + login scenario
+
+- Feature -> EPIC
+- Secanarion -> User story
