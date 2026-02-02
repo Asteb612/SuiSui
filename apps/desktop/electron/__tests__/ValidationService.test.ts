@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import type { Scenario } from '@suisui/shared'
+import type { Scenario, ScenarioStep } from '@suisui/shared'
 
 vi.mock('../services/StepService', () => ({
   getStepService: () => ({
@@ -172,6 +172,81 @@ describe('ValidationService', () => {
       }
 
       const result = await service.validateScenario(scenario)
+
+      expect(result.isValid).toBe(true)
+      expect(result.issues.filter((i) => i.severity === 'error')).toHaveLength(0)
+    })
+  })
+
+  describe('validateBackground', () => {
+    it('should pass with empty background', async () => {
+      const result = await service.validateBackground([])
+
+      expect(result.isValid).toBe(true)
+      expect(result.issues).toHaveLength(0)
+    })
+
+    it('should fail if background step argument is missing', async () => {
+      const background: ScenarioStep[] = [
+        {
+          id: 'bg-step-1',
+          keyword: 'Given',
+          pattern: 'the application is on {string}',
+          args: [{ name: 'page', type: 'string', value: '' }],
+        },
+      ]
+
+      const result = await service.validateBackground(background)
+
+      expect(result.isValid).toBe(false)
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          severity: 'error',
+          message: 'Missing required argument: page',
+          stepId: 'bg-step-1',
+        })
+      )
+    })
+
+    it('should fail if background step has invalid int argument', async () => {
+      const background: ScenarioStep[] = [
+        {
+          id: 'bg-step-1',
+          keyword: 'Given',
+          pattern: 'I have {int} items',
+          args: [{ name: 'count', type: 'int', value: 'not-a-number' }],
+        },
+      ]
+
+      const result = await service.validateBackground(background)
+
+      expect(result.isValid).toBe(false)
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          severity: 'error',
+          message: 'Argument "count" must be an integer',
+          stepId: 'bg-step-1',
+        })
+      )
+    })
+
+    it('should pass with valid background steps', async () => {
+      const background: ScenarioStep[] = [
+        {
+          id: 'bg-step-1',
+          keyword: 'Given',
+          pattern: 'the application is running',
+          args: [],
+        },
+        {
+          id: 'bg-step-2',
+          keyword: 'And',
+          pattern: 'I am on the {string} page',
+          args: [{ name: 'page', type: 'string', value: 'home' }],
+        },
+      ]
+
+      const result = await service.validateBackground(background)
 
       expect(result.isValid).toBe(true)
       expect(result.issues.filter((i) => i.severity === 'error')).toHaveLength(0)

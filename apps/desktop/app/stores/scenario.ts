@@ -8,6 +8,7 @@ function generateStepId(): string {
 export const useScenarioStore = defineStore('scenario', {
   state: () => ({
     featureName: '' as string,
+    background: [] as ScenarioStep[],
     scenarios: [] as Scenario[],
     activeScenarioIndex: 0 as number,
     validation: null as ValidationResult | null,
@@ -117,6 +118,78 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
+    // Background step management
+    addBackgroundStep(keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const step: ScenarioStep = {
+        id: generateStepId(),
+        keyword,
+        pattern,
+        args: args.map((arg) => ({ name: arg.name, type: arg.type, value: '' })),
+      }
+      this.background.push(step)
+      this.isDirty = true
+    },
+
+    removeBackgroundStep(stepId: string) {
+      const index = this.background.findIndex((s) => s.id === stepId)
+      if (index !== -1) {
+        this.background.splice(index, 1)
+        this.isDirty = true
+      }
+    },
+
+    updateBackgroundStep(stepId: string, updates: Partial<ScenarioStep>) {
+      const index = this.background.findIndex((s) => s.id === stepId)
+      if (index !== -1) {
+        const existingStep = this.background[index]!
+        this.background[index] = { ...existingStep, ...updates }
+        this.isDirty = true
+      }
+    },
+
+    updateBackgroundStepArg(stepId: string, argName: string, value: string) {
+      const step = this.background.find((s) => s.id === stepId)
+      if (step) {
+        const arg = step.args.find((a) => a.name === argName)
+        if (arg) {
+          arg.value = value
+          this.isDirty = true
+        }
+      }
+    },
+
+    moveBackgroundStep(fromIndex: number, toIndex: number) {
+      const step = this.background.splice(fromIndex, 1)[0]
+      if (step) {
+        this.background.splice(toIndex, 0, step)
+        this.isDirty = true
+      }
+    },
+
+    replaceBackgroundStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const index = this.background.findIndex((s) => s.id === stepId)
+      if (index !== -1) {
+        const oldStep = this.background[index]!
+        // Preserve argument values for matching names and types
+        const newArgs = args.map((arg) => {
+          const existingArg = oldStep.args.find((a) => a.name === arg.name && a.type === arg.type)
+          return {
+            name: arg.name,
+            type: arg.type,
+            value: existingArg?.value ?? '',
+          }
+        })
+
+        this.background[index] = {
+          id: oldStep.id,
+          keyword,
+          pattern,
+          args: newArgs,
+        }
+        this.isDirty = true
+      }
+    },
+
     moveStep(fromIndex: number, toIndex: number) {
       const current = this.scenarios[this.activeScenarioIndex]
       if (current) {
@@ -153,6 +226,21 @@ export const useScenarioStore = defineStore('scenario', {
       lines.push(`Feature: ${this.featureName || 'Untitled'}`)
       lines.push('')
 
+      // Add Background section if present
+      if (this.background.length > 0) {
+        lines.push('  Background:')
+        for (const step of this.background) {
+          let text = step.pattern
+          for (const arg of step.args) {
+            const placeholder = `{${arg.type}}`
+            const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
+            text = text.replace(placeholder, value)
+          }
+          lines.push(`    ${step.keyword} ${text}`)
+        }
+        lines.push('')
+      }
+
       for (const scenario of this.scenarios) {
         lines.push(`  Scenario: ${scenario.name || 'Untitled'}`)
 
@@ -184,8 +272,10 @@ export const useScenarioStore = defineStore('scenario', {
 
     parseGherkin(content: string) {
       this.scenarios = []
+      this.background = []
       this.featureName = ''
       let currentScenario: Scenario | null = null
+      let parsingBackground = false
 
       const lines = content.split('\n')
       for (const line of lines) {
@@ -193,7 +283,10 @@ export const useScenarioStore = defineStore('scenario', {
 
         if (trimmed.startsWith('Feature:')) {
           this.featureName = trimmed.replace('Feature:', '').trim()
+        } else if (trimmed.startsWith('Background:')) {
+          parsingBackground = true
         } else if (trimmed.startsWith('Scenario:')) {
+          parsingBackground = false
           // Save previous scenario if exists
           if (currentScenario) {
             this.scenarios.push(currentScenario)
@@ -202,7 +295,7 @@ export const useScenarioStore = defineStore('scenario', {
             name: trimmed.replace('Scenario:', '').trim(),
             steps: [],
           }
-        } else if (currentScenario && (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But '))) {
+        } else if (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But ')) {
           const match = trimmed.match(/^(Given|When|Then|And|But)\s+(.*)$/)
           if (match) {
             const keyword = match[1] as StepKeyword
@@ -222,12 +315,18 @@ export const useScenarioStore = defineStore('scenario', {
 
             const pattern = text.replace(/"[^"]*"/g, '{string}').replace(/\d+/g, '{int}')
 
-            currentScenario.steps.push({
+            const step: ScenarioStep = {
               id: generateStepId(),
               keyword,
               pattern,
               args,
-            })
+            }
+
+            if (parsingBackground) {
+              this.background.push(step)
+            } else if (currentScenario) {
+              currentScenario.steps.push(step)
+            }
           }
         }
       }
@@ -247,6 +346,7 @@ export const useScenarioStore = defineStore('scenario', {
 
     clear() {
       this.featureName = ''
+      this.background = []
       this.scenarios = []
       this.activeScenarioIndex = 0
       this.validation = null
@@ -256,6 +356,7 @@ export const useScenarioStore = defineStore('scenario', {
 
     createNew(name: string) {
       this.featureName = name
+      this.background = []
       this.scenarios = [{ name, steps: [] }]
       this.activeScenarioIndex = 0
       this.validation = null

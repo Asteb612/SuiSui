@@ -1,17 +1,40 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useScenarioStore } from '~/stores/scenario'
-import type { ScenarioStep, StepKeyword, StepArgDefinition } from '@suisui/shared'
+import type { ScenarioStep, StepKeyword, StepArgDefinition, StepDefinition } from '@suisui/shared'
+
+const props = withDefaults(
+  defineProps<{
+    editMode?: 'scenario' | 'background'
+  }>(),
+  {
+    editMode: 'scenario',
+  }
+)
+
+defineEmits<{
+  'toggle-edit-mode': []
+}>()
 
 const scenarioStore = useScenarioStore()
 
 // Drag & drop state
 const draggedIndex = ref<number | null>(null)
 const dropTargetIndex = ref<number | null>(null)
+const dragType = ref<'scenario' | 'background'>('scenario')
+const isDraggingFromCatalog = ref(false)
 
 // Edit dialog state
 const showEditDialog = ref(false)
 const editingStep = ref<ScenarioStep | null>(null)
+const editingStepType = ref<'scenario' | 'background'>('scenario')
+
+// Background section state
+const backgroundExpanded = ref(true)
+
+// Computed
+const isBackgroundEditMode = computed(() => props.editMode === 'background')
+const isScenarioEditMode = computed(() => props.editMode === 'scenario')
 
 function moveStepUp(index: number) {
   if (index > 0) {
@@ -42,17 +65,44 @@ async function validateScenario() {
   await scenarioStore.validate()
 }
 
+// Background step handlers
+function moveBackgroundStepUp(index: number) {
+  if (index > 0) {
+    scenarioStore.moveBackgroundStep(index, index - 1)
+  }
+}
+
+function moveBackgroundStepDown(index: number) {
+  if (index < scenarioStore.background.length - 1) {
+    scenarioStore.moveBackgroundStep(index, index + 1)
+  }
+}
+
+function removeBackgroundStep(stepId: string) {
+  scenarioStore.removeBackgroundStep(stepId)
+}
+
+function updateBackgroundArg(stepId: string, argName: string, event: Event) {
+  const value = (event.target as HTMLInputElement).value
+  scenarioStore.updateBackgroundStepArg(stepId, argName, value)
+}
+
+function toggleBackground() {
+  backgroundExpanded.value = !backgroundExpanded.value
+}
+
 // Drag & drop handlers
-function handleDragStart(index: number, event: DragEvent) {
+function handleDragStart(index: number, type: 'scenario' | 'background', event: DragEvent) {
   draggedIndex.value = index
+  dragType.value = type
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', String(index))
   }
 }
 
-function handleDragEnter(index: number) {
-  if (draggedIndex.value !== null && draggedIndex.value !== index) {
+function handleDragEnter(index: number, type: 'scenario' | 'background') {
+  if (draggedIndex.value !== null && draggedIndex.value !== index && dragType.value === type) {
     dropTargetIndex.value = index
   }
 }
@@ -64,9 +114,13 @@ function handleDragOver(event: DragEvent) {
   }
 }
 
-function handleDrop(index: number) {
-  if (draggedIndex.value !== null && draggedIndex.value !== index) {
-    scenarioStore.moveStep(draggedIndex.value, index)
+function handleDrop(index: number, type: 'scenario' | 'background') {
+  if (draggedIndex.value !== null && draggedIndex.value !== index && dragType.value === type) {
+    if (type === 'background') {
+      scenarioStore.moveBackgroundStep(draggedIndex.value, index)
+    } else {
+      scenarioStore.moveStep(draggedIndex.value, index)
+    }
   }
   draggedIndex.value = null
   dropTargetIndex.value = null
@@ -75,16 +129,54 @@ function handleDrop(index: number) {
 function handleDragEnd() {
   draggedIndex.value = null
   dropTargetIndex.value = null
+  isDraggingFromCatalog.value = false
+}
+
+// Catalog drag & drop handlers
+function handleCatalogDragOver(event: DragEvent) {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy'
+  }
+  isDraggingFromCatalog.value = true
+}
+
+function handleCatalogDragLeave() {
+  isDraggingFromCatalog.value = false
+}
+
+function handleDropFromCatalog(event: DragEvent, target: 'scenario' | 'background') {
+  event.preventDefault()
+  isDraggingFromCatalog.value = false
+  
+  const data = event.dataTransfer?.getData('application/json')
+  if (!data) return
+  
+  try {
+    const step = JSON.parse(data) as StepDefinition
+    if (target === 'background') {
+      scenarioStore.addBackgroundStep(step.keyword, step.pattern, step.args)
+    } else {
+      scenarioStore.addStep(step.keyword, step.pattern, step.args)
+    }
+  } catch (error) {
+    console.error('Failed to parse dropped step:', error)
+  }
 }
 
 // Edit step handlers
-function openEditDialog(step: ScenarioStep) {
+function openEditDialog(step: ScenarioStep, type: 'scenario' | 'background' = 'scenario') {
   editingStep.value = step
+  editingStepType.value = type
   showEditDialog.value = true
 }
 
 function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
-  scenarioStore.replaceStep(stepId, keyword, pattern, args)
+  if (editingStepType.value === 'background') {
+    scenarioStore.replaceBackgroundStep(stepId, keyword, pattern, args)
+  } else {
+    scenarioStore.replaceStep(stepId, keyword, pattern, args)
+  }
 }
 </script>
 
@@ -138,8 +230,161 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
         />
       </div>
 
+      <!-- Background Section -->
+      <div
+        class="background-section"
+        :class="{ 'edit-mode-active': isBackgroundEditMode }"
+      >
+        <div
+          class="background-header"
+          @click="toggleBackground"
+        >
+          <i :class="backgroundExpanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" />
+          <span class="background-title">
+            Background
+            <span
+              v-if="scenarioStore.background.length > 0"
+              class="step-count"
+            >
+              ({{ scenarioStore.background.length }} step<span v-if="scenarioStore.background.length !== 1">s</span>)
+            </span>
+          </span>
+          <Button
+            :icon="isBackgroundEditMode ? 'pi pi-check' : 'pi pi-pencil'"
+            :label="isBackgroundEditMode ? 'Editing' : 'Edit'"
+            :outlined="!isBackgroundEditMode"
+            :severity="isBackgroundEditMode ? 'success' : undefined"
+            size="small"
+            :title="isBackgroundEditMode ? 'Currently editing background' : 'Click to edit background'"
+            class="ms-auto"
+            @click.stop="$emit('toggle-edit-mode')"
+          />
+        </div>
+
+        <div 
+          v-if="backgroundExpanded" 
+          class="background-steps"
+          :class="{ 
+            'drop-zone-active': isDraggingFromCatalog && isBackgroundEditMode,
+            'edit-mode-inactive': !isBackgroundEditMode 
+          }"
+          @dragover="isBackgroundEditMode && handleCatalogDragOver($event)"
+          @dragleave="handleCatalogDragLeave"
+          @drop="isBackgroundEditMode && handleDropFromCatalog($event, 'background')"
+        >
+          <div
+            v-if="scenarioStore.background.length === 0"
+            class="empty-steps"
+          >
+            <i class="pi pi-plus-circle" />
+            <p>No background steps</p>
+            <p class="hint">
+              {{ isBackgroundEditMode ? 'Drag steps here or click steps in the catalog' : 'Click Edit to add background steps' }}
+            </p>
+          </div>
+
+          <div
+            v-for="(step, index) in scenarioStore.background"
+            :key="step.id"
+            class="step-row background-step-row"
+            :class="{
+              'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
+              'is-dragging': draggedIndex === index && dragType === 'background',
+              'is-drop-target': dropTargetIndex === index && dragType === 'background'
+            }"
+            data-testid="background-step"
+            draggable="true"
+            @dragstart="handleDragStart(index, 'background', $event)"
+            @dragenter="handleDragEnter(index, 'background')"
+            @dragover="handleDragOver"
+            @drop="handleDrop(index, 'background')"
+            @dragend="handleDragEnd"
+          >
+            <div class="step-controls">
+              <i
+                class="pi pi-bars drag-handle"
+                title="Drag to reorder"
+              />
+              <Button
+                icon="pi pi-chevron-up"
+                text
+                rounded
+                size="small"
+                :disabled="index === 0"
+                @click="moveBackgroundStepUp(index)"
+              />
+              <Button
+                icon="pi pi-chevron-down"
+                text
+                rounded
+                size="small"
+                :disabled="index === scenarioStore.background.length - 1"
+                @click="moveBackgroundStepDown(index)"
+              />
+            </div>
+
+            <div class="step-content">
+              <div class="step-header">
+                <span
+                  class="step-keyword"
+                  :class="step.keyword.toLowerCase()"
+                >
+                  {{ step.keyword }}
+                </span>
+                <span class="step-pattern">{{ step.pattern }}</span>
+                <Button
+                  icon="pi pi-times"
+                  text
+                  rounded
+                  severity="danger"
+                  size="small"
+                  title="Remove step"
+                  @click="removeBackgroundStep(step.id)"
+                />
+              </div>
+
+              <div
+                v-if="step.args.length > 0"
+                class="step-args"
+              >
+                <div
+                  v-for="arg in step.args"
+                  :key="arg.name"
+                  class="arg-field"
+                >
+                  <label :for="`bg-arg-${step.id}-${arg.name}`">{{ arg.name }}</label>
+                  <InputText
+                    :id="`bg-arg-${step.id}-${arg.name}`"
+                    :value="arg.value"
+                    :placeholder="`Enter ${arg.type}...`"
+                    size="small"
+                    :class="{ 'p-invalid': !arg.value }"
+                    @input="updateBackgroundArg(step.id, arg.name, $event)"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="getStepIssues(step.id).length > 0"
+                class="step-issues"
+              >
+                <div
+                  v-for="(issue, i) in getStepIssues(step.id)"
+                  :key="i"
+                  :class="['issue', issue.severity]"
+                >
+                  <i :class="issue.severity === 'error' ? 'pi pi-times-circle' : 'pi pi-exclamation-triangle'" />
+                  {{ issue.message }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div
         class="scenario-name"
+        :class="{ 'edit-mode-inactive': !isScenarioEditMode }"
         data-testid="scenario-name"
       >
         <label for="scenario-name">Scenario Name</label>
@@ -147,11 +392,21 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
           id="scenario-name"
           :model-value="scenarioStore.scenario.name"
           placeholder="Enter scenario name..."
+          :disabled="!isScenarioEditMode"
           @update:model-value="scenarioStore.setName($event as string)"
         />
       </div>
 
-      <div class="steps-container">
+      <div 
+        class="steps-container"
+        :class="{ 
+          'edit-mode-inactive': !isScenarioEditMode,
+          'drop-zone-active': isDraggingFromCatalog && isScenarioEditMode 
+        }"
+        @dragover="isScenarioEditMode && handleCatalogDragOver($event)"
+        @dragleave="handleCatalogDragLeave"
+        @drop="isScenarioEditMode && handleDropFromCatalog($event, 'scenario')"
+      >
         <div
           v-if="scenarioStore.scenario.steps.length === 0"
           class="empty-steps"
@@ -159,7 +414,7 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
           <i class="pi pi-plus-circle" />
           <p>No steps yet</p>
           <p class="hint">
-            Select steps from the panel on the right to add them here
+            {{ isScenarioEditMode ? 'Drag steps here or click steps in the catalog' : 'Background edit mode active' }}
           </p>
         </div>
 
@@ -174,10 +429,10 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
           }"
           data-testid="scenario-step"
           draggable="true"
-          @dragstart="handleDragStart(index, $event)"
-          @dragenter="handleDragEnter(index)"
+          @dragstart="handleDragStart(index, 'scenario', $event)"
+          @dragenter="handleDragEnter(index, 'scenario')"
           @dragover="handleDragOver"
-          @drop="handleDrop(index)"
+          @drop="handleDrop(index, 'scenario')"
           @dragend="handleDragEnd"
         >
           <div class="step-controls">
@@ -596,5 +851,95 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
 
 .add-scenario-btn {
   margin-left: 0.25rem;
+}
+
+/* Background section styles */
+.background-section {
+  margin-bottom: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-ground);
+}
+
+.background-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(59, 130, 246, 0.08);
+  border-bottom: 1px solid var(--surface-border);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.background-header:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.background-header i {
+  color: var(--primary-color);
+  font-size: 0.875rem;
+}
+
+.background-title {
+  font-weight: 500;
+  color: var(--text-color);
+  font-size: 0.875rem;
+}
+
+.step-count {
+  color: var(--text-color-secondary);
+  font-weight: normal;
+}
+
+.background-steps {
+  border-top: 1px solid var(--surface-border);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.background-step-row {
+  background: rgba(59, 130, 246, 0.03);
+}
+
+.background-step-row:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+/* Edit mode styles */
+.edit-mode-active {
+  border: 2px solid var(--primary-color);
+  border-radius: 6px;
+}
+
+.edit-mode-inactive {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+}
+
+.edit-mode-inactive::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.02);
+  pointer-events: none;
+}
+
+/* Drop zone styles */
+.drop-zone-active {
+  border: 2px dashed var(--primary-color);
+  background: rgba(59, 130, 246, 0.05);
+  transition: all 0.2s;
+}
+
+.steps-container.drop-zone-active,
+.background-steps.drop-zone-active {
+  min-height: 150px;
 }
 </style>

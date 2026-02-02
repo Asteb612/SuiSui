@@ -34,5 +34,6 @@ export interface StepArg {
 export interface Feature {
   name: string
   description?: string
+  background?: ScenarioStep[]
   scenarios: Scenario[]
 }

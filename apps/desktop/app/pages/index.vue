@@ -16,6 +16,11 @@ const showNewScenarioDialog = ref(false)
 const showToolsDialog = ref(false)
 const showHelpDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
+const editMode = ref<'scenario' | 'background'>('scenario')
+
+function toggleEditMode() {
+  editMode.value = editMode.value === 'scenario' ? 'background' : 'scenario'
+}
 
 onMounted(async () => {
   await workspaceStore.loadWorkspace()
@@ -195,10 +200,13 @@ function cancelInit() {
           </div>
           <div class="panel-content builder-content">
             <div class="builder-area">
-              <ScenarioBuilder />
+              <ScenarioBuilder
+                :edit-mode="editMode"
+                @toggle-edit-mode="toggleEditMode"
+              />
             </div>
             <div class="step-selector-area">
-              <StepSelector />
+              <StepSelector :add-target="editMode" />
             </div>
           </div>
         </section>
@@ -612,7 +620,7 @@ function cancelInit() {
 
 .builder-content {
   display: grid;
-  grid-template-columns: 1fr 350px;
+  grid-template-columns: 1fr 480px;
   gap: 1rem;
   height: 100%;
 }
