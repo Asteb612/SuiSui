@@ -9,6 +9,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     selectedFeature: null as FeatureFile | null,
     expandedFolders: new Set<string>(),
     isLoading: false,
+    isInitializing: false,
     error: null as string | null,
     // For workspace initialization flow
     pendingPath: null as string | null,
@@ -69,7 +70,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     async initWorkspace() {
       if (!this.pendingPath) return
 
-      this.isLoading = true
+      this.isInitializing = true
       this.error = null
       try {
         this.workspace = await window.api.workspace.init(this.pendingPath)
@@ -80,7 +81,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to initialize workspace'
       } finally {
-        this.isLoading = false
+        this.isInitializing = false
       }
     },
 

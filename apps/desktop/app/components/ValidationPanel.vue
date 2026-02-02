@@ -109,19 +109,19 @@ const statusColors: Record<string, string> = {
 
       <div class="runner-buttons">
         <Button
-          label="Headless"
-          icon="pi pi-play"
-          size="small"
-          :disabled="runnerStore.isRunning"
-          @click="runHeadless"
-        />
-        <Button
           label="UI"
           icon="pi pi-desktop"
           size="small"
-          outlined
           :disabled="runnerStore.isRunning"
           @click="runUI"
+        />
+        <Button
+          label="Headless"
+          icon="pi pi-play"
+          size="small"
+          outlined
+          :disabled="runnerStore.isRunning"
+          @click="runHeadless"
         />
         <Button
           v-if="runnerStore.isRunning"

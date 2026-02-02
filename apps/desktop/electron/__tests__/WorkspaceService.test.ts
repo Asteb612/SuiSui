@@ -62,6 +62,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       const result = await service.validate(workspacePath)
@@ -113,6 +114,19 @@ describe('WorkspaceService', () => {
       expect(result.errors).toContain('Missing features/ directory')
     })
 
+    it('should return error when cucumber.json is missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing cucumber.json')
+    })
+
     it('should return multiple errors when both package.json and features are missing', async () => {
       const workspacePath = '/test/workspace'
       vol.fromJSON({
@@ -124,7 +138,8 @@ describe('WorkspaceService', () => {
       expect(result.isValid).toBe(false)
       expect(result.errors).toContain('Missing package.json')
       expect(result.errors).toContain('Missing features/ directory')
-      expect(result.errors).toHaveLength(2)
+      expect(result.errors).toContain('Missing cucumber.json')
+      expect(result.errors).toHaveLength(3)
     })
   })
 
@@ -134,6 +149,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       const result = await service.set(workspacePath)
@@ -149,6 +165,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -163,6 +180,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -182,6 +200,7 @@ describe('WorkspaceService', () => {
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
         [`${workspacePath}/features/steps/generic.steps.ts`]: existingSteps,
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -208,8 +227,10 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath1}/package.json`]: JSON.stringify({ name: 'test1' }),
         [`${workspacePath1}/features/.gitkeep`]: '',
+        [`${workspacePath1}/cucumber.json`]: JSON.stringify({ default: {} }),
         [`${workspacePath2}/package.json`]: JSON.stringify({ name: 'test2' }),
         [`${workspacePath2}/features/.gitkeep`]: '',
+        [`${workspacePath2}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath1)
@@ -226,6 +247,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -237,6 +259,7 @@ describe('WorkspaceService', () => {
       expect(result?.isValid).toBe(true)
       expect(result?.hasPackageJson).toBe(true)
       expect(result?.hasFeaturesDir).toBe(true)
+      expect(result?.hasCucumberJson).toBe(true)
     })
 
     it('should load workspace from settings if no current workspace', async () => {
@@ -244,6 +267,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       mockGet.mockResolvedValue({
@@ -263,6 +287,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       mockGet.mockResolvedValue({
@@ -302,6 +327,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       mockGet.mockResolvedValue({
@@ -326,6 +352,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -344,6 +371,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.set(workspacePath)
@@ -400,6 +428,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       await service.init(workspacePath)
@@ -407,6 +436,23 @@ describe('WorkspaceService', () => {
       const configPath = path.join(workspacePath, 'playwright.config.ts')
       const configContent = await vol.promises.readFile(configPath, 'utf-8')
       expect(String(configContent)).toContain('defineBddConfig')
+    })
+
+    it('should create cucumber.json if missing', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+      const cucumberJsonContent = await vol.promises.readFile(cucumberJsonPath, 'utf-8')
+      const cucumberJson = JSON.parse(cucumberJsonContent as string)
+      
+      expect(cucumberJson.default).toBeDefined()
+      expect(cucumberJson.default.paths).toContain('features/**/*.feature')
     })
 
     it('should create generic.steps.ts with default step definitions', async () => {
@@ -501,6 +547,7 @@ describe('WorkspaceService', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       const result = await service.init(workspacePath)

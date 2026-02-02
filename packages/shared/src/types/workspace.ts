@@ -4,6 +4,7 @@ export interface WorkspaceInfo {
   isValid: boolean
   hasPackageJson: boolean
   hasFeaturesDir: boolean
+  hasCucumberJson: boolean
 }
 
 export interface WorkspaceValidation {

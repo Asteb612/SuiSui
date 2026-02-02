@@ -57,6 +57,32 @@ export class WorkspaceService {
     }
   }
 
+  private async ensureCucumberJson(workspacePath: string): Promise<void> {
+    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+    try {
+      await fs.access(cucumberJsonPath)
+      logger.debug('cucumber.json already exists', { cucumberJsonPath })
+    } catch {
+      logger.info('Creating cucumber.json', { cucumberJsonPath })
+      const cucumberConfig = {
+        default: {
+          formatOptions: {
+            snippetInterface: 'async-await',
+          },
+          paths: ['features/**/*.feature'],
+          require: ['features/steps/**/*.ts', 'features/steps/**/*.js'],
+          format: [
+            'progress-bar',
+            'html:reports/cucumber-report.html',
+          ],
+          publishQuiet: true,
+        },
+      }
+      await fs.writeFile(cucumberJsonPath, JSON.stringify(cucumberConfig, null, 2))
+      logger.info('cucumber.json created', { cucumberJsonPath })
+    }
+  }
+
   private async ensureDefaultSteps(workspacePath: string): Promise<void> {
     const stepsPath = path.join(workspacePath, 'features', 'steps')
     const defaultStepsPath = path.join(stepsPath, 'generic.steps.ts')
@@ -133,8 +159,18 @@ export class WorkspaceService {
       logger.debug('Missing features/ directory', { featuresPath })
     }
 
+    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+    let hasCucumberJson = false
+    try {
+      await fs.access(cucumberJsonPath)
+      hasCucumberJson = true
+    } catch {
+      errors.push('Missing cucumber.json')
+      logger.debug('Missing cucumber.json', { cucumberJsonPath })
+    }
+
     const result = {
-      isValid: hasPackageJson && hasFeaturesDir,
+      isValid: hasPackageJson && hasFeaturesDir && hasCucumberJson,
       errors,
     }
     logger.info('Workspace validation completed', { isValid: result.isValid, errors: result.errors.length })
@@ -152,6 +188,7 @@ export class WorkspaceService {
         isValid: true,
         hasPackageJson: true,
         hasFeaturesDir: true,
+        hasCucumberJson: true,
       }
 
       await this.ensurePlaywrightConfig(workspacePath)
@@ -206,6 +243,7 @@ export class WorkspaceService {
           isValid: true,
           hasPackageJson: true,
           hasFeaturesDir: true,
+          hasCucumberJson: true,
         }
         await this.ensurePlaywrightConfig(settings.workspacePath)
         await this.ensureDefaultSteps(settings.workspacePath)
@@ -287,6 +325,7 @@ export class WorkspaceService {
     }
 
     await this.ensurePlaywrightConfig(workspacePath)
+    await this.ensureCucumberJson(workspacePath)
     await this.ensureDefaultSteps(workspacePath)
 
     // Now set the workspace
@@ -298,6 +337,7 @@ export class WorkspaceService {
       isValid: true,
       hasPackageJson: true,
       hasFeaturesDir: true,
+      hasCucumberJson: true,
     }
     logger.info('Workspace initialized successfully', { workspacePath, name: result.name })
     return result

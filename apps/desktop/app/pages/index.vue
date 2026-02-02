@@ -14,6 +14,7 @@ const runnerStore = useRunnerStore()
 
 const showNewScenarioDialog = ref(false)
 const showToolsDialog = ref(false)
+const showHelpDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 
 onMounted(async () => {
@@ -75,6 +76,12 @@ function cancelInit() {
       <span class="subtitle">BDD Test Builder</span>
       <div class="header-spacer" />
       <Button
+        icon="pi pi-question-circle"
+        text
+        size="small"
+        @click="showHelpDialog = true"
+      />
+      <Button
         v-if="workspaceStore.hasWorkspace"
         label="Change Workspace"
         icon="pi pi-folder"
@@ -87,7 +94,7 @@ function cancelInit() {
     <!-- Main content -->
     <main class="content">
       <div
-        v-if="workspaceStore.isLoading"
+        v-if="workspaceStore.isLoading && !workspaceStore.isInitializing"
         class="loading"
       >
         <i
@@ -172,7 +179,7 @@ function cancelInit() {
             <div class="header-actions">
               <Button
                 icon="pi pi-cog"
-                label="Tools"
+                label="Execute"
                 outlined
                 size="small"
                 @click="showToolsDialog = true"
@@ -224,43 +231,64 @@ function cancelInit() {
       :closable="false"
     >
       <div class="init-dialog-content">
-        <div class="init-icon">
-          <i class="pi pi-info-circle" />
-        </div>
-        <h3>Missing Required Files</h3>
-        <p class="init-description">
-          The selected folder is missing some required files to be a valid BDD workspace:
-        </p>
-        <div class="missing-items">
-          <div
-            v-for="error in workspaceStore.pendingValidation?.errors"
-            :key="error"
-            class="missing-item"
-          >
-            <i class="pi pi-times-circle" />
-            <span>{{ error }}</span>
+        <template v-if="workspaceStore.isInitializing">
+          <!-- Loading state -->
+          <div class="init-loading">
+            <i
+              class="pi pi-spin pi-spinner"
+              style="font-size: 2rem"
+            />
+            <h3>Creating files and installing dependencies…</h3>
+            <p>This may take a minute. Please wait.</p>
+            <ProgressBar
+              :value="undefined"
+              class="progress-indeterminate"
+            />
           </div>
-        </div>
-        <div class="init-info">
-          <p class="init-question">
-            Would you like to initialize this folder as a new BDD workspace?
+        </template>
+        <template v-else>
+          <!-- Initial state -->
+          <div class="init-icon">
+            <i class="pi pi-info-circle" />
+          </div>
+          <h3>Missing Required Files</h3>
+          <p class="init-description">
+            The selected folder is missing some required files to be a valid BDD workspace:
           </p>
-          <p class="init-hint">
-            <i class="pi pi-lightbulb" />
-            This will automatically create the missing <code>package.json</code> and <code>features/</code> directory for you.
-          </p>
-        </div>
+          <div class="missing-items">
+            <div
+              v-for="error in workspaceStore.pendingValidation?.errors"
+              :key="error"
+              class="missing-item"
+            >
+              <i class="pi pi-times-circle" />
+              <span>{{ error }}</span>
+            </div>
+          </div>
+          <div class="init-info">
+            <p class="init-question">
+              Would you like to initialize this folder as a new BDD workspace?
+            </p>
+            <p class="init-hint">
+              <i class="pi pi-lightbulb" />
+              This will automatically create the missing <code>package.json</code>, <code>cucumber.json</code>, and <code>features/</code> directory, and run <code>npm install</code> to set up dependencies for you.
+            </p>
+          </div>
+        </template>
       </div>
       <template #footer>
         <Button
           label="Cancel"
           text
           severity="secondary"
+          :disabled="workspaceStore.isInitializing"
           @click="cancelInit"
         />
         <Button
           label="Initialize Workspace"
           icon="pi pi-check"
+          :disabled="workspaceStore.isInitializing"
+          :loading="workspaceStore.isInitializing"
           @click="initializeWorkspace"
         />
       </template>
@@ -269,12 +297,86 @@ function cancelInit() {
     <!-- Tools Dialog -->
     <Dialog
       v-model:visible="showToolsDialog"
-      header="Tools"
+      header="Execute"
       :style="{ width: '450px' }"
       modal
       :draggable="true"
     >
       <ValidationPanel />
+    </Dialog>
+
+    <!-- Help Dialog -->
+    <Dialog
+      v-model:visible="showHelpDialog"
+      header="Help"
+      :style="{ width: '600px' }"
+      modal
+      :draggable="true"
+    >
+      <div class="help-dialog-content">
+        <div class="help-section">
+          <h4>How SuiSui Works</h4>
+          <ol class="help-steps">
+            <li>
+              <strong>Workspace:</strong> Select or create a workspace directory that contains your BDD tests and step definitions.
+            </li>
+            <li>
+              <strong>Features:</strong> Manage feature files organized by folder structure. Each feature file contains scenarios written in Gherkin syntax.
+            </li>
+            <li>
+              <strong>Scenarios:</strong> Build test scenarios visually using Given/When/Then steps. The step catalog is automatically populated from your workspace.
+            </li>
+            <li>
+              <strong>Validation:</strong> Validate your scenarios to ensure they use correct steps and syntax.
+            </li>
+            <li>
+              <strong>Execution:</strong> Run your tests in Headless mode (automated) or Primary mode (interactive with browser UI).
+            </li>
+          </ol>
+        </div>
+
+        <div class="help-section">
+          <h4>Useful Resources</h4>
+          <div class="help-links">
+            <a
+              href="https://github.com/nicholasgrose/bddgen"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="help-link"
+            >
+              <i class="pi pi-external-link" />
+              <span>bddgen - BDD Code Generator</span>
+            </a>
+            <a
+              href="https://playwright.dev/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="help-link"
+            >
+              <i class="pi pi-external-link" />
+              <span>Playwright - End-to-end Testing</span>
+            </a>
+            <a
+              href="https://vitalets.github.io/playwright-bdd/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="help-link"
+            >
+              <i class="pi pi-external-link" />
+              <span>Playwright-BDD - Documentation</span>
+            </a>
+            <a
+              href="https://cucumber.io/docs/gherkin/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="help-link"
+            >
+              <i class="pi pi-external-link" />
+              <span>Gherkin - Feature File Syntax</span>
+            </a>
+          </div>
+        </div>
+      </div>
     </Dialog>
   </div>
 </template>
@@ -637,4 +739,96 @@ function cancelInit() {
   color: var(--primary-color);
   border: 1px solid var(--surface-border);
 }
+
+.init-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.init-loading i {
+  color: var(--primary-color);
+}
+
+.init-loading h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.init-loading p {
+  margin: 0;
+  color: var(--text-color-secondary);
+  font-size: 0.875rem;
+}
+
+.progress-indeterminate {
+  width: 100%;
+}
+
+.help-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.help-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.help-section h4 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.help-steps {
+  margin: 0;
+  padding-left: 1.5rem;
+  color: var(--text-color-secondary);
+  line-height: 1.8;
+}
+
+.help-steps li {
+  margin-bottom: 0.75rem;
+}
+
+.help-steps strong {
+  color: var(--text-color);
+}
+
+.help-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.help-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: var(--surface-ground);
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: background-color 0.2s;
+  font-size: 0.9375rem;
+}
+
+.help-link:hover {
+  background: var(--surface-border);
+}
+
+.help-link i {
+  font-size: 0.875rem;
+}
+
 </style>

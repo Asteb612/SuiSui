@@ -126,6 +126,7 @@ describe('Workspace IPC Handlers', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       // First set the workspace
@@ -153,6 +154,7 @@ describe('Workspace IPC Handlers', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       const setHandler = (mockIpcMain as any).invoke
@@ -194,6 +196,7 @@ describe('Workspace IPC Handlers', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       ;(mockDialog.showOpenDialog as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -288,6 +291,7 @@ describe('Workspace IPC Handlers', () => {
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       const validateHandler = (mockIpcMain as any).invoke
@@ -323,6 +327,7 @@ describe('Workspace IPC Handlers', () => {
       expect(result.name).toBe('workspace')
       expect(result.hasPackageJson).toBe(true)
       expect(result.hasFeaturesDir).toBe(true)
+      expect(result.hasCucumberJson).toBe(true)
 
       // Verify package.json was created
       const packageJsonPath = path.join(workspacePath, 'package.json')
