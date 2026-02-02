@@ -26,12 +26,18 @@ async function commitAndPush() {
 
 <template>
   <div class="git-panel">
-    <div v-if="gitStore.status" class="git-status">
+    <div
+      v-if="gitStore.status"
+      class="git-status"
+    >
       <div class="branch">
         <i class="pi pi-code-branch" />
         {{ gitStore.branchName }}
       </div>
-      <div v-if="gitStore.status.ahead > 0 || gitStore.status.behind > 0" class="sync-status">
+      <div
+        v-if="gitStore.status.ahead > 0 || gitStore.status.behind > 0"
+        class="sync-status"
+      >
         <span v-if="gitStore.status.ahead > 0">
           <i class="pi pi-arrow-up" /> {{ gitStore.status.ahead }}
         </span>
@@ -41,7 +47,10 @@ async function commitAndPush() {
       </div>
     </div>
 
-    <div v-if="gitStore.hasChanges" class="changes-indicator">
+    <div
+      v-if="gitStore.hasChanges"
+      class="changes-indicator"
+    >
       <i class="pi pi-circle-fill" />
       {{ (gitStore.status?.modified.length ?? 0) + (gitStore.status?.untracked.length ?? 0) }} changes
     </div>
@@ -65,12 +74,18 @@ async function commitAndPush() {
       />
     </div>
 
-    <div v-if="gitStore.error" class="git-error">
+    <div
+      v-if="gitStore.error"
+      class="git-error"
+    >
       <i class="pi pi-exclamation-triangle" />
       {{ gitStore.error }}
     </div>
 
-    <div v-if="gitStore.lastMessage" class="git-message">
+    <div
+      v-if="gitStore.lastMessage"
+      class="git-message"
+    >
       {{ gitStore.lastMessage }}
     </div>
 

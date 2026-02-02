@@ -1,5 +1,5 @@
 import type { WorkspaceInfo, WorkspaceValidation } from '../types/workspace'
-import type { FeatureFile, Scenario } from '../types/feature'
+import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepExportResult, DecoratorDefinition } from '../types/step'
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions } from '../types/runner'
@@ -28,6 +28,13 @@ export interface ElectronAPI {
     read: (relativePath: string) => Promise<string>
     write: (relativePath: string, content: string) => Promise<void>
     delete: (relativePath: string) => Promise<void>
+    getTree: () => Promise<FeatureTreeNode[]>
+    createFolder: (relativePath: string) => Promise<void>
+    renameFolder: (oldPath: string, newPath: string) => Promise<void>
+    deleteFolder: (relativePath: string) => Promise<void>
+    rename: (oldPath: string, newPath: string) => Promise<void>
+    move: (filePath: string, newFolderPath: string) => Promise<void>
+    copy: (sourcePath: string, targetPath: string) => Promise<void>
   }
 
   steps: {

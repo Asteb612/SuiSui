@@ -13,7 +13,10 @@ function selectFeature(feature: typeof workspaceStore.features[0]) {
 </script>
 
 <template>
-  <div class="feature-list" data-testid="feature-list">
+  <div
+    class="feature-list"
+    data-testid="feature-list"
+  >
     <div class="feature-list-header">
       <span class="feature-count">{{ workspaceStore.featureCount }} features</span>
       <Button
@@ -26,12 +29,18 @@ function selectFeature(feature: typeof workspaceStore.features[0]) {
       />
     </div>
 
-    <div v-if="workspaceStore.features.length === 0" class="empty-state">
+    <div
+      v-if="workspaceStore.features.length === 0"
+      class="empty-state"
+    >
       <i class="pi pi-file" />
       <p>No features found</p>
     </div>
 
-    <ul v-else class="feature-items">
+    <ul
+      v-else
+      class="feature-items"
+    >
       <li
         v-for="feature in workspaceStore.features"
         :key="feature.relativePath"

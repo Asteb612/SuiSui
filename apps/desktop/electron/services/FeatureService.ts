@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import type { FeatureFile } from '@suisui/shared'
+import type { FeatureFile, FeatureTreeNode } from '@suisui/shared'
 import { getWorkspaceService } from './WorkspaceService'
 
 export class FeatureService {
@@ -94,6 +94,171 @@ export class FeatureService {
     } catch {
       return false
     }
+  }
+
+  async createFolder(relativePath: string): Promise<void> {
+    this.validatePath(relativePath + '/dummy.feature')
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      throw new Error('No workspace selected')
+    }
+    const fullPath = path.join(workspacePath, 'features', relativePath)
+    await fs.mkdir(fullPath, { recursive: true })
+  }
+
+  async renameFolder(oldPath: string, newPath: string): Promise<void> {
+    this.validatePath(oldPath + '/dummy.feature')
+    this.validatePath(newPath + '/dummy.feature')
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      throw new Error('No workspace selected')
+    }
+    const oldFullPath = path.join(workspacePath, 'features', oldPath)
+    const newFullPath = path.join(workspacePath, 'features', newPath)
+    
+    try {
+      await fs.rename(oldFullPath, newFullPath)
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        throw new Error(`Folder not found: ${oldPath}`)
+      }
+      throw error
+    }
+  }
+
+  async deleteFolder(relativePath: string): Promise<void> {
+    this.validatePath(relativePath + '/dummy.feature')
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      throw new Error('No workspace selected')
+    }
+    const fullPath = path.join(workspacePath, 'features', relativePath)
+    
+    try {
+      await fs.rm(fullPath, { recursive: true, force: false })
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        throw new Error(`Folder not found: ${relativePath}`)
+      }
+      throw error
+    }
+  }
+
+  async renameFeature(oldPath: string, newPath: string): Promise<void> {
+    this.validatePath(oldPath)
+    this.validatePath(newPath)
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      throw new Error('No workspace selected')
+    }
+    const oldFullPath = path.join(workspacePath, 'features', oldPath)
+    const newFullPath = path.join(workspacePath, 'features', newPath)
+    
+    try {
+      await fs.rename(oldFullPath, newFullPath)
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        throw new Error(`Feature file not found: ${oldPath}`)
+      }
+      throw error
+    }
+  }
+
+  async moveFeature(oldPath: string, newFolderPath: string): Promise<void> {
+    this.validatePath(oldPath)
+    this.validatePath(newFolderPath + '/dummy.feature')
+    
+    const fileName = path.basename(oldPath)
+    const newPath = newFolderPath ? `${newFolderPath}/${fileName}` : fileName
+    await this.renameFeature(oldPath, newPath)
+  }
+
+  async copyFeature(sourcePath: string, targetPath: string): Promise<void> {
+    this.validatePath(sourcePath)
+    this.validatePath(targetPath)
+    
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      throw new Error('No workspace selected')
+    }
+    
+    const sourceFullPath = path.join(workspacePath, 'features', sourcePath)
+    const targetFullPath = path.join(workspacePath, 'features', targetPath)
+    
+    try {
+      const content = await fs.readFile(sourceFullPath, 'utf-8')
+      const targetDir = path.dirname(targetFullPath)
+      await fs.mkdir(targetDir, { recursive: true })
+      await fs.writeFile(targetFullPath, content, 'utf-8')
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException
+      if (nodeError.code === 'ENOENT') {
+        throw new Error(`Source feature file not found: ${sourcePath}`)
+      }
+      throw error
+    }
+  }
+
+  async getTree(): Promise<FeatureTreeNode[]> {
+    const workspaceService = getWorkspaceService()
+    const workspacePath = workspaceService.getPath()
+    if (!workspacePath) {
+      return []
+    }
+
+    const featuresDir = path.join(workspacePath, 'features')
+
+    async function scanDir(dir: string, prefix = ''): Promise<FeatureTreeNode[]> {
+      try {
+        const entries = await fs.readdir(dir, { withFileTypes: true })
+        const nodes: FeatureTreeNode[] = []
+
+        for (const entry of entries) {
+          const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+          
+          if (entry.isDirectory()) {
+            const children = await scanDir(path.join(dir, entry.name), relativePath)
+            nodes.push({
+              type: 'folder',
+              name: entry.name,
+              relativePath,
+              children,
+            })
+          } else if (entry.name.endsWith('.feature')) {
+            nodes.push({
+              type: 'file',
+              name: entry.name.replace('.feature', ''),
+              relativePath,
+              feature: {
+                path: path.join(dir, entry.name),
+                name: entry.name.replace('.feature', ''),
+                relativePath,
+              },
+            })
+          }
+        }
+
+        return nodes.sort((a, b) => {
+          // Folders first, then files
+          if (a.type !== b.type) {
+            return a.type === 'folder' ? -1 : 1
+          }
+          return a.name.localeCompare(b.name)
+        })
+      } catch {
+        return []
+      }
+    }
+
+    return await scanDir(featuresDir)
   }
 }
 

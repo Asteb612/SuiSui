@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia'
-import type { WorkspaceInfo, FeatureFile, WorkspaceValidation } from '@suisui/shared'
+import type { WorkspaceInfo, FeatureFile, WorkspaceValidation, FeatureTreeNode } from '@suisui/shared'
 
 export const useWorkspaceStore = defineStore('workspace', {
   state: () => ({
     workspace: null as WorkspaceInfo | null,
     features: [] as FeatureFile[],
+    featureTree: [] as FeatureTreeNode[],
     selectedFeature: null as FeatureFile | null,
+    expandedFolders: new Set<string>(),
     isLoading: false,
     error: null as string | null,
     // For workspace initialization flow
@@ -27,6 +29,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.workspace = await window.api.workspace.get()
         if (this.workspace) {
           await this.loadFeatures()
+          await this.loadFeatureTree()
         }
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load workspace'
@@ -49,6 +52,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         if (result.workspace) {
           this.workspace = result.workspace
           await this.loadFeatures()
+          await this.loadFeatureTree()
         } else if (result.selectedPath && result.validation && !result.validation.isValid) {
           // Folder selected but validation failed - store for potential initialization
           this.pendingPath = result.selectedPath
@@ -72,6 +76,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.pendingPath = null
         this.pendingValidation = null
         await this.loadFeatures()
+        await this.loadFeatureTree()
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to initialize workspace'
       } finally {
@@ -94,14 +99,116 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
     },
 
+    async loadFeatureTree() {
+      if (!this.workspace) return
+      try {
+        this.featureTree = await window.api.features.getTree()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to load feature tree'
+      }
+    },
+
     selectFeature(feature: FeatureFile | null) {
       this.selectedFeature = feature
+    },
+
+    async createFolder(parentPath: string, name: string) {
+      this.error = null
+      try {
+        const folderPath = parentPath ? `${parentPath}/${name}` : name
+        await window.api.features.createFolder(folderPath)
+        await this.loadFeatureTree()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to create folder'
+        throw err
+      }
+    },
+
+    async renameFolder(oldPath: string, newPath: string) {
+      this.error = null
+      try {
+        await window.api.features.renameFolder(oldPath, newPath)
+        await this.loadFeatureTree()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to rename folder'
+        throw err
+      }
+    },
+
+    async deleteFolder(path: string) {
+      this.error = null
+      try {
+        await window.api.features.deleteFolder(path)
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to delete folder'
+        throw err
+      }
+    },
+
+    async renameFeature(oldPath: string, newPath: string) {
+      this.error = null
+      try {
+        await window.api.features.rename(oldPath, newPath)
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to rename feature'
+        throw err
+      }
+    },
+
+    async moveFeature(filePath: string, newFolderPath: string) {
+      this.error = null
+      try {
+        await window.api.features.move(filePath, newFolderPath)
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to move feature'
+        throw err
+      }
+    },
+
+    async copyFeature(sourcePath: string, targetPath: string) {
+      this.error = null
+      try {
+        await window.api.features.copy(sourcePath, targetPath)
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to copy feature'
+        throw err
+      }
+    },
+
+    async deleteFeature(path: string) {
+      this.error = null
+      try {
+        await window.api.features.delete(path)
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to delete feature'
+        throw err
+      }
+    },
+
+    expandFolder(path: string) {
+      this.expandedFolders.add(path)
+    },
+
+    collapseFolder(path: string) {
+      this.expandedFolders.delete(path)
     },
 
     clearWorkspace() {
       this.workspace = null
       this.features = []
+      this.featureTree = []
       this.selectedFeature = null
+      this.expandedFolders.clear()
     },
   },
 })

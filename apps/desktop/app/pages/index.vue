@@ -42,9 +42,6 @@ async function saveScenario() {
   await workspaceStore.loadFeatures()
 }
 
-function openNewScenarioDialog() {
-  showNewScenarioDialog.value = true
-}
 
 function handleCreateScenario(data: { name: string; fileName: string }) {
   scenarioStore.createNew(data.name)
@@ -72,7 +69,9 @@ function cancelInit() {
   <div class="main-container">
     <!-- Header -->
     <header class="header titlebar">
-      <h1 class="title">SuiSui</h1>
+      <h1 class="title">
+        SuiSui
+      </h1>
       <span class="subtitle">BDD Test Builder</span>
       <div class="header-spacer" />
       <Button
@@ -87,12 +86,21 @@ function cancelInit() {
 
     <!-- Main content -->
     <main class="content">
-      <div v-if="workspaceStore.isLoading" class="loading">
-        <i class="pi pi-spin pi-spinner" style="font-size: 2rem" />
+      <div
+        v-if="workspaceStore.isLoading"
+        class="loading"
+      >
+        <i
+          class="pi pi-spin pi-spinner"
+          style="font-size: 2rem"
+        />
         <p>Loading...</p>
       </div>
 
-      <div v-else-if="!workspaceStore.hasWorkspace" class="no-workspace">
+      <div
+        v-else-if="!workspaceStore.hasWorkspace"
+        class="no-workspace"
+      >
         <div class="no-workspace-content">
           <div class="workspace-icon">
             <i class="pi pi-folder-open" />
@@ -118,7 +126,9 @@ function cancelInit() {
             />
           </div>
           <div class="workspace-requirements">
-            <p class="requirements-title">Workspace Requirements:</p>
+            <p class="requirements-title">
+              Workspace Requirements:
+            </p>
             <ul class="requirements-list">
               <li>
                 <i class="pi pi-check-circle" />
@@ -133,30 +143,24 @@ function cancelInit() {
               Don't have these? Select a folder and we'll initialize it for you!
             </p>
           </div>
-          <div v-if="workspaceStore.error && !workspaceStore.needsInit" class="workspace-error">
+          <div
+            v-if="workspaceStore.error && !workspaceStore.needsInit"
+            class="workspace-error"
+          >
             <i class="pi pi-exclamation-triangle" />
             <span>{{ workspaceStore.error }}</span>
           </div>
         </div>
       </div>
 
-      <div v-else class="workspace-layout workspace-two-panel">
-        <!-- Left Panel: Features List -->
+      <div
+        v-else
+        class="workspace-layout workspace-two-panel"
+      >
+        <!-- Left Panel: Features Tree -->
         <aside class="panel left-panel">
-          <div class="panel-header">
-            <h3>Features</h3>
-            <Button
-              icon="pi pi-plus"
-              text
-              rounded
-              size="small"
-              title="New Feature"
-              data-testid="new-feature-button"
-              @click="openNewScenarioDialog"
-            />
-          </div>
           <div class="panel-content">
-            <FeatureList />
+            <FeatureTree />
           </div>
           <GitPanel />
         </aside>
@@ -191,14 +195,16 @@ function cancelInit() {
             </div>
           </div>
         </section>
-
       </div>
     </main>
 
     <!-- Status bar -->
     <footer class="status-bar">
       <span>{{ workspaceStore.workspace?.path ?? 'No workspace' }}</span>
-      <span v-if="stepsStore.exportedAt" class="steps-info">
+      <span
+        v-if="stepsStore.exportedAt"
+        class="steps-info"
+      >
         {{ stepsStore.steps.length }} steps loaded
       </span>
     </footer>
@@ -236,7 +242,9 @@ function cancelInit() {
           </div>
         </div>
         <div class="init-info">
-          <p class="init-question">Would you like to initialize this folder as a new BDD workspace?</p>
+          <p class="init-question">
+            Would you like to initialize this folder as a new BDD workspace?
+          </p>
           <p class="init-hint">
             <i class="pi pi-lightbulb" />
             This will automatically create the missing <code>package.json</code> and <code>features/</code> directory for you.

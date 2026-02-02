@@ -11,6 +11,13 @@ export const IPC_CHANNELS = {
   FEATURES_READ: 'features:read',
   FEATURES_WRITE: 'features:write',
   FEATURES_DELETE: 'features:delete',
+  FEATURES_GET_TREE: 'features:getTree',
+  FEATURES_CREATE_FOLDER: 'features:createFolder',
+  FEATURES_RENAME_FOLDER: 'features:renameFolder',
+  FEATURES_DELETE_FOLDER: 'features:deleteFolder',
+  FEATURES_RENAME: 'features:rename',
+  FEATURES_MOVE: 'features:move',
+  FEATURES_COPY: 'features:copy',
 
   // Steps
   STEPS_EXPORT: 'steps:export',

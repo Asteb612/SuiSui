@@ -89,9 +89,15 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
 </script>
 
 <template>
-  <div class="scenario-builder" data-testid="scenario-builder">
+  <div
+    class="scenario-builder"
+    data-testid="scenario-builder"
+  >
     <!-- Empty state when no scenario selected -->
-    <div v-if="!scenarioStore.currentFeaturePath && !scenarioStore.scenario.name" class="no-scenario-selected">
+    <div
+      v-if="!scenarioStore.currentFeaturePath && !scenarioStore.scenario.name"
+      class="no-scenario-selected"
+    >
       <div class="empty-state-icon">
         <i class="pi pi-file-edit" />
       </div>
@@ -132,7 +138,10 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
         />
       </div>
 
-      <div class="scenario-name" data-testid="scenario-name">
+      <div
+        class="scenario-name"
+        data-testid="scenario-name"
+      >
         <label for="scenario-name">Scenario Name</label>
         <InputText
           id="scenario-name"
@@ -143,101 +152,122 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
       </div>
 
       <div class="steps-container">
-      <div v-if="scenarioStore.scenario.steps.length === 0" class="empty-steps">
-        <i class="pi pi-plus-circle" />
-        <p>No steps yet</p>
-        <p class="hint">Select steps from the panel on the right to add them here</p>
-      </div>
-
-      <div
-        v-for="(step, index) in scenarioStore.scenario.steps"
-        :key="step.id"
-        class="step-row"
-        :class="{
-          'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
-          'is-dragging': draggedIndex === index,
-          'is-drop-target': dropTargetIndex === index
-        }"
-        data-testid="scenario-step"
-        draggable="true"
-        @dragstart="handleDragStart(index, $event)"
-        @dragenter="handleDragEnter(index)"
-        @dragover="handleDragOver"
-        @drop="handleDrop(index)"
-        @dragend="handleDragEnd"
-      >
-        <div class="step-controls">
-          <i class="pi pi-bars drag-handle" title="Drag to reorder" />
-          <Button
-            icon="pi pi-chevron-up"
-            text
-            rounded
-            size="small"
-            :disabled="index === 0"
-            @click="moveStepUp(index)"
-          />
-          <Button
-            icon="pi pi-chevron-down"
-            text
-            rounded
-            size="small"
-            :disabled="index === scenarioStore.scenario.steps.length - 1"
-            @click="moveStepDown(index)"
-          />
+        <div
+          v-if="scenarioStore.scenario.steps.length === 0"
+          class="empty-steps"
+        >
+          <i class="pi pi-plus-circle" />
+          <p>No steps yet</p>
+          <p class="hint">
+            Select steps from the panel on the right to add them here
+          </p>
         </div>
 
-        <div class="step-content">
-          <div class="step-header">
-            <span class="step-keyword" :class="step.keyword.toLowerCase()">
-              {{ step.keyword }}
-            </span>
-            <span class="step-pattern">{{ step.pattern }}</span>
-            <Button
-              icon="pi pi-pencil"
-              text
-              rounded
-              size="small"
-              title="Edit step"
-              @click="openEditDialog(step)"
+        <div
+          v-for="(step, index) in scenarioStore.scenario.steps"
+          :key="step.id"
+          class="step-row"
+          :class="{
+            'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
+            'is-dragging': draggedIndex === index,
+            'is-drop-target': dropTargetIndex === index
+          }"
+          data-testid="scenario-step"
+          draggable="true"
+          @dragstart="handleDragStart(index, $event)"
+          @dragenter="handleDragEnter(index)"
+          @dragover="handleDragOver"
+          @drop="handleDrop(index)"
+          @dragend="handleDragEnd"
+        >
+          <div class="step-controls">
+            <i
+              class="pi pi-bars drag-handle"
+              title="Drag to reorder"
             />
             <Button
-              icon="pi pi-times"
+              icon="pi pi-chevron-up"
               text
               rounded
-              severity="danger"
               size="small"
-              title="Remove step"
-              @click="removeStep(step.id)"
+              :disabled="index === 0"
+              @click="moveStepUp(index)"
+            />
+            <Button
+              icon="pi pi-chevron-down"
+              text
+              rounded
+              size="small"
+              :disabled="index === scenarioStore.scenario.steps.length - 1"
+              @click="moveStepDown(index)"
             />
           </div>
 
-          <div v-if="step.args.length > 0" class="step-args">
-            <div v-for="arg in step.args" :key="arg.name" class="arg-field">
-              <label :for="`arg-${step.id}-${arg.name}`">{{ arg.name }}</label>
-              <InputText
-                :id="`arg-${step.id}-${arg.name}`"
-                :value="arg.value"
-                :placeholder="`Enter ${arg.type}...`"
+          <div class="step-content">
+            <div class="step-header">
+              <span
+                class="step-keyword"
+                :class="step.keyword.toLowerCase()"
+              >
+                {{ step.keyword }}
+              </span>
+              <span class="step-pattern">{{ step.pattern }}</span>
+              <Button
+                icon="pi pi-pencil"
+                text
+                rounded
                 size="small"
-                :class="{ 'p-invalid': !arg.value }"
-                @input="updateArg(step.id, arg.name, $event)"
+                title="Edit step"
+                @click="openEditDialog(step)"
+              />
+              <Button
+                icon="pi pi-times"
+                text
+                rounded
+                severity="danger"
+                size="small"
+                title="Remove step"
+                @click="removeStep(step.id)"
               />
             </div>
-          </div>
 
-          <div v-if="getStepIssues(step.id).length > 0" class="step-issues">
             <div
-              v-for="(issue, i) in getStepIssues(step.id)"
-              :key="i"
-              :class="['issue', issue.severity]"
+              v-if="step.args.length > 0"
+              class="step-args"
             >
-              <i :class="issue.severity === 'error' ? 'pi pi-times-circle' : 'pi pi-exclamation-triangle'" />
-              {{ issue.message }}
+              <div
+                v-for="arg in step.args"
+                :key="arg.name"
+                class="arg-field"
+              >
+                <label :for="`arg-${step.id}-${arg.name}`">{{ arg.name }}</label>
+                <InputText
+                  :id="`arg-${step.id}-${arg.name}`"
+                  :value="arg.value"
+                  :placeholder="`Enter ${arg.type}...`"
+                  size="small"
+                  :class="{ 'p-invalid': !arg.value }"
+                  @input="updateArg(step.id, arg.name, $event)"
+                />
+              </div>
+            </div>
+
+            <div
+              v-if="getStepIssues(step.id).length > 0"
+              class="step-issues"
+            >
+              <div
+                v-for="(issue, i) in getStepIssues(step.id)"
+                :key="i"
+                :class="['issue', issue.severity]"
+              >
+                <i :class="issue.severity === 'error' ? 'pi pi-times-circle' : 'pi pi-exclamation-triangle'" />
+                {{ issue.message }}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
       <div class="builder-actions">
         <Button
@@ -248,7 +278,10 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
           data-testid="validate-button"
           @click="validateScenario"
         />
-        <span v-if="scenarioStore.isDirty" class="dirty-indicator">
+        <span
+          v-if="scenarioStore.isDirty"
+          class="dirty-indicator"
+        >
           <i class="pi pi-circle-fill" />
           Unsaved changes
         </span>

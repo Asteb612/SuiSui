@@ -30,7 +30,10 @@ async function refreshSteps() {
 </script>
 
 <template>
-  <div class="step-selector" data-testid="step-selector">
+  <div
+    class="step-selector"
+    data-testid="step-selector"
+  >
     <div class="step-selector-header">
       <SelectButton
         v-model="selectedKeyword"
@@ -52,23 +55,38 @@ async function refreshSteps() {
     <div class="search-box">
       <IconField>
         <InputIcon class="pi pi-search" />
-        <InputText v-model="searchQuery" placeholder="Search steps..." size="small" />
+        <InputText
+          v-model="searchQuery"
+          placeholder="Search steps..."
+          size="small"
+        />
       </IconField>
     </div>
 
-    <div v-if="stepsStore.error" class="error-message">
+    <div
+      v-if="stepsStore.error"
+      class="error-message"
+    >
       <i class="pi pi-exclamation-triangle" />
       {{ stepsStore.error }}
     </div>
 
-    <div v-else-if="filteredSteps.length === 0" class="empty-state">
+    <div
+      v-else-if="filteredSteps.length === 0"
+      class="empty-state"
+    >
       <p v-if="stepsStore.steps.length === 0">
         No steps loaded. Click refresh to export from bddgen.
       </p>
-      <p v-else>No steps match your search.</p>
+      <p v-else>
+        No steps match your search.
+      </p>
     </div>
 
-    <ul v-else class="step-items">
+    <ul
+      v-else
+      class="step-items"
+    >
       <li
         v-for="step in filteredSteps"
         :key="step.id"
@@ -80,13 +98,26 @@ async function refreshSteps() {
           <span class="keyword">{{ step.keyword }}</span>
           {{ step.pattern }}
         </div>
-        <div v-if="step.args.length > 0" class="step-args">
-          <span v-for="arg in step.args" :key="arg.name" class="arg-badge">
+        <div
+          v-if="step.args.length > 0"
+          class="step-args"
+        >
+          <span
+            v-for="arg in step.args"
+            :key="arg.name"
+            class="arg-badge"
+          >
             {{ arg.name }}: {{ arg.type }}
           </span>
         </div>
-        <span v-if="step.isGeneric" class="generic-badge">Generic</span>
-        <span v-if="step.decorator" class="decorator-badge">@{{ step.decorator }}</span>
+        <span
+          v-if="step.isGeneric"
+          class="generic-badge"
+        >Generic</span>
+        <span
+          v-if="step.decorator"
+          class="decorator-badge"
+        >@{{ step.decorator }}</span>
       </li>
     </ul>
   </div>

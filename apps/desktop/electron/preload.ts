@@ -17,6 +17,16 @@ const api: ElectronAPI = {
     write: (relativePath, content) =>
       ipcRenderer.invoke(IPC_CHANNELS.FEATURES_WRITE, relativePath, content),
     delete: (relativePath) => ipcRenderer.invoke(IPC_CHANNELS.FEATURES_DELETE, relativePath),
+    getTree: () => ipcRenderer.invoke(IPC_CHANNELS.FEATURES_GET_TREE),
+    createFolder: (relativePath) => ipcRenderer.invoke(IPC_CHANNELS.FEATURES_CREATE_FOLDER, relativePath),
+    renameFolder: (oldPath, newPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FEATURES_RENAME_FOLDER, oldPath, newPath),
+    deleteFolder: (relativePath) => ipcRenderer.invoke(IPC_CHANNELS.FEATURES_DELETE_FOLDER, relativePath),
+    rename: (oldPath, newPath) => ipcRenderer.invoke(IPC_CHANNELS.FEATURES_RENAME, oldPath, newPath),
+    move: (filePath, newFolderPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FEATURES_MOVE, filePath, newFolderPath),
+    copy: (sourcePath, targetPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FEATURES_COPY, sourcePath, targetPath),
   },
 
   steps: {

@@ -141,6 +141,37 @@ export function registerIpcHandlers(
     await featureService.delete(relativePath)
   })
 
+  ipcMain.handle(IPC_CHANNELS.FEATURES_GET_TREE, async () => {
+    return featureService.getTree()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FEATURES_CREATE_FOLDER, async (_event, relativePath: string) => {
+    await featureService.createFolder(relativePath)
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.FEATURES_RENAME_FOLDER,
+    async (_event, oldPath: string, newPath: string) => {
+      await featureService.renameFolder(oldPath, newPath)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FEATURES_DELETE_FOLDER, async (_event, relativePath: string) => {
+    await featureService.deleteFolder(relativePath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FEATURES_RENAME, async (_event, oldPath: string, newPath: string) => {
+    await featureService.renameFeature(oldPath, newPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FEATURES_MOVE, async (_event, oldPath: string, newFolderPath: string) => {
+    await featureService.moveFeature(oldPath, newFolderPath)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.FEATURES_COPY, async (_event, sourcePath: string, targetPath: string) => {
+    await featureService.copyFeature(sourcePath, targetPath)
+  })
+
   // Steps handlers
   ipcMain.handle(IPC_CHANNELS.STEPS_EXPORT, async () => {
     return stepService.export()

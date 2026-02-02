@@ -37,22 +37,42 @@ const statusColors: Record<string, string> = {
 </script>
 
 <template>
-  <div class="validation-panel" data-testid="validation-panel">
+  <div
+    class="validation-panel"
+    data-testid="validation-panel"
+  >
     <div class="validation-section">
       <h4>Validation</h4>
-      <div v-if="!scenarioStore.validation" class="validation-empty">
+      <div
+        v-if="!scenarioStore.validation"
+        class="validation-empty"
+      >
         Click "Validate" to check the scenario
       </div>
-      <div v-else-if="scenarioStore.isValid" class="validation-success">
+      <div
+        v-else-if="scenarioStore.isValid"
+        class="validation-success"
+      >
         <i class="pi pi-check-circle" />
         Scenario is valid
       </div>
-      <div v-else class="validation-issues">
-        <div v-for="(issue, i) in scenarioStore.errors" :key="`error-${i}`" class="issue error">
+      <div
+        v-else
+        class="validation-issues"
+      >
+        <div
+          v-for="(issue, i) in scenarioStore.errors"
+          :key="`error-${i}`"
+          class="issue error"
+        >
           <i class="pi pi-times-circle" />
           {{ issue.message }}
         </div>
-        <div v-for="(issue, i) in scenarioStore.warnings" :key="`warning-${i}`" class="issue warning">
+        <div
+          v-for="(issue, i) in scenarioStore.warnings"
+          :key="`warning-${i}`"
+          class="issue warning"
+        >
           <i class="pi pi-exclamation-triangle" />
           {{ issue.message }}
         </div>
@@ -62,9 +82,15 @@ const statusColors: Record<string, string> = {
     <div class="runner-section">
       <h4>Test Runner</h4>
       <div class="runner-status">
-        <span class="status-dot" :style="{ backgroundColor: statusColors[runnerStore.status] }" />
+        <span
+          class="status-dot"
+          :style="{ backgroundColor: statusColors[runnerStore.status] }"
+        />
         <span class="status-text">{{ runnerStore.status }}</span>
-        <span v-if="runnerStore.lastResult" class="duration">
+        <span
+          v-if="runnerStore.lastResult"
+          class="duration"
+        >
           {{ runnerStore.lastResult.duration }}ms
         </span>
       </div>
@@ -121,10 +147,16 @@ const statusColors: Record<string, string> = {
         />
       </div>
       <div class="logs-content">
-        <div v-if="runnerStore.logs.length === 0" class="logs-empty">
+        <div
+          v-if="runnerStore.logs.length === 0"
+          class="logs-empty"
+        >
           No logs yet
         </div>
-        <pre v-else class="logs-text">{{ runnerStore.logs.join('\n') }}</pre>
+        <pre
+          v-else
+          class="logs-text"
+        >{{ runnerStore.logs.join('\n') }}</pre>
       </div>
     </div>
   </div>

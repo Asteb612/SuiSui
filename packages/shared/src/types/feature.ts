@@ -5,6 +5,14 @@ export interface FeatureFile {
   content?: string
 }
 
+export interface FeatureTreeNode {
+  type: 'folder' | 'file'
+  name: string
+  relativePath: string
+  children?: FeatureTreeNode[] // For folders
+  feature?: FeatureFile // For files
+}
+
 export interface Scenario {
   name: string
   steps: ScenarioStep[]

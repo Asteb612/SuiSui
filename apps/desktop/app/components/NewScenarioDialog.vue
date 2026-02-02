@@ -84,7 +84,10 @@ function onCancel() {
               input-id="custom-filename"
               binary
             />
-            <label for="custom-filename" class="toggle-label">Custom</label>
+            <label
+              for="custom-filename"
+              class="toggle-label"
+            >Custom</label>
           </div>
         </div>
         <InputText
@@ -94,7 +97,10 @@ function onCancel() {
           class="w-full"
           data-testid="custom-filename-input"
         />
-        <div v-else class="suggested-filename">
+        <div
+          v-else
+          class="suggested-filename"
+        >
           <i class="pi pi-file" />
           <span>{{ suggestedFileName || 'Enter a scenario name...' }}</span>
         </div>

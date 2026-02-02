@@ -63,10 +63,16 @@ function onClose() {
     @update:visible="$emit('update:visible', $event)"
   >
     <div class="edit-dialog-content">
-      <div v-if="step" class="current-step">
+      <div
+        v-if="step"
+        class="current-step"
+      >
         <label>Current Step</label>
         <div class="current-step-display">
-          <span class="keyword" :class="step.keyword.toLowerCase()">{{ step.keyword }}</span>
+          <span
+            class="keyword"
+            :class="step.keyword.toLowerCase()"
+          >{{ step.keyword }}</span>
           <span class="pattern">{{ step.pattern }}</span>
         </div>
       </div>
@@ -86,15 +92,25 @@ function onClose() {
         <div class="search-box">
           <IconField>
             <InputIcon class="pi pi-search" />
-            <InputText v-model="searchQuery" placeholder="Search steps..." size="small" />
+            <InputText
+              v-model="searchQuery"
+              placeholder="Search steps..."
+              size="small"
+            />
           </IconField>
         </div>
 
-        <div v-if="filteredSteps.length === 0" class="empty-state">
+        <div
+          v-if="filteredSteps.length === 0"
+          class="empty-state"
+        >
           <p>No steps match your search.</p>
         </div>
 
-        <ul v-else class="step-items">
+        <ul
+          v-else
+          class="step-items"
+        >
           <li
             v-for="stepDef in filteredSteps"
             :key="stepDef.id"
@@ -108,19 +124,33 @@ function onClose() {
               <span class="keyword">{{ stepDef.keyword }}</span>
               {{ stepDef.pattern }}
             </div>
-            <div v-if="stepDef.args.length > 0" class="step-args">
-              <span v-for="arg in stepDef.args" :key="arg.name" class="arg-badge">
+            <div
+              v-if="stepDef.args.length > 0"
+              class="step-args"
+            >
+              <span
+                v-for="arg in stepDef.args"
+                :key="arg.name"
+                class="arg-badge"
+              >
                 {{ arg.name }}: {{ arg.type }}
               </span>
             </div>
-            <span v-if="stepDef.isGeneric" class="generic-badge">Generic</span>
+            <span
+              v-if="stepDef.isGeneric"
+              class="generic-badge"
+            >Generic</span>
           </li>
         </ul>
       </div>
     </div>
 
     <template #footer>
-      <Button label="Cancel" text @click="onClose" />
+      <Button
+        label="Cancel"
+        text
+        @click="onClose"
+      />
     </template>
   </Dialog>
 </template>
