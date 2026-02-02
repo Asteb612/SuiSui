@@ -151,8 +151,21 @@ async function refreshSteps() {
               v-for="arg in step.args"
               :key="arg.name"
               class="arg-badge"
+              :class="{ 'enum-badge': arg.type === 'enum', 'table-badge': arg.type === 'table' }"
             >
               {{ arg.name }}: {{ arg.type }}
+              <span
+                v-if="arg.enumValues"
+                class="enum-values"
+              >
+                ({{ arg.enumValues.join(' | ') }})
+              </span>
+              <span
+                v-if="arg.tableColumns"
+                class="table-columns"
+              >
+                ({{ arg.tableColumns.join(', ') }})
+              </span>
             </span>
           </div>
           <span
@@ -310,6 +323,34 @@ async function refreshSteps() {
   border-radius: 4px;
   color: var(--primary-color);
   font-weight: 500;
+  word-break: break-word;
+}
+
+.arg-badge.enum-badge {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.2);
+  color: #8b5cf6;
+}
+
+.arg-badge.table-badge {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.enum-values,
+.table-columns {
+  display: inline;
+  margin-left: 0.25rem;
+  opacity: 0.9;
+}
+
+.enum-values {
+  color: inherit;
+}
+
+.table-columns {
+  color: inherit;
 }
 
 .generic-badge,

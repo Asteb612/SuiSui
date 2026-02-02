@@ -106,6 +106,107 @@ describe('StepService', () => {
       expect(args[0]).toEqual({ name: 'fieldName', type: 'string', required: true })
       expect(args[1]).toEqual({ name: 'value', type: 'string', required: true })
     })
+
+    it('should parse enum values from regex', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('je me connecte en tant que (admin|user|guest)')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({
+        name: 'arg0',
+        type: 'enum',
+        required: true,
+        enumValues: ['admin', 'user', 'guest'],
+      })
+    })
+
+    it('should parse enum with whitespace variations', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('I login as ( admin | user | guest )')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({
+        name: 'arg0',
+        type: 'enum',
+        required: true,
+        enumValues: ['admin', 'user', 'guest'],
+      })
+    })
+
+    it('should parse multiple enums in one pattern', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('user (admin|user) can (create|delete)')
+      expect(args).toHaveLength(2)
+      expect(args[0]).toEqual({
+        name: 'arg0',
+        type: 'enum',
+        required: true,
+        enumValues: ['admin', 'user'],
+      })
+      expect(args[1]).toEqual({
+        name: 'arg1',
+        type: 'enum',
+        required: true,
+        enumValues: ['create', 'delete'],
+      })
+    })
+
+    it('should parse table columns from pattern', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('les utilisateurs (email, role) :')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({
+        name: 'table',
+        type: 'table',
+        required: true,
+        tableColumns: ['email', 'role'],
+      })
+    })
+
+    it('should parse table with multiple columns', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('the following users (id, name, email, role) :')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({
+        name: 'table',
+        type: 'table',
+        required: true,
+        tableColumns: ['id', 'name', 'email', 'role'],
+      })
+    })
+
+    it('should handle DataTable without column info', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('the following data:')
+      expect(args).toHaveLength(1)
+      expect(args[0]).toEqual({
+        name: 'table',
+        type: 'table',
+        required: true,
+      })
+    })
+
+    it('should parse mixed enum and Cucumber expressions', () => {
+      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
+
+      const args = parseArgs('user (admin|user|guest) waits {int} seconds')
+      expect(args).toHaveLength(2)
+      expect(args[0]).toEqual({
+        name: 'arg0',
+        type: 'enum',
+        required: true,
+        enumValues: ['admin', 'user', 'guest'],
+      })
+      expect(args[1]).toEqual({
+        name: 'arg1',
+        type: 'int',
+        required: true,
+      })
+    })
   })
 
   describe('parseDecorator', () => {
