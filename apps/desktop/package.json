@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron\"",
     "dev:nuxt": "nuxt dev --port 3000",
-    "dev:electron": "wait-on http://localhost:3000 && electron .",
+    "dev:electron": "wait-on http://localhost:3000 && electron --no-sandbox .",
     "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
     "clean": "node scripts/cleanup.js",
     "build": "pnpm -C ../../packages/shared build && nuxt build && pnpm build:electron",
