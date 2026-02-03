@@ -187,7 +187,20 @@ export function registerIpcHandlers(
 
   // Validation handlers
   ipcMain.handle(IPC_CHANNELS.VALIDATE_SCENARIO, async (_event, scenario: Scenario) => {
-    return validationService.validateScenario(scenario)
+    try {
+      logger.debug('VALIDATE_SCENARIO called', { scenarioName: scenario.name, stepCount: scenario.steps.length })
+      const result = await validationService.validateScenario(scenario)
+      logger.debug('VALIDATE_SCENARIO completed', { 
+        isValid: result.isValid, 
+        issueCount: result.issues.length,
+        errorCount: result.issues.filter(i => i.severity === 'error').length 
+      })
+      return result
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      logger.error('VALIDATE_SCENARIO failed', error)
+      throw error
+    }
   })
 
   // Runner handlers

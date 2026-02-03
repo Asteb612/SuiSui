@@ -15,6 +15,7 @@ const runnerStore = useRunnerStore()
 const showNewScenarioDialog = ref(false)
 const showToolsDialog = ref(false)
 const showHelpDialog = ref(false)
+const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
 
@@ -43,8 +44,8 @@ watch(
 )
 
 async function saveScenario() {
-  if (!workspaceStore.selectedFeature) return
-  await scenarioStore.save(workspaceStore.selectedFeature.relativePath)
+  if (!scenarioStore.currentFeaturePath) return
+  await scenarioStore.save(scenarioStore.currentFeaturePath)
   await workspaceStore.loadFeatures()
 }
 
@@ -182,19 +183,46 @@ function cancelInit() {
           <div class="panel-header">
             <h3>Scenario Builder</h3>
             <div class="header-actions">
+              <span
+                v-if="!scenarioStore.isValid && scenarioStore.errors.length > 0"
+                class="validation-indicator error clickable"
+                :title="`${scenarioStore.errors.length} validation error${scenarioStore.errors.length > 1 ? 's' : ''} - Click to view details`"
+                @click="showValidationDialog = true"
+              >
+                <i class="pi pi-exclamation-circle" />
+                {{ scenarioStore.errors.length }} error{{ scenarioStore.errors.length > 1 ? 's' : '' }}
+              </span>
+              <span
+                v-else-if="scenarioStore.warnings.length > 0"
+                class="validation-indicator warning clickable"
+                :title="`${scenarioStore.warnings.length} warning${scenarioStore.warnings.length > 1 ? 's' : ''} - Click to view details`"
+                @click="showValidationDialog = true"
+              >
+                <i class="pi pi-exclamation-triangle" />
+                {{ scenarioStore.warnings.length }} warning{{ scenarioStore.warnings.length > 1 ? 's' : '' }}
+              </span>
+              <span
+                v-if="scenarioStore.isDirty"
+                class="dirty-indicator"
+              >
+                <i class="pi pi-circle-fill" />
+                Unsaved changes
+              </span>
+              <Button
+                v-if="scenarioStore.isDirty"
+                label="Save"
+                icon="pi pi-save"
+                size="small"
+                :disabled="!scenarioStore.isValid"
+                :title="!scenarioStore.isValid ? 'Fix validation errors before saving' : 'Save feature'"
+                @click="saveScenario"
+              />
               <Button
                 icon="pi pi-cog"
                 label="Execute"
                 outlined
                 size="small"
                 @click="showToolsDialog = true"
-              />
-              <Button
-                v-if="scenarioStore.isDirty"
-                label="Save"
-                icon="pi pi-save"
-                size="small"
-                @click="saveScenario"
               />
             </div>
           </div>
@@ -298,6 +326,91 @@ function cancelInit() {
           :disabled="workspaceStore.isInitializing"
           :loading="workspaceStore.isInitializing"
           @click="initializeWorkspace"
+        />
+      </template>
+    </Dialog>
+
+    <!-- Validation Errors Dialog -->
+    <Dialog
+      v-model:visible="showValidationDialog"
+      header="Validation Errors"
+      :style="{ width: '600px' }"
+      modal
+      :draggable="true"
+    >
+      <div class="validation-dialog-content">
+        <div
+          v-if="scenarioStore.errors.length === 0 && scenarioStore.warnings.length === 0"
+          class="no-issues"
+        >
+          <i class="pi pi-check-circle" />
+          <p>No validation issues found</p>
+        </div>
+        
+        <div v-else>
+          <!-- Errors Section -->
+          <div
+            v-if="scenarioStore.errors.length > 0"
+            class="issues-section"
+          >
+            <h4 class="issues-header error">
+              <i class="pi pi-times-circle" />
+              Errors ({{ scenarioStore.errors.length }})
+            </h4>
+            <div class="issues-list">
+              <div
+                v-for="(error, index) in scenarioStore.errors"
+                :key="`error-${index}`"
+                class="issue-item error"
+              >
+                <i class="pi pi-exclamation-circle" />
+                <div class="issue-content">
+                  <p class="issue-message">
+                    {{ error.message }}
+                  </p>
+                  <span
+                    v-if="error.stepId"
+                    class="issue-meta"
+                  >Step ID: {{ error.stepId }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Warnings Section -->
+          <div
+            v-if="scenarioStore.warnings.length > 0"
+            class="issues-section"
+          >
+            <h4 class="issues-header warning">
+              <i class="pi pi-exclamation-triangle" />
+              Warnings ({{ scenarioStore.warnings.length }})
+            </h4>
+            <div class="issues-list">
+              <div
+                v-for="(warning, index) in scenarioStore.warnings"
+                :key="`warning-${index}`"
+                class="issue-item warning"
+              >
+                <i class="pi pi-exclamation-triangle" />
+                <div class="issue-content">
+                  <p class="issue-message">
+                    {{ warning.message }}
+                  </p>
+                  <span
+                    v-if="warning.stepId"
+                    class="issue-meta"
+                  >Step ID: {{ warning.stepId }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <Button
+          label="Close"
+          @click="showValidationDialog = false"
         />
       </template>
     </Dialog>
@@ -646,6 +759,174 @@ function cancelInit() {
 
 .steps-info {
   color: var(--primary-color);
+}
+
+.dirty-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+}
+
+.dirty-indicator i {
+  font-size: 0.5rem;
+  color: #f59e0b;
+}
+
+.validation-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.validation-indicator.error {
+  color: #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+}
+
+.validation-indicator.warning {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.validation-indicator.clickable {
+  cursor: pointer;
+}
+
+.validation-indicator.clickable:hover {
+  transform: translateY(-1px);
+}
+
+.validation-indicator.error.clickable:hover {
+  background: rgba(220, 53, 69, 0.2);
+}
+
+.validation-indicator.warning.clickable:hover {
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.validation-indicator i {
+  font-size: 0.875rem;
+}
+
+.validation-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 0.5rem 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.no-issues {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  color: var(--text-color-secondary);
+  gap: 1rem;
+}
+
+.no-issues i {
+  font-size: 3rem;
+  color: #10b981;
+}
+
+.no-issues p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.issues-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.issues-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid;
+}
+
+.issues-header.error {
+  color: #dc3545;
+  border-color: rgba(220, 53, 69, 0.3);
+}
+
+.issues-header.warning {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.issue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+}
+
+.issue-item.error {
+  background: rgba(220, 53, 69, 0.05);
+  border-color: #dc3545;
+}
+
+.issue-item.warning {
+  background: rgba(245, 158, 11, 0.05);
+  border-color: #f59e0b;
+}
+
+.issue-item i {
+  font-size: 1.125rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.issue-item.error i {
+  color: #dc3545;
+}
+
+.issue-item.warning i {
+  color: #f59e0b;
+}
+
+.issue-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.issue-message {
+  margin: 0;
+  color: var(--text-color);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.issue-meta {
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+  font-family: monospace;
 }
 
 .init-dialog-content {

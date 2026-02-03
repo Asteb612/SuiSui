@@ -1,7 +1,32 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useScenarioStore } from '~/stores/scenario'
 import type { ScenarioStep, StepKeyword, StepArgDefinition, StepDefinition } from '@suisui/shared'
+
+// Throttle utility function
+function throttle<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  let lastRan = 0
+
+  return function(...args: Parameters<T>) {
+    const now = Date.now()
+    
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+
+    if (now - lastRan >= delay) {
+      func(...args)
+      lastRan = now
+    } else {
+      timeoutId = setTimeout(() => {
+        func(...args)
+        lastRan = Date.now()
+        timeoutId = null
+      }, delay - (now - lastRan))
+    }
+  }
+}
 
 const props = withDefaults(
   defineProps<{
@@ -30,7 +55,7 @@ const editingStep = ref<ScenarioStep | null>(null)
 const editingStepType = ref<'scenario' | 'background'>('scenario')
 
 // Background section state
-const backgroundExpanded = ref(true)
+const backgroundExpanded = ref(false)
 
 // Computed
 const isBackgroundEditMode = computed(() => props.editMode === 'background')
@@ -61,9 +86,44 @@ function getStepIssues(stepId: string) {
   return scenarioStore.validation?.issues.filter((i) => i.stepId === stepId) ?? []
 }
 
-async function validateScenario() {
-  await scenarioStore.validate()
-}
+// Auto-validation with throttle
+const throttledValidate = throttle(async () => {
+  if (scenarioStore.scenario.name || scenarioStore.scenario.steps.length > 0) {
+    await scenarioStore.validate()
+  }
+}, 1000)
+
+// Watch for changes in scenario to trigger validation
+// Use computed values to avoid reactivity issues
+watch(
+  () => {
+    // Create a plain serializable representation for watching
+    const scenario = scenarioStore.scenario
+    const background = scenarioStore.background
+    
+    return {
+      featureName: scenarioStore.featureName,
+      scenarioName: scenario.name,
+      stepCount: scenario.steps.length,
+      backgroundCount: background.length,
+      // Serialize args to detect changes
+      stepsSignature: scenario.steps.map(s => ({
+        id: s.id,
+        pattern: s.pattern,
+        args: s.args.map(a => ({ name: a.name, value: a.value, type: a.type }))
+      })),
+      backgroundSignature: background.map(s => ({
+        id: s.id,
+        pattern: s.pattern,
+        args: s.args.map(a => ({ name: a.name, value: a.value, type: a.type }))
+      }))
+    }
+  },
+  () => {
+    throttledValidate()
+  },
+  { deep: true }
+)
 
 // Background step handlers
 function moveBackgroundStepUp(index: number) {
@@ -523,24 +583,6 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
           </div>
         </div>
       </div>
-
-      <div class="builder-actions">
-        <Button
-          label="Validate"
-          icon="pi pi-check"
-          outlined
-          size="small"
-          data-testid="validate-button"
-          @click="validateScenario"
-        />
-        <span
-          v-if="scenarioStore.isDirty"
-          class="dirty-indicator"
-        >
-          <i class="pi pi-circle-fill" />
-          Unsaved changes
-        </span>
-      </div>
     </template>
 
     <!-- Edit Step Dialog -->
@@ -731,27 +773,6 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
 
 .issue.warning {
   color: #ffc107;
-}
-
-.builder-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--surface-border);
-}
-
-.dirty-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-color-secondary);
-}
-
-.dirty-indicator i {
-  font-size: 0.5rem;
-  color: #f59e0b;
 }
 
 /* Empty state styles */

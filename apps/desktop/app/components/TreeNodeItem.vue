@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { FeatureTreeNode } from '@suisui/shared'
 
 interface Props {
@@ -14,28 +14,47 @@ const emit = defineEmits<{
   select: [node: FeatureTreeNode]
   rename: []
   delete: []
+  newFeature: []
 }>()
 
 const menuRef = ref()
 
-const menuItems = [
-  {
-    label: 'Rename',
-    icon: 'pi pi-pencil',
-    command: () => {
-      emit('select', props.node)
-      emit('rename')
+const menuItems = computed(() => {
+  const items = []
+  
+  // Add "New Feature" for folders only
+  if (props.node.type === 'folder') {
+    items.push({
+      label: 'New Feature',
+      icon: 'pi pi-file-plus',
+      command: () => {
+        emit('select', props.node)
+        emit('newFeature')
+      },
+    })
+  }
+  
+  items.push(
+    {
+      label: 'Rename',
+      icon: 'pi pi-pencil',
+      command: () => {
+        emit('select', props.node)
+        emit('rename')
+      },
     },
-  },
-  {
-    label: 'Delete',
-    icon: 'pi pi-trash',
-    command: () => {
-      emit('select', props.node)
-      emit('delete')
-    },
-  },
-]
+    {
+      label: 'Delete',
+      icon: 'pi pi-trash',
+      command: () => {
+        emit('select', props.node)
+        emit('delete')
+      },
+    }
+  )
+  
+  return items
+})
 
 function showMenu(event: MouseEvent) {
   event.stopPropagation()
@@ -66,22 +85,34 @@ function showMenu(event: MouseEvent) {
       <i :class="[node.type === 'folder' ? 'pi pi-folder' : 'pi pi-file', 'node-icon']" />
       <span class="node-label">{{ node.name }}</span>
 
-      <div
-        class="node-menu"
-        @click.stop=""
-      >
-        <Menu
-          ref="menuRef"
-          :model="menuItems"
-          :popup="true"
-        />
+      <div class="node-actions">
         <Button
-          icon="pi pi-ellipsis-v"
+          v-if="node.type === 'folder'"
+          icon="pi pi-file-plus"
           text
           rounded
           size="small"
-          @click="showMenu"
+          title="New Feature"
+          class="action-button"
+          @click.stop="emit('newFeature')"
         />
+        <div
+          class="node-menu"
+          @click.stop=""
+        >
+          <Menu
+            ref="menuRef"
+            :model="menuItems"
+            :popup="true"
+          />
+          <Button
+            icon="pi pi-ellipsis-v"
+            text
+            rounded
+            size="small"
+            @click="showMenu"
+          />
+        </div>
       </div>
     </div>
 
@@ -99,6 +130,7 @@ function showMenu(event: MouseEvent) {
         @select="(n) => $emit('select', n)"
         @rename="() => $emit('rename')"
         @delete="() => $emit('delete')"
+        @new-feature="() => $emit('newFeature')"
       />
     </div>
   </div>
@@ -152,6 +184,21 @@ function showMenu(event: MouseEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.node-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.action-button {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.node-content:hover .action-button {
+  opacity: 1;
 }
 
 .node-menu {

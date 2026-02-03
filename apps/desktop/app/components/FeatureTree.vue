@@ -10,11 +10,13 @@ const scenarioStore = useScenarioStore()
 const expandedKeys = ref<Record<string, boolean>>({})
 const selectedKey = ref<string>('')
 const showNewFolderDialog = ref(false)
+const showNewFeatureDialog = ref(false)
 const showRenameDialog = ref(false)
 const showDeleteConfirm = ref(false)
 
 const newFolderName = ref('')
 const newFolderParent = ref('')
+const newFeatureParent = ref('')
 const renameName = ref('')
 const renameNode = ref<FeatureTreeNode | null>(null)
 const deleteNode = ref<FeatureTreeNode | null>(null)
@@ -48,6 +50,27 @@ async function createNewFolder() {
   await workspaceStore.createFolder(newFolderParent.value, newFolderName.value)
   await workspaceStore.loadFeatureTree()
   showNewFolderDialog.value = false
+}
+
+function openNewFeatureDialog(parentPath?: string) {
+  newFeatureParent.value = parentPath || ''
+  showNewFeatureDialog.value = true
+}
+
+async function createNewFeature(data: { name: string; fileName: string }) {
+  const featurePath = newFeatureParent.value 
+    ? `${newFeatureParent.value}/${data.fileName}` 
+    : data.fileName
+  
+  scenarioStore.createNew(data.name)
+  await scenarioStore.save(featurePath)
+  await workspaceStore.loadFeatureTree()
+  await workspaceStore.loadFeatures()
+  showNewFeatureDialog.value = false
+  
+  // Load the newly created feature
+  scenarioStore.loadFromFeature(featurePath)
+  selectedKey.value = featurePath
 }
 
 
@@ -144,11 +167,17 @@ async function refreshTree() {
           @select="onNodeSelect"
           @rename="() => {renameNode = node; renameName = node.name; showRenameDialog = true}"
           @delete="() => {deleteNode = node; showDeleteConfirm = true}"
+          @new-feature="() => openNewFeatureDialog(node.relativePath)"
         />
       </div>
     </div>
 
     <!-- Dialogs -->
+    <NewScenarioDialog
+      v-model:visible="showNewFeatureDialog"
+      @create="createNewFeature"
+    />
+
     <Dialog
       v-model:visible="showNewFolderDialog"
       header="New Folder"

@@ -205,11 +205,38 @@ export const useScenarioStore = defineStore('scenario', {
       const current = this.scenarios[this.activeScenarioIndex]
       if (!current) return
       try {
-        this.validation = await window.api.validate.scenario(current)
-      } catch {
+        // Serialize the scenario to ensure it's cloneable for IPC
+        const serializedScenario: Scenario = {
+          name: current.name,
+          steps: current.steps.map(step => ({
+            id: step.id,
+            keyword: step.keyword,
+            pattern: step.pattern,
+            args: step.args.map(arg => ({
+              name: arg.name,
+              type: arg.type,
+              value: arg.value
+            }))
+          }))
+        }
+        
+        this.validation = await window.api.validate.scenario(serializedScenario)
+      } catch (error) {
+        console.error('Validation failed:', error)
+        let errorMessage = 'Validation service failed to respond'
+        
+        if (error instanceof Error) {
+          errorMessage = `Validation error: ${error.message}`
+        } else if (typeof error === 'string') {
+          errorMessage = error
+        }
+        
         this.validation = {
           isValid: false,
-          issues: [{ severity: 'error', message: 'Validation failed' }],
+          issues: [{ 
+            severity: 'error', 
+            message: errorMessage,
+          }],
         }
       }
     },
