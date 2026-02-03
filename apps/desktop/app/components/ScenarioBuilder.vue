@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useScenarioStore } from '~/stores/scenario'
+import TableEditor from './TableEditor.vue'
 import type { ScenarioStep, StepKeyword, StepArgDefinition, StepDefinition } from '@suisui/shared'
 
+interface TableRow {
+  [key: string]: string
+}
+
 // Throttle utility function
-function throttle<T extends (...args: any[]) => any>(func: T, delay: number): (...args: Parameters<T>) => void {
+function throttle<T extends (...args: unknown[]) => unknown>(func: T, delay: number): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
   let lastRan = 0
 
@@ -77,9 +82,68 @@ function removeStep(stepId: string) {
   scenarioStore.removeStep(stepId)
 }
 
-function updateArg(stepId: string, argName: string, event: Event) {
-  const value = (event.target as HTMLInputElement).value
+function updateArg(stepId: string, argName: string, value: string) {
   scenarioStore.updateStepArg(stepId, argName, value)
+}
+
+function parseTableValue(value: string): TableRow[] {
+  if (!value) return []
+  try {
+    return JSON.parse(value)
+  } catch {
+    return []
+  }
+}
+
+function updateTableArg(stepId: string, argName: string, rows: TableRow[]) {
+  const value = JSON.stringify(rows)
+  scenarioStore.updateStepArg(stepId, argName, value)
+}
+
+function updateBackgroundArg(stepId: string, argName: string, value: string) {
+  scenarioStore.updateBackgroundStepArg(stepId, argName, value)
+}
+
+function updateBackgroundTableArg(stepId: string, argName: string, rows: TableRow[]) {
+  const value = JSON.stringify(rows)
+  scenarioStore.updateBackgroundStepArg(stepId, argName, value)
+}
+
+function parseStepPattern(pattern: string): string {
+  const escapeHtml = (str: string): string => {
+    const map: { [key: string]: string } = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }
+    return str.replace(/[&<>"']/g, (c) => map[c] || c)
+  }
+
+  let parsed = pattern
+
+  // Replace (enum|values) with styled variable - show first option with asterisk
+  parsed = parsed.replace(/\(([^)]+\|[^)]+)\)/g, (_, content) => {
+    const firstOption = content.split('|')[0].trim()
+    const escaped = escapeHtml(firstOption)
+    return `<span class="pattern-variable pattern-enum">${escaped}*</span>`
+  })
+
+  // Replace {type} with styled variable
+  parsed = parsed.replace(/\{(string|int|float|any)(?::(\w+))?\}/g, (_, type, name) => {
+    const displayName = name || type
+    const escaped = escapeHtml(displayName)
+    return `<span class="pattern-variable pattern-${type}">{${escaped}}</span>`
+  })
+
+  // Replace (columns) : with table indicator
+  parsed = parsed.replace(/\(([^)]+(?:,\s*[^)]+)+)\)\s*:\s*$/, (_, columns) => {
+    const escaped = escapeHtml(columns)
+    return `<span class="pattern-variable pattern-table">[${escaped}]</span>`
+  })
+
+  return parsed
 }
 
 function getStepIssues(stepId: string) {
@@ -140,11 +204,6 @@ function moveBackgroundStepDown(index: number) {
 
 function removeBackgroundStep(stepId: string) {
   scenarioStore.removeBackgroundStep(stepId)
-}
-
-function updateBackgroundArg(stepId: string, argName: string, event: Event) {
-  const value = (event.target as HTMLInputElement).value
-  scenarioStore.updateBackgroundStepArg(stepId, argName, value)
 }
 
 function toggleBackground() {
@@ -391,7 +450,10 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
                 >
                   {{ step.keyword }}
                 </span>
-                <span class="step-pattern">{{ step.pattern }}</span>
+                <span
+                  class="step-pattern"
+                  v-html="parseStepPattern(step.pattern)"
+                />
                 <Button
                   icon="pi pi-times"
                   text
@@ -413,13 +475,36 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
                   class="arg-field"
                 >
                   <label :for="`bg-arg-${step.id}-${arg.name}`">{{ arg.name }}</label>
+
+                  <!-- Enum Select -->
+                  <Select
+                    v-if="arg.type === 'enum' && arg.enumValues"
+                    :id="`bg-arg-${step.id}-${arg.name}`"
+                    :model-value="arg.value"
+                    :options="arg.enumValues"
+                    placeholder="Select value..."
+                    size="small"
+                    :class="{ 'p-invalid': !arg.value }"
+                    @update:model-value="updateBackgroundArg(step.id, arg.name, $event)"
+                  />
+
+                  <!-- Table DataTable -->
+                  <TableEditor
+                    v-else-if="arg.type === 'table'"
+                    :model-value="parseTableValue(arg.value)"
+                    :columns="arg.tableColumns || []"
+                    @update:model-value="updateBackgroundTableArg(step.id, arg.name, $event)"
+                  />
+
+                  <!-- Standard Input -->
                   <InputText
+                    v-else
                     :id="`bg-arg-${step.id}-${arg.name}`"
                     :value="arg.value"
                     :placeholder="`Enter ${arg.type}...`"
                     size="small"
                     :class="{ 'p-invalid': !arg.value }"
-                    @input="updateBackgroundArg(step.id, arg.name, $event)"
+                    @input="updateBackgroundArg(step.id, arg.name, ($event.target as HTMLInputElement).value)"
                   />
                 </div>
               </div>
@@ -526,7 +611,10 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
               >
                 {{ step.keyword }}
               </span>
-              <span class="step-pattern">{{ step.pattern }}</span>
+              <span
+                class="step-pattern"
+                v-html="parseStepPattern(step.pattern)"
+              />
               <Button
                 icon="pi pi-pencil"
                 text
@@ -556,13 +644,36 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
                 class="arg-field"
               >
                 <label :for="`arg-${step.id}-${arg.name}`">{{ arg.name }}</label>
+
+                <!-- Enum Select -->
+                <Select
+                  v-if="arg.type === 'enum' && arg.enumValues"
+                  :id="`arg-${step.id}-${arg.name}`"
+                  :model-value="arg.value"
+                  :options="arg.enumValues"
+                  placeholder="Select value..."
+                  size="small"
+                  :class="{ 'p-invalid': !arg.value }"
+                  @update:model-value="updateArg(step.id, arg.name, $event)"
+                />
+
+                <!-- Table DataTable -->
+                <TableEditor
+                  v-else-if="arg.type === 'table'"
+                  :model-value="parseTableValue(arg.value)"
+                  :columns="arg.tableColumns || []"
+                  @update:model-value="updateTableArg(step.id, arg.name, $event)"
+                />
+
+                <!-- Standard Input -->
                 <InputText
+                  v-else
                   :id="`arg-${step.id}-${arg.name}`"
                   :value="arg.value"
                   :placeholder="`Enter ${arg.type}...`"
                   size="small"
                   :class="{ 'p-invalid': !arg.value }"
-                  @input="updateArg(step.id, arg.name, $event)"
+                  @input="updateArg(step.id, arg.name, ($event.target as HTMLInputElement).value)"
                 />
               </div>
             </div>
@@ -732,6 +843,33 @@ function handleReplaceStep(stepId: string, keyword: StepKeyword, pattern: string
   flex: 1;
   font-family: monospace;
   font-size: 0.875rem;
+  word-break: break-word;
+}
+
+.pattern-variable {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-weight: 600;
+  margin: 0 0.125rem;
+}
+
+.pattern-enum {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.pattern-table {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.pattern-string,
+.pattern-int,
+.pattern-float,
+.pattern-any {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
 .step-args {

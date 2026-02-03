@@ -74,7 +74,13 @@ export const useScenarioStore = defineStore('scenario', {
           id: generateStepId(),
           keyword,
           pattern,
-          args: args.map((arg) => ({ name: arg.name, type: arg.type, value: '' })),
+          args: args.map((arg) => ({
+            name: arg.name,
+            type: arg.type,
+            value: '',
+            enumValues: arg.enumValues,
+            tableColumns: arg.tableColumns,
+          })),
         }
         current.steps.push(step)
         this.isDirty = true
@@ -124,7 +130,13 @@ export const useScenarioStore = defineStore('scenario', {
         id: generateStepId(),
         keyword,
         pattern,
-        args: args.map((arg) => ({ name: arg.name, type: arg.type, value: '' })),
+        args: args.map((arg) => ({
+          name: arg.name,
+          type: arg.type,
+          value: '',
+          enumValues: arg.enumValues,
+          tableColumns: arg.tableColumns,
+        })),
       }
       this.background.push(step)
       this.isDirty = true
@@ -177,6 +189,8 @@ export const useScenarioStore = defineStore('scenario', {
             name: arg.name,
             type: arg.type,
             value: existingArg?.value ?? '',
+            enumValues: arg.enumValues,
+            tableColumns: arg.tableColumns,
           }
         })
 
@@ -405,6 +419,8 @@ export const useScenarioStore = defineStore('scenario', {
             name: arg.name,
             type: arg.type,
             value: existingArg?.value ?? '',
+            enumValues: arg.enumValues,
+            tableColumns: arg.tableColumns,
           }
         })
 

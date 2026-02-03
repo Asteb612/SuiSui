@@ -29,6 +29,8 @@ export interface StepArg {
   name: string
   value: string
   type: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table'
+  enumValues?: string[]
+  tableColumns?: string[]
 }
 
 export interface Feature {
