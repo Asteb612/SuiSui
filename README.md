@@ -1,160 +1,188 @@
 # SuiSui
 
-A desktop application for building BDD (Behavior-Driven Development) tests using a visual interface. SuiSui integrates with [bddgen](https://github.com/nicholasgrose/bddgen) and Playwright to provide a seamless experience for creating and running Gherkin-based tests.
+A desktop application for building BDD (Behavior-Driven Development) tests using a visual interface. SuiSui integrates with [playwright-bdd](https://github.com/vitalets/playwright-bdd) and Playwright to provide a seamless experience for creating and running Gherkin-based tests.
 
 ## Features
 
-- Visual scenario builder with Given/When/Then steps
-- Automatic step discovery from your bddgen project
-- Generic steps for common testing patterns
-- Real-time validation of scenarios
-- Run tests headless or with Playwright UI
-- Feature file management
-- Git integration for version control
+- **Visual Scenario Builder** - Create Given/When/Then steps with an intuitive drag-and-drop interface
+- **Automatic Step Discovery** - Imports step definitions from your playwright-bdd project
+- **Smart Step Matching** - Recognizes Cucumber expressions (`{string}`, `{int}`, `{float}`) and regex patterns
+- **Background & Examples Support** - Full support for Gherkin Background sections and Scenario Outline examples
+- **Real-time Validation** - Validates scenarios against available step definitions before execution
+- **Integrated Test Runner** - Run tests headless or with Playwright UI directly from the app
+- **Feature File Management** - Create, edit, and organize feature files in a tree view
+- **Git Integration** - Built-in version control for your test files
+- **Embedded Node.js** - Self-contained runtime, no external Node.js installation required
 
-## Tech Stack
+## Screenshots
 
-- **Electron** - Desktop application framework
-- **Nuxt 4** - Vue.js framework for the renderer
-- **PrimeVue** - UI component library
-- **Pinia** - State management
-- **TypeScript** - Type safety throughout
-- **Vitest** - Unit testing
-- **Playwright** - E2E testing
+_Screenshots coming soon_
 
-## Project Structure
+## Quick Start
 
-```text
-SuiSui/
-├── apps/
-│   └── desktop/           # Electron + Nuxt desktop app
-│       ├── app/           # Nuxt 4 renderer (Vue components, stores)
-│       │   ├── components/
-│       │   ├── composables/
-│       │   ├── pages/
-│       │   └── stores/
-│       ├── electron/      # Electron main process
-│       │   ├── services/  # Business logic services
-│       │   ├── ipc/       # IPC handlers
-│       │   └── __tests__/ # Unit tests
-│       └── e2e/           # E2E tests
-├── packages/
-│   └── shared/            # Shared types and IPC contracts
-└── PROJECT.md             # MVP specification
-```
+### Prerequisites
 
-## Prerequisites
+- Node.js 20+ and pnpm 9+ (for development only)
+- A playwright-bdd configured project (or let SuiSui create one)
 
-- Node.js 20+
-- pnpm 9+
-- A bddgen-configured Playwright project
+### Installation
 
-## Installation
+Download the latest release for your platform:
+
+- **Linux**: AppImage or .deb
+- **macOS**: .dmg
+- **Windows**: .exe installer
+
+### Getting Started
+
+1. **Launch SuiSui** and select a workspace folder
+2. **Initialize** a new BDD project or open an existing one
+3. **Create a feature file** in the feature tree
+4. **Build scenarios** by selecting steps from the step selector
+5. **Run tests** with the integrated test runner
+
+### Creating Your First Test
+
+1. Click "New Feature" in the feature tree
+2. Enter a feature name (e.g., "Login")
+3. Add a scenario name
+4. Drag steps from the Step Selector:
+   - `Given I am on the "login" page`
+   - `When I fill "username" with "testuser"`
+   - `When I fill "password" with "secret123"`
+   - `When I click on "Submit"`
+   - `Then I should see "Welcome"`
+5. Click "Save" then "Run"
+
+## Development Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/suisui.git
-cd suisui
+git clone https://github.com/Asteb612/SuiSui.git
+cd SuiSui
 
 # Install dependencies
 pnpm install
 
-# Prepare Nuxt
-pnpm --filter @suisui/desktop prepare
-```
-
-## Development
-
-```bash
-# Start the development server
+# Start development mode
 pnpm --filter @suisui/desktop dev
-
-# Run unit tests
-pnpm --filter @suisui/desktop test
-
-# Run unit tests in watch mode
-pnpm --filter @suisui/desktop test:watch
-
-# Type check
-pnpm --filter @suisui/desktop typecheck
 ```
 
-## Building
+### Development Commands
+
+| Command           | Description                            |
+| ----------------- | -------------------------------------- |
+| `pnpm dev`        | Start development mode with hot reload |
+| `pnpm build`      | Build for production                   |
+| `pnpm test`       | Run unit tests                         |
+| `pnpm test:watch` | Run tests in watch mode                |
+| `pnpm typecheck`  | Full TypeScript type checking          |
+| `pnpm lint:fix`   | Fix linting issues                     |
+| `pnpm dist`       | Build distributable packages           |
+
+### Building Releases
 
 ```bash
-# Build the application
-pnpm --filter @suisui/desktop build
+# Download Node.js runtime for packaging
+pnpm --filter @suisui/desktop prebuild:nodejs
+
+# Build distributable packages
+pnpm --filter @suisui/desktop dist
 ```
 
-## Testing
+## Tech Stack
 
-### Unit Tests
+| Layer             | Technology          |
+| ----------------- | ------------------- |
+| Desktop Framework | Electron 33         |
+| Frontend          | Nuxt 4 (Vue 3)      |
+| UI Components     | PrimeVue 4          |
+| State Management  | Pinia               |
+| Testing           | Vitest + Playwright |
+| Runtime           | Embedded Node.js 22 |
 
-Unit tests are written with Vitest and cover the Electron services:
+## Project Structure
 
-```bash
-pnpm --filter @suisui/desktop test
 ```
-
-### E2E Tests
-
-E2E tests use Playwright to test the full Electron application:
-
-```bash
-# Build first
-pnpm --filter @suisui/desktop build
-
-# Run E2E tests
-pnpm --filter @suisui/desktop test:e2e
+SuiSui/
+├── apps/desktop/              # Electron + Nuxt desktop app
+│   ├── app/                   # Frontend (Vue components, stores)
+│   │   ├── components/        # Vue SFC components
+│   │   ├── composables/       # Vue composables
+│   │   ├── stores/            # Pinia stores
+│   │   └── pages/             # Nuxt pages
+│   ├── electron/              # Backend (Electron main process)
+│   │   ├── services/          # Business logic
+│   │   ├── ipc/               # IPC handlers
+│   │   └── assets/            # Default step definitions
+│   └── e2e/                   # E2E tests
+├── packages/shared/           # Shared types and IPC contracts
+└── doc/                       # Technical documentation
 ```
 
 ## Architecture
 
-### Main Process Services
+SuiSui follows a layered architecture with strict process isolation:
 
-- **WorkspaceService** - Manages workspace path and validation
-- **FeatureService** - CRUD operations for .feature files
-- **StepService** - Exports and caches steps from bddgen
-- **ValidationService** - Validates scenarios before execution
-- **RunnerService** - Executes Playwright tests
-- **GitService** - Git operations (status, diff, commit, push)
-- **SettingsService** - Persistent settings storage
+- **Main Process** (Electron) - Node.js environment with file system access
+- **Renderer Process** (Nuxt) - Browser environment for UI
+- **Preload Script** - Secure bridge exposing typed IPC API
 
-### Renderer Stores (Pinia)
+For detailed architecture documentation, see [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md).
 
-- **workspace** - Workspace state and feature list
-- **steps** - Available step definitions
-- **scenario** - Current scenario being built
-- **runner** - Test execution state and logs
-- **git** - Git status and operations
+## Default Step Definitions
 
-### IPC Communication
-
-All communication between renderer and main process uses typed IPC channels defined in `@suisui/shared`. The preload script exposes a secure API via `window.api`.
-
-## Generic Steps
-
-SuiSui includes built-in generic steps that are always available:
+SuiSui includes built-in generic steps that work out of the box:
 
 ### Given
 
-- `I am on the {string} page`
-- `I am logged in as {string}`
+- `I am on the {string} page` - Navigate to a page
+- `I am logged in as {string}` - Login with username
 
 ### When
 
-- `I click on {string}`
-- `I fill {string} with {string}`
-- `I wait for {int} seconds`
-- `I press {string}`
+- `I click on {string}` - Click an element
+- `I fill {string} with {string}` - Fill an input field
+- `I select {string} from {string}` - Select from dropdown
+- `I wait for {int} seconds` - Wait for duration
 
 ### Then
 
-- `I should see {string}`
-- `I should not see {string}`
-- `the URL should contain {string}`
-- `the element {string} should be visible`
+- `I should see {string}` - Assert text is visible
+- `I should not see {string}` - Assert text is hidden
+- `the URL should contain {string}` - Assert URL
+- `the element {string} should be visible` - Assert element visibility
+
+These steps can be customized by editing `features/steps/generic.steps.ts` in your workspace.
+
+## Documentation
+
+| Document                               | Description                    |
+| -------------------------------------- | ------------------------------ |
+| [ARCHITECTURE.md](doc/ARCHITECTURE.md) | Overall design and data flow   |
+| [SERVICES.md](doc/SERVICES.md)         | Backend services documentation |
+| [FRONTEND.md](doc/FRONTEND.md)         | Frontend components and stores |
+| [IPC_TYPES.md](doc/IPC_TYPES.md)       | IPC channels and shared types  |
+| [DEVELOPMENT.md](doc/DEVELOPMENT.md)   | Development workflow           |
+| [TESTING.md](doc/TESTING.md)           | Testing strategies             |
+| [USER_GUIDE.md](doc/USER_GUIDE.md)     | End-user guide                 |
+
+## Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- [playwright-bdd](https://github.com/vitalets/playwright-bdd) - BDD framework for Playwright
+- [Playwright](https://playwright.dev/) - Browser automation framework
+- [PrimeVue](https://primevue.org/) - Vue UI component library

@@ -2,10 +2,12 @@
 import { ref, computed, watch } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useScenarioStore } from '~/stores/scenario'
+import { useStepsStore } from '~/stores/steps'
 import type { FeatureTreeNode } from '@suisui/shared'
 
 const workspaceStore = useWorkspaceStore()
 const scenarioStore = useScenarioStore()
+const stepsStore = useStepsStore()
 
 const expandedKeys = ref<Record<string, boolean>>({})
 const selectedKey = ref<string>('')
@@ -27,7 +29,7 @@ const treeData = computed(() => workspaceStore.featureTree)
 function onNodeSelect(node: FeatureTreeNode) {
   selectedKey.value = node.relativePath
   if (node.type === 'file' && node.feature) {
-    scenarioStore.loadFromFeature(node.feature.relativePath)
+    scenarioStore.loadFromFeature(node.feature.relativePath, stepsStore.steps)
   }
 }
 
@@ -69,7 +71,7 @@ async function createNewFeature(data: { name: string; fileName: string }) {
   showNewFeatureDialog.value = false
   
   // Load the newly created feature
-  scenarioStore.loadFromFeature(featurePath)
+  scenarioStore.loadFromFeature(featurePath, stepsStore.steps)
   selectedKey.value = featurePath
 }
 
@@ -168,6 +170,7 @@ async function refreshTree() {
           @rename="() => {renameNode = node; renameName = node.name; showRenameDialog = true}"
           @delete="() => {deleteNode = node; showDeleteConfirm = true}"
           @new-feature="() => openNewFeatureDialog(node.relativePath)"
+          @new-folder="() => openNewFolderDialog(node.relativePath)"
         />
       </div>
     </div>

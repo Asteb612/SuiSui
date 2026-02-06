@@ -1,4 +1,5 @@
 import type { Scenario, ValidationResult, ValidationIssue, StepExportResult, ScenarioStep } from '@suisui/shared'
+import { patternToRegex, resolvePattern } from '@suisui/shared'
 import { getStepService } from './StepService'
 
 export class ValidationService {
@@ -139,9 +140,10 @@ export class ValidationService {
     }
 
     for (const step of scenario.steps) {
+      const stepText = resolvePattern(step.pattern, step.args)
       const matchingSteps = cachedSteps.steps.filter((s) => {
-        const regex = this.patternToRegex(s.pattern)
-        return regex.test(this.stepToText(step))
+        const regex = patternToRegex(s.pattern)
+        return regex.test(stepText)
       })
 
       if (matchingSteps.length > 1) {
@@ -154,25 +156,6 @@ export class ValidationService {
     }
   }
 
-  private patternToRegex(pattern: string): RegExp {
-    const escaped = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\\{string\\}/g, '"[^"]*"')
-      .replace(/\\{int\\}/g, '\\d+')
-      .replace(/\\{float\\}/g, '\\d+\\.?\\d*')
-      .replace(/\\{any\\}/g, '.*')
-    return new RegExp(`^${escaped}$`)
-  }
-
-  private stepToText(step: { pattern: string; args: Array<{ value: string; type: string }> }): string {
-    let text = step.pattern
-    for (const arg of step.args) {
-      const placeholder = `{${arg.type}}`
-      const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
-      text = text.replace(placeholder, value)
-    }
-    return text
-  }
 }
 
 let validationServiceInstance: ValidationService | null = null

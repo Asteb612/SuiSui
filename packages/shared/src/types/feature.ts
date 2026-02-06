@@ -15,7 +15,19 @@ export interface FeatureTreeNode {
 
 export interface Scenario {
   name: string
+  tags?: string[]
   steps: ScenarioStep[]
+  /** Examples table for Scenario Outline - when present, this is a Scenario Outline */
+  examples?: ExampleTable
+}
+
+export interface ExampleTable {
+  columns: string[]
+  rows: ExampleRow[]
+}
+
+export interface ExampleRow {
+  [column: string]: string
 }
 
 export interface ScenarioStep {
@@ -36,6 +48,7 @@ export interface StepArg {
 export interface Feature {
   name: string
   description?: string
+  tags?: string[]
   background?: ScenarioStep[]
   scenarios: Scenario[]
 }

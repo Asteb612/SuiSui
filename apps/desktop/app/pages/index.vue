@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
@@ -12,12 +12,39 @@ const scenarioStore = useScenarioStore()
 const gitStore = useGitStore()
 const runnerStore = useRunnerStore()
 
+// Guard against async operations completing after unmount
+const isMounted = ref(true)
+onUnmounted(() => {
+  isMounted.value = false
+})
+
 const showNewScenarioDialog = ref(false)
-const showToolsDialog = ref(false)
 const showHelpDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
+
+// Panel visibility
+const showFolderPanel = ref(true)
+const showStepPanel = ref(false) // Hidden by default, shown in edit mode
+
+// Current view mode from ScenarioBuilder
+const currentViewMode = ref<'read' | 'edit' | 'run'>('read')
+
+function handleModeChange(mode: 'read' | 'edit' | 'run') {
+  currentViewMode.value = mode
+  // Show step panel only in edit mode
+  showStepPanel.value = mode === 'edit'
+  // Hide folder panel in edit/run modes to maximize workspace
+  if (mode !== 'read') {
+    showFolderPanel.value = false
+  }
+}
+
+// Git availability - hide if workspace is not a git repo
+const isGitAvailable = computed(() => {
+  return gitStore.status !== null && gitStore.error === null
+})
 
 function toggleEditMode() {
   editMode.value = editMode.value === 'scenario' ? 'background' : 'scenario'
@@ -25,9 +52,12 @@ function toggleEditMode() {
 
 onMounted(async () => {
   await workspaceStore.loadWorkspace()
+  if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
+    if (!isMounted.value) return
     await gitStore.refreshStatus()
+    if (!isMounted.value) return
     await runnerStore.loadBaseUrl()
   }
 })
@@ -36,7 +66,10 @@ watch(
   () => workspaceStore.selectedFeature,
   async (feature) => {
     if (feature) {
-      await scenarioStore.loadFromFeature(feature.relativePath)
+      await scenarioStore.loadFromFeature(feature.relativePath, stepsStore.steps)
+      // When a feature is selected, auto-hide folder panel
+      showFolderPanel.value = false
+      // Step panel visibility controlled by mode (will be shown if in edit mode)
     } else {
       scenarioStore.clear()
     }
@@ -47,6 +80,18 @@ async function saveScenario() {
   if (!scenarioStore.currentFeaturePath) return
   await scenarioStore.save(scenarioStore.currentFeaturePath)
   await workspaceStore.loadFeatures()
+}
+
+function getRunButtonTitle(): string {
+  if (currentViewMode.value === 'edit') return 'Exit edit mode first'
+  if (scenarioStore.isDirty) return 'Save changes first'
+  if (!scenarioStore.isValid) return 'Fix validation errors first'
+  return 'Run scenario'
+}
+
+async function resetScenario() {
+  if (!scenarioStore.currentFeaturePath) return
+  await scenarioStore.loadFromFeature(scenarioStore.currentFeaturePath, stepsStore.steps)
 }
 
 
@@ -61,8 +106,10 @@ function handleCreateScenario(data: { name: string; fileName: string }) {
 
 async function initializeWorkspace() {
   await workspaceStore.initWorkspace()
+  if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
+    if (!isMounted.value) return
     await gitStore.refreshStatus()
   }
 }
@@ -168,76 +215,197 @@ function cancelInit() {
 
       <div
         v-else
-        class="workspace-layout workspace-two-panel"
+        class="workspace-layout"
+        :class="{
+          'with-folder-panel': showFolderPanel,
+          'with-step-panel': showStepPanel && currentViewMode === 'edit',
+        }"
       >
         <!-- Left Panel: Features Tree -->
-        <aside class="panel left-panel">
+        <aside
+          v-if="showFolderPanel"
+          class="panel left-panel"
+        >
+          <div class="panel-header">
+            <h3>Features</h3>
+            <Button
+              icon="pi pi-angle-double-left"
+              text
+              rounded
+              size="small"
+              title="Hide folder panel"
+              @click="showFolderPanel = false"
+            />
+          </div>
           <div class="panel-content">
             <FeatureTree />
           </div>
-          <GitPanel />
+          <GitPanel v-if="isGitAvailable" />
         </aside>
 
         <!-- Center: Scenario Builder -->
         <section class="panel center-panel">
           <div class="panel-header">
-            <h3>Scenario Builder</h3>
-            <div class="header-actions">
-              <span
-                v-if="!scenarioStore.isValid && scenarioStore.errors.length > 0"
-                class="validation-indicator error clickable"
-                :title="`${scenarioStore.errors.length} validation error${scenarioStore.errors.length > 1 ? 's' : ''} - Click to view details`"
-                @click="showValidationDialog = true"
-              >
-                <i class="pi pi-exclamation-circle" />
-                {{ scenarioStore.errors.length }} error{{ scenarioStore.errors.length > 1 ? 's' : '' }}
-              </span>
-              <span
-                v-else-if="scenarioStore.warnings.length > 0"
-                class="validation-indicator warning clickable"
-                :title="`${scenarioStore.warnings.length} warning${scenarioStore.warnings.length > 1 ? 's' : ''} - Click to view details`"
-                @click="showValidationDialog = true"
-              >
-                <i class="pi pi-exclamation-triangle" />
-                {{ scenarioStore.warnings.length }} warning{{ scenarioStore.warnings.length > 1 ? 's' : '' }}
-              </span>
-              <span
-                v-if="scenarioStore.isDirty"
-                class="dirty-indicator"
-              >
-                <i class="pi pi-circle-fill" />
-                Unsaved changes
-              </span>
+            <div class="panel-header-left">
               <Button
-                v-if="scenarioStore.isDirty"
-                label="Save"
-                icon="pi pi-save"
+                v-if="!showFolderPanel"
+                icon="pi pi-folder"
+                text
+                rounded
                 size="small"
-                :disabled="!scenarioStore.isValid"
-                :title="!scenarioStore.isValid ? 'Fix validation errors before saving' : 'Save feature'"
-                @click="saveScenario"
+                title="Show features"
+                @click="showFolderPanel = true"
               />
+              <h3>{{ scenarioStore.featureName || 'Scenario' }}</h3>
+            </div>
+            <div class="header-actions">
+              <!-- Mode Controls -->
+              <div
+                v-if="scenarioStore.currentFeaturePath || scenarioStore.scenario.name"
+                class="mode-controls"
+              >
+                <!-- Validation indicator (edit mode only) -->
+                <span
+                  v-if="currentViewMode === 'edit' && !scenarioStore.isValid && scenarioStore.errors.length > 0"
+                  class="validation-indicator error clickable"
+                  :title="`${scenarioStore.errors.length} validation error${scenarioStore.errors.length > 1 ? 's' : ''} - Click to view details`"
+                  @click="showValidationDialog = true"
+                >
+                  <i class="pi pi-exclamation-circle" />
+                  {{ scenarioStore.errors.length }}
+                </span>
+                <span
+                  v-else-if="currentViewMode === 'edit' && scenarioStore.warnings.length > 0"
+                  class="validation-indicator warning clickable"
+                  :title="`${scenarioStore.warnings.length} warning${scenarioStore.warnings.length > 1 ? 's' : ''} - Click to view details`"
+                  @click="showValidationDialog = true"
+                >
+                  <i class="pi pi-exclamation-triangle" />
+                  {{ scenarioStore.warnings.length }}
+                </span>
+                <span
+                  v-else-if="currentViewMode !== 'edit' && scenarioStore.isValid"
+                  class="validation-indicator valid"
+                  title="Scenario is valid"
+                >
+                  <i class="pi pi-check-circle" />
+                </span>
+
+                <!-- Save indicator (edit mode only) -->
+                <span
+                  v-if="currentViewMode === 'edit' && scenarioStore.isDirty"
+                  class="dirty-indicator"
+                  title="Unsaved changes"
+                >
+                  <i class="pi pi-circle-fill" />
+                </span>
+
+                <!-- Edit button (toggle) -->
+                <Button
+                  v-if="currentViewMode !== 'edit'"
+                  icon="pi pi-pencil"
+                  label="Edit"
+                  text
+                  size="small"
+                  :disabled="currentViewMode === 'run'"
+                  @click="handleModeChange('edit')"
+                />
+                <!-- Edit mode buttons -->
+                <template v-else>
+                  <!-- Reset button (only if dirty) -->
+                  <Button
+                    v-if="scenarioStore.isDirty"
+                    icon="pi pi-refresh"
+                    text
+                    size="small"
+                    severity="secondary"
+                    title="Discard changes and reload from file"
+                    @click="resetScenario"
+                  />
+                  <!-- Save button (only if dirty) -->
+                  <Button
+                    v-if="scenarioStore.isDirty"
+                    icon="pi pi-save"
+                    label="Save"
+                    size="small"
+                    :disabled="!scenarioStore.isValid"
+                    :title="!scenarioStore.isValid ? 'Fix validation errors before saving' : 'Save changes'"
+                    @click="saveScenario"
+                  />
+                  <!-- Done button (close edit mode) -->
+                  <Button
+                    icon="pi pi-check"
+                    label="Done"
+                    text
+                    size="small"
+                    :disabled="scenarioStore.isDirty"
+                    :title="scenarioStore.isDirty ? 'Save or discard changes first' : 'Close edit mode'"
+                    @click="handleModeChange('read')"
+                  />
+                </template>
+
+                <!-- Run button -->
+                <Button
+                  v-if="currentViewMode !== 'run'"
+                  icon="pi pi-play"
+                  label="Run"
+                  text
+                  size="small"
+                  :disabled="currentViewMode === 'edit' || !scenarioStore.isValid || scenarioStore.isDirty"
+                  :title="getRunButtonTitle()"
+                  @click="handleModeChange('run')"
+                />
+                <Button
+                  v-else
+                  icon="pi pi-times"
+                  label="Close"
+                  text
+                  size="small"
+                  @click="handleModeChange('read')"
+                />
+              </div>
+
+              <!-- Steps catalog button (edit mode, when panel hidden) -->
               <Button
-                icon="pi pi-cog"
-                label="Execute"
-                outlined
+                v-if="!showStepPanel && currentViewMode === 'edit'"
+                icon="pi pi-list"
+                label="Steps"
+                text
                 size="small"
-                @click="showToolsDialog = true"
+                title="Show step catalog"
+                @click="showStepPanel = true"
               />
             </div>
           </div>
-          <div class="panel-content builder-content">
-            <div class="builder-area">
-              <ScenarioBuilder
-                :edit-mode="editMode"
-                @toggle-edit-mode="toggleEditMode"
-              />
-            </div>
-            <div class="step-selector-area">
-              <StepSelector :add-target="editMode" />
-            </div>
+          <div class="panel-content">
+            <ScenarioBuilder
+              :edit-mode="editMode"
+              :view-mode="currentViewMode"
+              @toggle-edit-mode="toggleEditMode"
+            />
           </div>
         </section>
+
+        <!-- Right Panel: Steps (edit mode only) -->
+        <aside
+          v-if="showStepPanel && currentViewMode === 'edit'"
+          class="panel right-panel"
+        >
+          <div class="panel-header">
+            <h3>Step Catalog</h3>
+            <Button
+              icon="pi pi-times"
+              text
+              rounded
+              size="small"
+              title="Hide step catalog"
+              @click="showStepPanel = false"
+            />
+          </div>
+          <div class="panel-content">
+            <StepSelector :add-target="editMode" />
+          </div>
+        </aside>
       </div>
     </main>
 
@@ -413,17 +581,6 @@ function cancelInit() {
           @click="showValidationDialog = false"
         />
       </template>
-    </Dialog>
-
-    <!-- Tools Dialog -->
-    <Dialog
-      v-model:visible="showToolsDialog"
-      header="Execute"
-      :style="{ width: '450px' }"
-      modal
-      :draggable="true"
-    >
-      <ValidationPanel />
     </Dialog>
 
     <!-- Help Dialog -->
@@ -673,14 +830,22 @@ function cancelInit() {
 
 .workspace-layout {
   display: grid;
-  grid-template-columns: 280px 1fr 320px;
+  grid-template-columns: 1fr;
   height: 100%;
   gap: 1px;
   background: var(--surface-border);
 }
 
-.workspace-layout.workspace-two-panel {
+.workspace-layout.with-folder-panel {
   grid-template-columns: 280px 1fr;
+}
+
+.workspace-layout.with-step-panel {
+  grid-template-columns: 1fr 380px;
+}
+
+.workspace-layout.with-folder-panel.with-step-panel {
+  grid-template-columns: 280px 1fr 380px;
 }
 
 .panel {
@@ -710,6 +875,13 @@ function cancelInit() {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -719,8 +891,19 @@ function cancelInit() {
   min-height: 0;
 }
 
+.left-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.left-panel .panel-header {
+  flex-shrink: 0;
+}
+
 .left-panel .panel-content {
   padding: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .center-panel .panel-content {
@@ -731,19 +914,25 @@ function cancelInit() {
   padding: 1rem;
 }
 
-.builder-content {
-  display: grid;
-  grid-template-columns: 1fr 480px;
-  gap: 1rem;
+.right-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.right-panel .panel-header {
+  flex-shrink: 0;
+}
+
+.right-panel .panel-content {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+}
+
+.right-panel :deep(.step-selector) {
+  border: none;
+  border-radius: 0;
   height: 100%;
-}
-
-.builder-area {
-  overflow: auto;
-}
-
-.step-selector-area {
-  overflow: hidden;
 }
 
 .status-bar {
@@ -774,10 +963,19 @@ function cancelInit() {
   color: #f59e0b;
 }
 
-.validation-indicator {
+.mode-controls {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.25rem;
+  background: var(--surface-ground);
+  border-radius: 6px;
+}
+
+.validation-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
   font-size: 0.75rem;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -792,6 +990,11 @@ function cancelInit() {
 .validation-indicator.warning {
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.1);
+}
+
+.validation-indicator.valid {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .validation-indicator.clickable {

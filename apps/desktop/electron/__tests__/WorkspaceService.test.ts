@@ -383,6 +383,161 @@ describe('WorkspaceService', () => {
     })
   })
 
+  describe('detectStepPaths', () => {
+    it('should return default paths when only features/steps/ exists', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+      ])
+    })
+
+    it('should return default paths when no step files exist', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+      ])
+    })
+
+    it('should detect additional steps/ directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        [`${workspacePath}/steps/login.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+        'steps/**/*.ts',
+        'steps/**/*.js',
+      ])
+    })
+
+    it('should collapse nested step dirs to common ancestor', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        [`${workspacePath}/steps/broker/dashboard.steps.ts`]: '',
+        [`${workspacePath}/steps/common/auth.steps.ts`]: '',
+        [`${workspacePath}/steps/crm/contacts.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+        'steps/**/*.ts',
+        'steps/**/*.js',
+      ])
+    })
+
+    it('should detect steps in tests/ directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        [`${workspacePath}/tests/login.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+        'tests/**/*.ts',
+        'tests/**/*.js',
+      ])
+    })
+
+    it('should skip node_modules directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        [`${workspacePath}/node_modules/some-lib/example.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+      ])
+    })
+
+    it('should detect .steps.js files', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/steps/login.steps.js`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toEqual([
+        'features/steps/**/*.ts',
+        'features/steps/**/*.js',
+        'steps/**/*.ts',
+        'steps/**/*.js',
+      ])
+    })
+
+    it('should handle multiple independent step directories', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        [`${workspacePath}/steps/login.steps.ts`]: '',
+        [`${workspacePath}/tests/e2e/checkout.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      expect(result).toContain('features/steps/**/*.ts')
+      expect(result).toContain('features/steps/**/*.js')
+      expect(result).toContain('steps/**/*.ts')
+      expect(result).toContain('steps/**/*.js')
+      expect(result).toContain('tests/**/*.ts')
+      expect(result).toContain('tests/**/*.js')
+    })
+  })
+
+  describe('ensurePlaywrightConfig with detected step paths', () => {
+    it('should include detected step paths in generated config', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/steps/broker/dashboard.steps.ts`]: '',
+        [`${workspacePath}/steps/common/auth.steps.ts`]: '',
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = String(await vol.promises.readFile(configPath, 'utf-8'))
+
+      expect(configContent).toContain("'features/steps/**/*.ts'")
+      expect(configContent).toContain("'features/steps/**/*.js'")
+      expect(configContent).toContain("'steps/**/*.ts'")
+      expect(configContent).toContain("'steps/**/*.js'")
+    })
+  })
+
   describe('init', () => {
     it('should create package.json if missing', async () => {
       const workspacePath = '/test/workspace'

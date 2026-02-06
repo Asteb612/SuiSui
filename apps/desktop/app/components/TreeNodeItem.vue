@@ -15,25 +15,36 @@ const emit = defineEmits<{
   rename: []
   delete: []
   newFeature: []
+  newFolder: []
 }>()
 
 const menuRef = ref()
 
 const menuItems = computed(() => {
   const items = []
-  
-  // Add "New Feature" for folders only
+
+  // Add "New Feature" and "New Folder" for folders only
   if (props.node.type === 'folder') {
-    items.push({
-      label: 'New Feature',
-      icon: 'pi pi-file-plus',
-      command: () => {
-        emit('select', props.node)
-        emit('newFeature')
+    items.push(
+      {
+        label: 'New Feature',
+        icon: 'pi pi-file-plus',
+        command: () => {
+          emit('select', props.node)
+          emit('newFeature')
+        },
       },
-    })
+      {
+        label: 'New Folder',
+        icon: 'pi pi-folder-plus',
+        command: () => {
+          emit('select', props.node)
+          emit('newFolder')
+        },
+      }
+    )
   }
-  
+
   items.push(
     {
       label: 'Rename',
@@ -52,7 +63,7 @@ const menuItems = computed(() => {
       },
     }
   )
-  
+
   return items
 })
 
@@ -131,6 +142,7 @@ function showMenu(event: MouseEvent) {
         @rename="() => $emit('rename')"
         @delete="() => $emit('delete')"
         @new-feature="() => $emit('newFeature')"
+        @new-folder="() => $emit('newFolder')"
       />
     </div>
   </div>

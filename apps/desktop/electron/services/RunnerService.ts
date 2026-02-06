@@ -7,9 +7,17 @@ import type { ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 import { createLogger } from '../utils/logger'
+import { parseBddgenErrors, getErrorSummary } from '../utils/bddgenErrorParser'
 
 const logger = createLogger('RunnerService')
 const debugRunner = process.env.SUISUI_DEBUG_RUNNER === '1'
+
+/**
+ * Escapes special regex characters in a string for use in Playwright's --grep option
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 export class RunnerService {
   private commandRunner: ICommandRunner
@@ -99,25 +107,38 @@ export class RunnerService {
       })
     }
 
-    const args = ['playwright', 'test']
-
-    if (options.mode === 'ui') {
-      args.push('--ui')
-    }
+    // Resolve the feature file path for both bddgen and playwright
+    let featurePath: string | undefined
+    let specPath: string | undefined
 
     if (options.featurePath) {
       const normalized = options.featurePath.replace(/\\/g, '/')
-      const isAbsolute = path.isAbsolute(options.featurePath)
       const isInFeaturesDir = normalized.startsWith('features/')
-      const resolvedFeaturePath =
-        isAbsolute || isInFeaturesDir
-          ? options.featurePath
-          : path.join('features', options.featurePath)
-      args.push(resolvedFeaturePath)
+
+      // Ensure the path starts with 'features/'
+      featurePath = isInFeaturesDir ? normalized : `features/${normalized}`
+
+      // Convert to the generated spec file path:
+      // features/auth/login.feature -> .features-gen/features/auth/login.feature.spec.js
+      specPath = `.features-gen/${featurePath.replace(/\.feature$/, '.feature.spec.js')}`
     }
 
+    // Build playwright args
+    const playwrightArgs = ['test']
+
+    if (options.mode === 'ui') {
+      playwrightArgs.push('--ui')
+    }
+
+    // Add the generated spec file path to playwright args
+    if (specPath) {
+      playwrightArgs.push(specPath)
+    }
+
+    // Escape special regex characters in scenario name for --grep
     if (options.scenarioName) {
-      args.push('--grep', options.scenarioName)
+      const escapedName = escapeRegex(options.scenarioName)
+      playwrightArgs.push('--grep', escapedName)
     }
 
     // Use only workspace binaries
@@ -141,29 +162,31 @@ export class RunnerService {
 
     const env: Record<string, string> = {
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
+      ...(featurePath ? { FEATURE: featurePath } : {}),
       NODE_PATH: workspaceNodeModules,
       PATH: pathParts.join(path.delimiter),
     }
 
     if (debugRunner) {
-      logger.warn('Debug: Starting Playwright run', {
+      logger.warn('Debug: Starting test run', {
         mode: options.mode,
         workspacePath,
-        args,
-        featurePath: options.featurePath,
+        playwrightArgs,
+        featurePath,
+        specPath,
         scenarioName: options.scenarioName,
         baseUrl: normalizedBaseUrl,
+        env: { FEATURE: featurePath, BASE_URL: normalizedBaseUrl },
         workspaceNodeModules,
         playwrightCliPath,
         bddgenCliPath,
         nodeExec: process.execPath,
       })
     } else {
-      logger.info('Starting Playwright run', {
+      logger.info('Starting test run', {
         mode: options.mode,
         workspacePath,
-        args,
-        featurePath: options.featurePath,
+        featurePath,
         scenarioName: options.scenarioName,
         baseUrl: options.baseUrl,
       })
@@ -207,6 +230,8 @@ export class RunnerService {
       env.PATH = pathParts.join(path.delimiter)
     }
 
+    // Run bddgen to generate spec files
+    // The FEATURE env var is read by playwright.config.ts to filter which features to generate
     const bddgenResult = await this.commandRunner.exec(nodeExec, [bddgenCliPath], {
       cwd: workspacePath,
       timeout: 60000,
@@ -214,17 +239,32 @@ export class RunnerService {
     })
 
     if (bddgenResult.code !== 0) {
+      const parsedErrors = parseBddgenErrors(bddgenResult.stdout, bddgenResult.stderr)
+      const errorSummary = getErrorSummary(parsedErrors)
+
       logger.error('bddgen generation failed', undefined, {
         exitCode: bddgenResult.code,
+        errorSummary,
+        errorCount: parsedErrors.length,
         stdoutLength: bddgenResult.stdout.length,
         stderrLength: bddgenResult.stderr.length,
       })
+
+      if (debugRunner) {
+        logger.warn('Debug: bddgen error details', {
+          stdout: bddgenResult.stdout,
+          stderr: bddgenResult.stderr,
+          parsedErrors,
+        })
+      }
+
       return {
         status: 'error',
         exitCode: bddgenResult.code,
         stdout: bddgenResult.stdout,
         stderr: bddgenResult.stderr || 'bddgen generation failed',
         duration: Date.now() - startTime,
+        errors: parsedErrors,
       }
     }
 
@@ -242,7 +282,8 @@ export class RunnerService {
       }
     }
 
-    const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...args.slice(1)], {
+    // Run playwright test
+    const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...playwrightArgs], {
       cwd: workspacePath,
       timeout: options.mode === 'ui' ? 0 : 300000,
       env,

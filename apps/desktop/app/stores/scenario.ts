@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import type { Scenario, ScenarioStep, StepArg, ValidationResult, StepKeyword, StepArgDefinition } from '@suisui/shared'
+import type { Scenario, ScenarioStep, StepArg, ValidationResult, StepKeyword, StepArgDefinition, ExampleTable, ExampleRow, StepDefinition } from '@suisui/shared'
+import { resolvePattern, findBestMatch } from '@suisui/shared'
 
 function generateStepId(): string {
   return `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -8,6 +9,8 @@ function generateStepId(): string {
 export const useScenarioStore = defineStore('scenario', {
   state: () => ({
     featureName: '' as string,
+    featureTags: [] as string[],
+    featureDescription: '' as string,
     background: [] as ScenarioStep[],
     scenarios: [] as Scenario[],
     activeScenarioIndex: 0 as number,
@@ -38,10 +41,109 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
-    addScenario(name: string = 'New Scenario') {
-      this.scenarios.push({ name, steps: [] })
+    addScenario(name: string = 'New Scenario', isOutline: boolean = false) {
+      const scenario: Scenario = { name, tags: [], steps: [] }
+      if (isOutline) {
+        scenario.examples = { columns: [], rows: [] }
+      }
+      this.scenarios.push(scenario)
       this.activeScenarioIndex = this.scenarios.length - 1
       this.isDirty = true
+    },
+
+    setFeatureTags(tags: string[]) {
+      this.featureTags = tags
+      this.isDirty = true
+    },
+
+    setFeatureDescription(description: string) {
+      this.featureDescription = description
+      this.isDirty = true
+    },
+
+    setScenarioTags(tags: string[]) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        current.tags = tags
+        this.isDirty = true
+      }
+    },
+
+    toggleScenarioOutline() {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        if (current.examples) {
+          // Convert from outline to regular scenario
+          delete current.examples
+        } else {
+          // Convert to outline
+          current.examples = { columns: [], rows: [] }
+        }
+        this.isDirty = true
+      }
+    },
+
+    setExamples(examples: ExampleTable) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        current.examples = examples
+        this.isDirty = true
+      }
+    },
+
+    addExampleColumn(column: string) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current?.examples) {
+        current.examples.columns.push(column)
+        // Add empty value for the new column in existing rows
+        for (const row of current.examples.rows) {
+          row[column] = ''
+        }
+        this.isDirty = true
+      }
+    },
+
+    removeExampleColumn(column: string) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current?.examples) {
+        const index = current.examples.columns.indexOf(column)
+        if (index !== -1) {
+          current.examples.columns.splice(index, 1)
+          // Remove the column from all rows
+          for (const row of current.examples.rows) {
+            delete row[column]
+          }
+          this.isDirty = true
+        }
+      }
+    },
+
+    addExampleRow() {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current?.examples) {
+        const row: ExampleRow = {}
+        for (const col of current.examples.columns) {
+          row[col] = ''
+        }
+        current.examples.rows.push(row)
+        this.isDirty = true
+      }
+    },
+
+    removeExampleRow(index: number) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current?.examples && index >= 0 && index < current.examples.rows.length) {
+        current.examples.rows.splice(index, 1)
+        this.isDirty = true
+      }
+    },
+
+    updateExampleCell(rowIndex: number, column: string, value: string) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current?.examples && current.examples.rows[rowIndex]) {
+        current.examples.rows[rowIndex][column] = value
+        this.isDirty = true
+      }
     },
 
     removeScenario(index: number) {
@@ -99,7 +201,7 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
-    updateStepArg(stepId: string, argName: string, value: string) {
+    updateStepArg(stepId: string, argName: string, value: string, argType?: StepArg['type'], enumValues?: string[]) {
       const current = this.scenarios[this.activeScenarioIndex]
       if (current) {
         const step = current.steps.find((s) => s.id === stepId)
@@ -107,6 +209,18 @@ export const useScenarioStore = defineStore('scenario', {
           const arg = step.args.find((a) => a.name === argName)
           if (arg) {
             arg.value = value
+            this.isDirty = true
+          } else {
+            // Arg doesn't exist yet - create it (handles regex patterns without pre-defined args)
+            const newArg: StepArg = {
+              name: argName,
+              type: argType || 'string',
+              value,
+            }
+            if (enumValues) {
+              newArg.enumValues = enumValues
+            }
+            step.args.push(newArg)
             this.isDirty = true
           }
         }
@@ -121,6 +235,26 @@ export const useScenarioStore = defineStore('scenario', {
           current.steps.splice(index, 1)
           this.isDirty = true
         }
+      }
+    },
+
+    insertStepAt(index: number, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const step: ScenarioStep = {
+          id: generateStepId(),
+          keyword,
+          pattern,
+          args: args.map((arg) => ({
+            name: arg.name,
+            type: arg.type,
+            value: '',
+            enumValues: arg.enumValues,
+            tableColumns: arg.tableColumns,
+          })),
+        }
+        current.steps.splice(index, 0, step)
+        this.isDirty = true
       }
     },
 
@@ -150,6 +284,31 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
+    insertBackgroundStepAt(index: number, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {
+      const step: ScenarioStep = {
+        id: generateStepId(),
+        keyword,
+        pattern,
+        args: args.map((arg) => ({
+          name: arg.name,
+          type: arg.type,
+          value: '',
+          enumValues: arg.enumValues,
+          tableColumns: arg.tableColumns,
+        })),
+      }
+      this.background.splice(index, 0, step)
+      this.isDirty = true
+    },
+
+    moveBackgroundStep(fromIndex: number, toIndex: number) {
+      const step = this.background.splice(fromIndex, 1)[0]
+      if (step) {
+        this.background.splice(toIndex, 0, step)
+        this.isDirty = true
+      }
+    },
+
     updateBackgroundStep(stepId: string, updates: Partial<ScenarioStep>) {
       const index = this.background.findIndex((s) => s.id === stepId)
       if (index !== -1) {
@@ -167,14 +326,6 @@ export const useScenarioStore = defineStore('scenario', {
           arg.value = value
           this.isDirty = true
         }
-      }
-    },
-
-    moveBackgroundStep(fromIndex: number, toIndex: number) {
-      const step = this.background.splice(fromIndex, 1)[0]
-      if (step) {
-        this.background.splice(toIndex, 0, step)
-        this.isDirty = true
       }
     },
 
@@ -264,46 +415,83 @@ export const useScenarioStore = defineStore('scenario', {
 
     toGherkin(): string {
       const lines: string[] = []
+
+      // Feature tags
+      if (this.featureTags.length > 0) {
+        lines.push(this.featureTags.map(t => `@${t}`).join(' '))
+      }
+
       lines.push(`Feature: ${this.featureName || 'Untitled'}`)
+
+      // Feature description
+      if (this.featureDescription) {
+        lines.push('')
+        for (const line of this.featureDescription.split('\n')) {
+          lines.push(`  ${line}`)
+        }
+      }
+
       lines.push('')
 
       // Add Background section if present
       if (this.background.length > 0) {
         lines.push('  Background:')
         for (const step of this.background) {
-          let text = step.pattern
-          for (const arg of step.args) {
-            const placeholder = `{${arg.type}}`
-            const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
-            text = text.replace(placeholder, value)
-          }
+          const text = resolvePattern(step.pattern, step.args)
           lines.push(`    ${step.keyword} ${text}`)
         }
         lines.push('')
       }
 
       for (const scenario of this.scenarios) {
-        lines.push(`  Scenario: ${scenario.name || 'Untitled'}`)
+        // Scenario tags
+        if (scenario.tags && scenario.tags.length > 0) {
+          lines.push('  ' + scenario.tags.map(t => `@${t}`).join(' '))
+        }
+
+        // Scenario or Scenario Outline
+        const isOutline = scenario.examples && scenario.examples.columns.length > 0
+        const keyword = isOutline ? 'Scenario Outline' : 'Scenario'
+        lines.push(`  ${keyword}: ${scenario.name || 'Untitled'}`)
 
         for (const step of scenario.steps) {
-          let text = step.pattern
-          for (const arg of step.args) {
-            const placeholder = `{${arg.type}}`
-            const value = arg.type === 'string' ? `"${arg.value}"` : arg.value
-            text = text.replace(placeholder, value)
-          }
+          const text = resolvePattern(step.pattern, step.args)
           lines.push(`    ${step.keyword} ${text}`)
         }
+
+        // Examples table for Scenario Outline
+        if (isOutline && scenario.examples) {
+          lines.push('')
+          lines.push('    Examples:')
+
+          // Calculate column widths for alignment
+          const { columns, rows } = scenario.examples
+          const widths = columns.map(col => {
+            const values = [col, ...rows.map(row => row[col] || '')]
+            return Math.max(...values.map(v => v.length))
+          })
+
+          // Header row
+          const header = '      | ' + columns.map((col, i) => col.padEnd(widths[i] ?? 0)).join(' | ') + ' |'
+          lines.push(header)
+
+          // Data rows
+          for (const row of rows) {
+            const dataRow = '      | ' + columns.map((col, i) => (row[col] || '').padEnd(widths[i] ?? 0)).join(' | ') + ' |'
+            lines.push(dataRow)
+          }
+        }
+
         lines.push('')
       }
 
       return lines.join('\n')
     },
 
-    async loadFromFeature(featurePath: string) {
+    async loadFromFeature(featurePath: string, stepDefinitions: StepDefinition[] = []) {
       try {
         const content = await window.api.features.read(featurePath)
-        this.parseGherkin(content)
+        this.parseGherkin(content, stepDefinitions)
         this.currentFeaturePath = featurePath
         this.isDirty = false
       } catch {
@@ -311,50 +499,106 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
-    parseGherkin(content: string) {
+    parseGherkin(content: string, stepDefinitions: StepDefinition[] = []) {
       this.scenarios = []
       this.background = []
       this.featureName = ''
+      this.featureTags = []
+      this.featureDescription = ''
       let currentScenario: Scenario | null = null
       let parsingBackground = false
+      let parsingExamples = false
+      let parsingDescription = false
+      let pendingTags: string[] = []
+      let descriptionLines: string[] = []
+      let exampleColumns: string[] = []
 
       const lines = content.split('\n')
-      for (const line of lines) {
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] ?? ''
         const trimmed = line.trim()
+
+        // Parse tags (lines starting with @)
+        if (trimmed.startsWith('@')) {
+          const tags = trimmed.split(/\s+/).filter(t => t.startsWith('@')).map(t => t.slice(1))
+          pendingTags.push(...tags)
+          parsingDescription = false
+          continue
+        }
 
         if (trimmed.startsWith('Feature:')) {
           this.featureName = trimmed.replace('Feature:', '').trim()
+          this.featureTags = pendingTags
+          pendingTags = []
+          parsingDescription = true
+          descriptionLines = []
         } else if (trimmed.startsWith('Background:')) {
+          // Save description if we were collecting it
+          if (parsingDescription && descriptionLines.length > 0) {
+            this.featureDescription = descriptionLines.join('\n').trim()
+          }
+          parsingDescription = false
           parsingBackground = true
-        } else if (trimmed.startsWith('Scenario:')) {
+          parsingExamples = false
+        } else if (trimmed.startsWith('Scenario Outline:') || trimmed.startsWith('Scenario:')) {
+          // Save description if we were collecting it
+          if (parsingDescription && descriptionLines.length > 0) {
+            this.featureDescription = descriptionLines.join('\n').trim()
+          }
+          parsingDescription = false
           parsingBackground = false
+          parsingExamples = false
+
           // Save previous scenario if exists
           if (currentScenario) {
             this.scenarios.push(currentScenario)
           }
+
+          const isOutline = trimmed.startsWith('Scenario Outline:')
+          const name = trimmed.replace(/Scenario Outline:|Scenario:/, '').trim()
+
           currentScenario = {
-            name: trimmed.replace('Scenario:', '').trim(),
+            name,
+            tags: pendingTags.length > 0 ? [...pendingTags] : [],
             steps: [],
           }
+
+          if (isOutline) {
+            currentScenario.examples = { columns: [], rows: [] }
+          }
+
+          pendingTags = []
+        } else if (trimmed.startsWith('Examples:')) {
+          parsingExamples = true
+          exampleColumns = []
+        } else if (trimmed.startsWith('|') && parsingExamples && currentScenario?.examples) {
+          // Parse table row
+          const cells = trimmed.split('|').slice(1, -1).map(c => c.trim())
+
+          if (exampleColumns.length === 0) {
+            // First row is headers
+            exampleColumns = cells
+            currentScenario.examples.columns = cells
+          } else {
+            // Data rows
+            const row: ExampleRow = {}
+            cells.forEach((cell, idx) => {
+              const col = exampleColumns[idx]
+              if (col) {
+                row[col] = cell
+              }
+            })
+            currentScenario.examples.rows.push(row)
+          }
         } else if (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But ')) {
+          parsingExamples = false
           const match = trimmed.match(/^(Given|When|Then|And|But)\s+(.*)$/)
           if (match) {
             const keyword = match[1] as StepKeyword
             const text = match[2] ?? ''
 
-            const args: StepArg[] = []
-            const stringMatches = text.match(/"([^"]*)"/g)
-            if (stringMatches) {
-              stringMatches.forEach((m, i) => {
-                args.push({
-                  name: `arg${i}`,
-                  value: m.slice(1, -1),
-                  type: 'string',
-                })
-              })
-            }
-
-            const pattern = text.replace(/"[^"]*"/g, '{string}').replace(/\d+/g, '{int}')
+            // Try to match against known step definitions
+            const { pattern, args } = findBestMatch(text, keyword, stepDefinitions)
 
             const step: ScenarioStep = {
               id: generateStepId(),
@@ -369,6 +613,9 @@ export const useScenarioStore = defineStore('scenario', {
               currentScenario.steps.push(step)
             }
           }
+        } else if (parsingDescription && trimmed !== '' && !trimmed.startsWith('#')) {
+          // Collect description lines (between Feature: and Background:/Scenario:)
+          descriptionLines.push(trimmed)
         }
       }
 
@@ -379,7 +626,7 @@ export const useScenarioStore = defineStore('scenario', {
 
       // Ensure at least one scenario
       if (this.scenarios.length === 0) {
-        this.scenarios.push({ name: '', steps: [] })
+        this.scenarios.push({ name: '', tags: [], steps: [] })
       }
 
       this.activeScenarioIndex = 0
@@ -387,6 +634,8 @@ export const useScenarioStore = defineStore('scenario', {
 
     clear() {
       this.featureName = ''
+      this.featureTags = []
+      this.featureDescription = ''
       this.background = []
       this.scenarios = []
       this.activeScenarioIndex = 0
@@ -397,8 +646,10 @@ export const useScenarioStore = defineStore('scenario', {
 
     createNew(name: string) {
       this.featureName = name
+      this.featureTags = []
+      this.featureDescription = ''
       this.background = []
-      this.scenarios = [{ name, steps: [] }]
+      this.scenarios = [{ name, tags: [], steps: [] }]
       this.activeScenarioIndex = 0
       this.validation = null
       this.isDirty = true
