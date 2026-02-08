@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, provide } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useScenarioStore } from '~/stores/scenario'
 import { useStepsStore } from '~/stores/steps'
@@ -25,7 +25,6 @@ const deleteNode = ref<FeatureTreeNode | null>(null)
 
 const treeData = computed(() => workspaceStore.featureTree)
 
-
 function onNodeSelect(node: FeatureTreeNode) {
   selectedKey.value = node.relativePath
   if (node.type === 'file' && node.feature) {
@@ -40,6 +39,12 @@ function toggleExpanded(path: string) {
     expandedKeys.value[path] = true
   }
 }
+
+// Provide expansion and selection state to all nested TreeNodeItem components
+provide('expandedKeys', expandedKeys)
+provide('selectedKey', selectedKey)
+provide('toggleExpanded', toggleExpanded)
+provide('onNodeSelect', onNodeSelect)
 
 function openNewFolderDialog(parentPath?: string) {
   newFolderName.value = ''
