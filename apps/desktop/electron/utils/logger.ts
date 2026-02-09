@@ -56,22 +56,27 @@ class Logger {
     const prefix = `[${entry.timestamp}] [${this.formatLevel(level)}] [${this.context}]`
     const logMessage = `${prefix} ${message}`
 
-    switch (level) {
-      case LogLevel.DEBUG:
-        console.debug(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
-        break
-      case LogLevel.INFO:
-        console.info(logMessage, data ? JSON.stringify(data, null, 2) : '')
-        break
-      case LogLevel.WARN:
-        console.warn(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
-        break
-      case LogLevel.ERROR:
-        console.error(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
-        if (error) {
-          console.error('Stack trace:', error.stack)
-        }
-        break
+    // Wrap console calls in try-catch to handle EPIPE errors during shutdown
+    try {
+      switch (level) {
+        case LogLevel.DEBUG:
+          console.debug(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
+          break
+        case LogLevel.INFO:
+          console.info(logMessage, data ? JSON.stringify(data, null, 2) : '')
+          break
+        case LogLevel.WARN:
+          console.warn(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
+          break
+        case LogLevel.ERROR:
+          console.error(logMessage, data ? JSON.stringify(data, null, 2) : '', error || '')
+          if (error) {
+            console.error('Stack trace:', error.stack)
+          }
+          break
+      }
+    } catch {
+      // Ignore EPIPE and other write errors during app shutdown
     }
   }
 

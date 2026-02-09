@@ -1,4 +1,4 @@
-export type StepKeyword = 'Given' | 'When' | 'Then'
+export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
 
 export interface StepArgDefinition {
   name: string

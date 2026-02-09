@@ -6,41 +6,56 @@ The frontend is a Nuxt 4 (Vue 3) single-page application running in Electron's r
 
 ## Technology Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Nuxt | 3.15.0 | Framework (SSR disabled) |
-| Vue | 3.5.0 | Reactive UI framework |
-| Pinia | Latest | State management |
-| PrimeVue | 4.2.0 | UI component library |
-| PrimeFlex | Latest | CSS utility framework |
-| PrimeIcons | Latest | Icon library |
+| Technology | Version | Purpose                  |
+| ---------- | ------- | ------------------------ |
+| Nuxt       | 3.15.0  | Framework (SSR disabled) |
+| Vue        | 3.5.0   | Reactive UI framework    |
+| Pinia      | Latest  | State management         |
+| PrimeVue   | 4.2.0   | UI component library     |
+| PrimeFlex  | Latest  | CSS utility framework    |
+| PrimeIcons | Latest  | Icon library             |
 
 ## Directory Structure
 
 ```
 apps/desktop/app/
-├── components/          # Vue SFC components
-│   ├── ScenarioBuilder.vue
-│   ├── StepSelector.vue
-│   ├── ValidationPanel.vue
-│   ├── FeatureList.vue
-│   └── GitPanel.vue
-├── pages/               # Nuxt pages
-│   └── index.vue        # Main application page
-├── stores/              # Pinia stores
+├── components/              # Vue SFC components
+│   ├── BackgroundSection.vue    # Background steps editor
+│   ├── ExamplesEditor.vue       # Scenario Outline examples
+│   ├── FeatureList.vue          # Simple feature list
+│   ├── FeatureTree.vue          # Tree-based feature browser
+│   ├── GitPanel.vue             # Git operations panel
+│   ├── NewScenarioDialog.vue    # Create scenario dialog
+│   ├── ScenarioBuilder.vue      # Main scenario editor
+│   ├── StepAddDialog.vue        # Add step dialog
+│   ├── StepRow.vue              # Individual step display
+│   ├── StepSelector.vue         # Step definition browser
+│   ├── TableEditor.vue          # DataTable argument editor
+│   ├── TagsEditor.vue           # Tag management
+│   ├── TreeNodeItem.vue         # Recursive tree node
+│   └── ValidationPanel.vue      # Validation & runner
+├── pages/                   # Nuxt pages
+│   └── index.vue            # Main application page
+├── stores/                  # Pinia stores
 │   ├── workspace.ts
 │   ├── steps.ts
 │   ├── scenario.ts
 │   ├── runner.ts
 │   └── git.ts
-├── composables/         # Vue composables
-│   └── useApi.ts
-├── layouts/             # Layout components
+├── composables/             # Vue composables
+│   ├── useApi.ts            # Electron API access
+│   ├── useDragDrop.ts       # Drag and drop logic
+│   ├── useFeatureTree.ts    # Tree state management
+│   └── useThrottle.ts       # Function throttling
+├── utils/                   # Utility functions
+│   ├── stepPatternFormatter.ts  # Pattern formatting
+│   └── tableUtils.ts            # Table operations
+├── layouts/                 # Layout components
 │   └── default.vue
-├── assets/              # Static assets
+├── assets/                  # Static assets
 │   └── css/
-├── types/               # TypeScript definitions
-└── app.vue              # Root component
+├── types/                   # TypeScript definitions
+└── app.vue                  # Root component
 ```
 
 ## Application Layout
@@ -76,6 +91,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Purpose:** Main scenario editing interface.
 
 **Features:**
+
 - Scenario name input field
 - Step rows with keyword display (Given/When/Then/And/But)
 - Argument input fields for each step
@@ -89,6 +105,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Events:** None (updates stores directly)
 
 **Store Dependencies:**
+
 - `useScenarioStore` - scenario data and mutations
 - `useStepsStore` - step definitions for pattern matching
 
@@ -99,16 +116,19 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Purpose:** Displays available steps for adding to scenario.
 
 **Features:**
+
 - Categorized step display (Given/When/Then)
 - Steps from bddgen export (includes generic steps from workspace)
 - Clickable step items
 - Search/filter functionality
 
 **Store Dependencies:**
+
 - `useStepsStore` - step definitions
 - `useScenarioStore` - for adding steps
 
 **Usage:**
+
 ```vue
 <StepSelector />
 <!-- Steps are displayed categorized by keyword -->
@@ -122,6 +142,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Purpose:** Shows validation results and test runner controls.
 
 **Features:**
+
 - Validation status (success/errors/warnings)
 - Issue list with severity indicators
 - Test runner status display (idle/running/passed/failed/error)
@@ -140,6 +161,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 | error | Red |
 
 **Store Dependencies:**
+
 - `useScenarioStore` - validation results
 - `useRunnerStore` - runner status and controls
 
@@ -150,12 +172,14 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Purpose:** Lists and manages feature files in workspace.
 
 **Features:**
+
 - Hierarchical feature file display
 - Selected feature highlighting
 - Click to load feature into builder
 - File path display
 
 **Store Dependencies:**
+
 - `useWorkspaceStore` - feature file list
 - `useScenarioStore` - for loading selected feature
 
@@ -166,6 +190,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Purpose:** Git operations interface.
 
 **Features:**
+
 - Current branch display
 - Modified/untracked file counts
 - Status indicators (color-coded)
@@ -175,7 +200,186 @@ The main page (`pages/index.vue`) uses a three-column layout:
 - Loading states for operations
 
 **Store Dependencies:**
+
 - `useGitStore` - git status and operations
+
+---
+
+### FeatureTree.vue
+
+**Purpose:** Hierarchical tree view of feature files with folder structure.
+
+**Features:**
+
+- Tree-based navigation of features and folders
+- Expand/collapse folders
+- Context menu for file operations
+- Create new features and folders
+- Rename and delete operations
+- Visual selection state
+
+**Store Dependencies:**
+
+- `useWorkspaceStore` - feature file list
+- `useScenarioStore` - for loading selected feature
+- `useStepsStore` - for step matching on import
+
+---
+
+### BackgroundSection.vue
+
+**Purpose:** Displays and edits Background steps that run before each scenario.
+
+**Features:**
+
+- Add/remove background steps
+- Step reordering via drag and drop
+- Inline argument editing
+- Keyword display (Given/And)
+- Collapse/expand functionality
+
+**Store Dependencies:**
+
+- `useScenarioStore` - background steps data
+
+---
+
+### StepRow.vue
+
+**Purpose:** Individual step display with keyword, pattern, and arguments.
+
+**Features:**
+
+- Keyword badge (Given/When/Then/And/But)
+- Pattern text with argument placeholders
+- Inline argument input fields
+- Enum argument dropdown selectors
+- Delete and reorder controls
+- Drag handle for reordering
+- Validation error highlighting
+
+**Props:**
+| Prop | Type | Description |
+|------|------|-------------|
+| `step` | `ScenarioStep` | The step data |
+| `index` | `number` | Step position |
+| `isBackground` | `boolean` | If in background section |
+
+**Events:**
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `update` | `Partial<ScenarioStep>` | Step data changed |
+| `remove` | - | Delete requested |
+| `move-up` | - | Move up requested |
+| `move-down` | - | Move down requested |
+
+---
+
+### StepAddDialog.vue
+
+**Purpose:** Dialog for adding steps with pattern selection.
+
+**Features:**
+
+- Step pattern search/filter
+- Keyword category tabs
+- Pattern preview with placeholders
+- Argument pre-fill options
+
+**Store Dependencies:**
+
+- `useStepsStore` - available step definitions
+- `useScenarioStore` - for adding steps
+
+---
+
+### ExamplesEditor.vue
+
+**Purpose:** Edit Examples table for Scenario Outlines.
+
+**Features:**
+
+- Dynamic column management
+- Add/remove columns and rows
+- Inline cell editing
+- Column header editing
+- Auto-detect placeholders from steps
+
+**Props:**
+| Prop | Type | Description |
+|------|------|-------------|
+| `examples` | `Examples` | The examples data |
+| `placeholders` | `string[]` | Detected `<placeholder>` names |
+
+---
+
+### TableEditor.vue
+
+**Purpose:** Generic data table editor for step DataTable arguments.
+
+**Features:**
+
+- Dynamic column/row management
+- Inline cell editing
+- Column reordering
+- CSV-like paste support
+
+**Props:**
+| Prop | Type | Description |
+|------|------|-------------|
+| `columns` | `string[]` | Column headers |
+| `rows` | `string[][]` | Table data |
+
+---
+
+### TagsEditor.vue
+
+**Purpose:** Edit tags for features and scenarios.
+
+**Features:**
+
+- Add/remove tags with @ prefix
+- Tag suggestions from existing tags
+- Keyboard navigation
+- Inline editing
+
+**Props:**
+| Prop | Type | Description |
+|------|------|-------------|
+| `tags` | `string[]` | Current tags |
+
+---
+
+### TreeNodeItem.vue
+
+**Purpose:** Recursive tree node component for FeatureTree.
+
+**Features:**
+
+- Folder/file icon display
+- Expand/collapse toggle
+- Selection highlighting
+- Context menu integration
+- Drag and drop support
+
+**Props:**
+| Prop | Type | Description |
+|------|------|-------------|
+| `node` | `TreeNode` | The tree node data |
+| `level` | `number` | Nesting depth |
+| `selected` | `boolean` | Selection state |
+
+---
+
+### NewScenarioDialog.vue
+
+**Purpose:** Dialog for creating new scenarios.
+
+**Features:**
+
+- Scenario name input
+- Template selection (empty, outline, etc.)
+- Tag pre-fill option
 
 ---
 
@@ -186,6 +390,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Location:** `stores/workspace.ts`
 
 **State:**
+
 ```typescript
 {
   workspace: WorkspaceInfo | null;
@@ -218,6 +423,7 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Location:** `stores/steps.ts`
 
 **State:**
+
 ```typescript
 {
   steps: StepDefinition[];
@@ -251,43 +457,88 @@ The main page (`pages/index.vue`) uses a three-column layout:
 **Location:** `stores/scenario.ts`
 
 **State:**
+
 ```typescript
 {
-  scenario: Scenario;           // { name, steps[] }
+  featureName: string;                    // Feature title
+  featureDescription: string;             // Feature description
+  scenarios: Scenario[];                  // Array of scenarios
+  activeScenarioIndex: number;            // Currently selected scenario
+  background: ScenarioStep[];             // Background steps
   validation: ValidationResult | null;
   isDirty: boolean;
   currentFeaturePath: string | null;
 }
 ```
 
+**Scenario Structure:**
+
+```typescript
+interface Scenario {
+  name: string
+  tags: string[]
+  steps: ScenarioStep[]
+  examples?: Examples // For Scenario Outlines
+}
+
+interface Examples {
+  columns: string[]
+  rows: Record<string, string>[]
+}
+```
+
 **Actions:**
 | Action | Description |
 |--------|-------------|
-| `setName(name)` | Update scenario name |
+| `setFeatureName(name)` | Update feature name |
+| `setFeatureDescription(desc)` | Update feature description |
+| `setScenarioName(name)` | Update active scenario name |
+| `addScenario()` | Add new empty scenario |
+| `removeScenario(index)` | Remove scenario at index |
+| `setActiveScenario(index)` | Switch active scenario |
 | `addStep(keyword, pattern, args)` | Add step with auto-generated ID |
 | `updateStep(stepId, updates)` | Modify step properties |
 | `updateStepArg(stepId, argName, value)` | Update single argument |
 | `removeStep(stepId)` | Delete step |
 | `moveStep(fromIndex, toIndex)` | Reorder steps |
+| `addBackgroundStep(step)` | Add background step |
+| `removeBackgroundStep(stepId)` | Remove background step |
+| `moveBackgroundStep(from, to)` | Reorder background |
+| `setExamples(examples)` | Set scenario outline examples |
+| `addExampleRow(row)` | Add row to examples table |
+| `removeExampleRow(index)` | Remove example row |
 | `validate()` | Call IPC validation |
 | `save(featurePath)` | Convert to Gherkin and write |
-| `loadFromFeature(featurePath)` | Parse Gherkin and populate |
-| `toGherkin()` | Convert scenario to Gherkin syntax |
-| `parseGherkin(content)` | Parse Gherkin content |
+| `loadFromFeature(path, stepDefs)` | Parse Gherkin with step matching |
+| `toGherkin()` | Convert to Gherkin syntax |
+| `parseGherkin(content, stepDefs)` | Parse Gherkin content |
 | `clear()` | Reset all state |
 
 **Getters:**
 | Getter | Type | Description |
 |--------|------|-------------|
-| `hasSteps` | boolean | Whether scenario has steps |
+| `activeScenario` | Scenario | Currently selected scenario |
+| `hasSteps` | boolean | Whether active scenario has steps |
+| `hasBackground` | boolean | Whether background has steps |
 | `isValid` | boolean | Validation passed |
 | `errors` | ValidationIssue[] | Error-level issues |
 | `warnings` | ValidationIssue[] | Warning-level issues |
+| `placeholders` | string[] | Detected `<placeholder>` names |
+
+**Step Pattern Matching:**
+When parsing Gherkin, the store matches step text against step definitions:
+
+- Supports Cucumber expressions: `{string}`, `{int}`, `{float}`, `{any}`
+- Supports regex enum patterns: `(option1|option2|option3)`
+- Extracts argument values from matched text
+- Falls back to simple pattern if no match found
 
 **Gherkin Conversion:**
 The store handles bidirectional conversion between the internal `Scenario` object and Gherkin text format:
+
 - `toGherkin()` - Serialize scenario to `.feature` file content
 - `parseGherkin()` - Parse `.feature` content into scenario object
+- Supports Background, Scenario, Scenario Outline, and Examples
 
 ---
 
@@ -296,6 +547,7 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 **Location:** `stores/runner.ts`
 
 **State:**
+
 ```typescript
 {
   status: RunStatus;      // 'idle' | 'running' | 'passed' | 'failed' | 'error'
@@ -320,14 +572,15 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 **Location:** `stores/git.ts`
 
 **State:**
+
 ```typescript
 {
-  status: GitStatusResult | null;
-  isLoading: boolean;
-  isPulling: boolean;
-  isPushing: boolean;
-  error: string | null;
-  lastMessage: string | null;
+  status: GitStatusResult | null
+  isLoading: boolean
+  isPulling: boolean
+  isPushing: boolean
+  error: string | null
+  lastMessage: string | null
 }
 ```
 
@@ -355,31 +608,145 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 **Purpose:** Type-safe access to Electron API from renderer.
 
 **Usage:**
+
 ```typescript
 // Strict - throws if API unavailable
-const api = useApi();
-const workspace = await api.workspace.get();
+const api = useApi()
+const workspace = await api.workspace.get()
 
 // Safe - returns null if unavailable
-const api = useApiSafe();
+const api = useApiSafe()
 if (api) {
-  const workspace = await api.workspace.get();
+  const workspace = await api.workspace.get()
 }
 ```
 
 **Implementation:**
+
 ```typescript
 export function useApi(): ElectronAPI {
   if (!window.api) {
-    throw new Error('Electron API not available');
+    throw new Error('Electron API not available')
   }
-  return window.api;
+  return window.api
 }
 
 export function useApiSafe(): ElectronAPI | null {
-  return window.api ?? null;
+  return window.api ?? null
 }
 ```
+
+---
+
+### useDragDrop
+
+**Location:** `composables/useDragDrop.ts`
+
+**Purpose:** Reusable drag and drop functionality for step reordering.
+
+**Features:**
+
+- Drag state management
+- Drop zone detection
+- Position calculation
+- Animation support
+
+**Usage:**
+
+```typescript
+const { isDragging, draggedItem, dropIndex, startDrag, endDrag, handleDragOver, handleDrop } =
+  useDragDrop<ScenarioStep>()
+```
+
+**Return Values:**
+| Value | Type | Description |
+|-------|------|-------------|
+| `isDragging` | `Ref<boolean>` | Whether drag is active |
+| `draggedItem` | `Ref<T \| null>` | Current dragged item |
+| `dropIndex` | `Ref<number>` | Target drop position |
+| `startDrag` | `(item, index) => void` | Begin drag operation |
+| `endDrag` | `() => void` | End drag operation |
+| `handleDragOver` | `(event, index) => void` | Handle drag over event |
+| `handleDrop` | `(callback) => void` | Handle drop with callback |
+
+---
+
+### useFeatureTree
+
+**Location:** `composables/useFeatureTree.ts`
+
+**Purpose:** Manages feature tree state and operations.
+
+**Features:**
+
+- Tree node expansion state
+- Selection management
+- File/folder operations
+- Path resolution
+
+**Usage:**
+
+```typescript
+const {
+  expandedNodes,
+  selectedNode,
+  toggleExpand,
+  selectNode,
+  createFeature,
+  createFolder,
+  renameNode,
+  deleteNode,
+} = useFeatureTree()
+```
+
+**Return Values:**
+| Value | Type | Description |
+|-------|------|-------------|
+| `expandedNodes` | `Ref<Set<string>>` | Expanded node paths |
+| `selectedNode` | `Ref<TreeNode \| null>` | Currently selected node |
+| `toggleExpand` | `(path) => void` | Toggle node expansion |
+| `selectNode` | `(node) => void` | Select a node |
+| `createFeature` | `(parentPath, name) => Promise` | Create new feature |
+| `createFolder` | `(parentPath, name) => Promise` | Create new folder |
+| `renameNode` | `(node, newName) => Promise` | Rename file/folder |
+| `deleteNode` | `(node) => Promise` | Delete file/folder |
+
+---
+
+### useThrottle
+
+**Location:** `composables/useThrottle.ts`
+
+**Purpose:** Throttle function execution for performance optimization.
+
+**Features:**
+
+- Configurable delay
+- Leading/trailing edge options
+- Cancel functionality
+
+**Usage:**
+
+```typescript
+const throttledFn = useThrottle((value: string) => {
+  // Expensive operation
+  search(value)
+}, 300)
+
+// Call throttled function
+throttledFn('search term')
+
+// Cancel pending execution
+throttledFn.cancel()
+```
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `fn` | `Function` | required | Function to throttle |
+| `delay` | `number` | `100` | Throttle delay in ms |
+| `options.leading` | `boolean` | `true` | Execute on leading edge |
+| `options.trailing` | `boolean` | `true` | Execute on trailing edge |
 
 ---
 
@@ -389,24 +756,24 @@ Key settings in `nuxt.config.ts`:
 
 ```typescript
 export default defineNuxtConfig({
-  ssr: false,                    // Client-only (required for Electron)
+  ssr: false, // Client-only (required for Electron)
   compatibilityDate: '2024-01-01',
   devtools: { enabled: true },
 
   modules: [
-    '@primevue/nuxt-module',     // UI components
-    '@pinia/nuxt'                // State management
+    '@primevue/nuxt-module', // UI components
+    '@pinia/nuxt', // State management
   ],
 
   typescript: {
     strict: true,
-    typeCheck: true
+    typeCheck: true,
   },
 
   primevue: {
     // PrimeVue configuration
-  }
-});
+  },
+})
 ```
 
 ---

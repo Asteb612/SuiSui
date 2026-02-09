@@ -11,6 +11,10 @@ export * from './types/settings'
 export * from './types/node'
 export * from './types/dependency'
 
+// Patterns
+export * from './patterns/processor'
+export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } from './patterns/types'
+
 // IPC
 export * from './ipc/channels'
 export * from './ipc/api'

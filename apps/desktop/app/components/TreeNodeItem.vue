@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, inject, type Ref } from 'vue'
 import type { FeatureTreeNode } from '@suisui/shared'
 
 interface Props {
@@ -15,25 +15,46 @@ const emit = defineEmits<{
   rename: []
   delete: []
   newFeature: []
+  newFolder: []
 }>()
+
+// Inject state management from parent FeatureTree
+const expandedKeys = inject<Ref<Record<string, boolean>>>('expandedKeys')
+const selectedKey = inject<Ref<string>>('selectedKey')
+const toggleExpanded = inject<(path: string) => void>('toggleExpanded')
+const onNodeSelect = inject<(node: FeatureTreeNode) => void>('onNodeSelect')
+
+// Create computed properties to safely access injected refs
+const expandedKeysValue = computed(() => expandedKeys?.value || {})
+const selectedKeyValue = computed(() => selectedKey?.value || '')
 
 const menuRef = ref()
 
 const menuItems = computed(() => {
   const items = []
-  
-  // Add "New Feature" for folders only
+
+  // Add "New Feature" and "New Folder" for folders only
   if (props.node.type === 'folder') {
-    items.push({
-      label: 'New Feature',
-      icon: 'pi pi-file-plus',
-      command: () => {
-        emit('select', props.node)
-        emit('newFeature')
+    items.push(
+      {
+        label: 'New Feature',
+        icon: 'pi pi-file-plus',
+        command: () => {
+          emit('select', props.node)
+          emit('newFeature')
+        },
       },
-    })
+      {
+        label: 'New Folder',
+        icon: 'pi pi-folder-plus',
+        command: () => {
+          emit('select', props.node)
+          emit('newFolder')
+        },
+      }
+    )
   }
-  
+
   items.push(
     {
       label: 'Rename',
@@ -52,7 +73,7 @@ const menuItems = computed(() => {
       },
     }
   )
-  
+
   return items
 })
 
@@ -67,12 +88,12 @@ function showMenu(event: MouseEvent) {
     <div
       class="node-content"
       :class="{ selected }"
-      @click="emit('select', node)"
+      @click="onNodeSelect ? onNodeSelect(node) : emit('select', node)"
     >
       <span
         v-if="node.type === 'folder'"
         class="node-toggle"
-        @click.stop="emit('toggle')"
+        @click.stop="toggleExpanded ? toggleExpanded(node.relativePath) : emit('toggle')"
       >
         <i :class="[expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right']" />
       </span>
@@ -124,13 +145,14 @@ function showMenu(event: MouseEvent) {
         v-for="child in node.children"
         :key="child.relativePath"
         :node="child"
-        :expanded="false"
-        :selected="false"
-        @toggle="() => {}"
-        @select="(n) => $emit('select', n)"
+        :expanded="expandedKeysValue[child.relativePath] || false"
+        :selected="selectedKeyValue === child.relativePath"
+        @toggle="() => toggleExpanded?.(child.relativePath)"
+        @select="(n) => onNodeSelect?.(n)"
         @rename="() => $emit('rename')"
         @delete="() => $emit('delete')"
         @new-feature="() => $emit('newFeature')"
+        @new-folder="() => $emit('newFolder')"
       />
     </div>
   </div>

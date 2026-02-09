@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { parseArgs } from '@suisui/shared'
 import { StepService, resetStepService } from '../services/StepService'
 
 // Mock electron app
@@ -71,143 +72,8 @@ describe('StepService', () => {
     process.cwd = originalCwd
   })
 
-  describe('parseArgs', () => {
-    it('should parse string arguments', () => {
-      // Access private method via casting
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('I am on the {string} page')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({ name: 'arg0', type: 'string', required: true })
-    })
-
-    it('should parse multiple arguments', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('I fill {string} with {string}')
-      expect(args).toHaveLength(2)
-      expect(args[0]).toEqual({ name: 'arg0', type: 'string', required: true })
-      expect(args[1]).toEqual({ name: 'arg1', type: 'string', required: true })
-    })
-
-    it('should parse int arguments', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('I wait for {int} seconds')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({ name: 'arg0', type: 'int', required: true })
-    })
-
-    it('should parse named arguments', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('I fill {string:fieldName} with {string:value}')
-      expect(args).toHaveLength(2)
-      expect(args[0]).toEqual({ name: 'fieldName', type: 'string', required: true })
-      expect(args[1]).toEqual({ name: 'value', type: 'string', required: true })
-    })
-
-    it('should parse enum values from regex', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('je me connecte en tant que (admin|user|guest)')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({
-        name: 'arg0',
-        type: 'enum',
-        required: true,
-        enumValues: ['admin', 'user', 'guest'],
-      })
-    })
-
-    it('should parse enum with whitespace variations', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('I login as ( admin | user | guest )')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({
-        name: 'arg0',
-        type: 'enum',
-        required: true,
-        enumValues: ['admin', 'user', 'guest'],
-      })
-    })
-
-    it('should parse multiple enums in one pattern', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('user (admin|user) can (create|delete)')
-      expect(args).toHaveLength(2)
-      expect(args[0]).toEqual({
-        name: 'arg0',
-        type: 'enum',
-        required: true,
-        enumValues: ['admin', 'user'],
-      })
-      expect(args[1]).toEqual({
-        name: 'arg1',
-        type: 'enum',
-        required: true,
-        enumValues: ['create', 'delete'],
-      })
-    })
-
-    it('should parse table columns from pattern', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('les utilisateurs (email, role) :')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({
-        name: 'table',
-        type: 'table',
-        required: true,
-        tableColumns: ['email', 'role'],
-      })
-    })
-
-    it('should parse table with multiple columns', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('the following users (id, name, email, role) :')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({
-        name: 'table',
-        type: 'table',
-        required: true,
-        tableColumns: ['id', 'name', 'email', 'role'],
-      })
-    })
-
-    it('should handle DataTable without column info', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('the following data:')
-      expect(args).toHaveLength(1)
-      expect(args[0]).toEqual({
-        name: 'table',
-        type: 'table',
-        required: true,
-      })
-    })
-
-    it('should parse mixed enum and Cucumber expressions', () => {
-      const parseArgs = (service as unknown as { parseArgs: (pattern: string) => unknown[] }).parseArgs.bind(service)
-
-      const args = parseArgs('user (admin|user|guest) waits {int} seconds')
-      expect(args).toHaveLength(2)
-      expect(args[0]).toEqual({
-        name: 'arg0',
-        type: 'enum',
-        required: true,
-        enumValues: ['admin', 'user', 'guest'],
-      })
-      expect(args[1]).toEqual({
-        name: 'arg1',
-        type: 'int',
-        required: true,
-      })
-    })
-  })
+  // parseArgs tests have moved to packages/shared/src/patterns/__tests__/processor.test.ts
+  // StepService now delegates to the shared parseArgs function
 
   describe('parseDecorator', () => {
     it('should extract decorator from pattern', () => {
@@ -265,6 +131,112 @@ describe('StepService', () => {
     it('should return empty array when no cache', async () => {
       const decorators = await service.getDecorators()
       expect(decorators).toHaveLength(0)
+    })
+  })
+
+  describe('parseExportOutput — regex step patterns', () => {
+    function callParseExportOutput(output: string) {
+      return (service as unknown as { parseExportOutput: (output: string) => Array<{ keyword: string; pattern: string; location: string }> }).parseExportOutput(output)
+    }
+
+    it('should parse simple string step patterns', () => {
+      const output = [
+        'List of all steps (3):',
+        '* Given I am on the home page',
+        '* When I click on {string}',
+        '* Then I should see {string}',
+      ].join('\n')
+
+      const steps = callParseExportOutput(output)
+      expect(steps).toHaveLength(3)
+      expect(steps[0]).toEqual({ keyword: 'Given', pattern: 'I am on the home page', location: '' })
+      expect(steps[1]).toEqual({ keyword: 'When', pattern: 'I click on {string}', location: '' })
+    })
+
+    it('should parse regex patterns with anchors (enum alternation)', () => {
+      const output = [
+        'List of all steps (1):',
+        '* Given ^I am logged in as (manager|internal seller)$',
+      ].join('\n')
+
+      const steps = callParseExportOutput(output)
+      console.log('[DIAG] parseExportOutput for regex enum:', JSON.stringify(steps))
+      expect(steps).toHaveLength(1)
+      expect(steps[0]!.keyword).toBe('Given')
+      expect(steps[0]!.pattern).toBe('^I am logged in as (manager|internal seller)$')
+    })
+
+    it('should parse regex patterns with capture groups', () => {
+      const output = [
+        'List of all steps (3):',
+        '* When ^I click on "([^"]*)"$',
+        '* Then ^I should see (\\d+) items$',
+        '* When ^I fill "([^"]*)" with "([^"]*)"$',
+      ].join('\n')
+
+      const steps = callParseExportOutput(output)
+      console.log('[DIAG] parseExportOutput for regex captures:', JSON.stringify(steps))
+      expect(steps).toHaveLength(3)
+      expect(steps[0]!.pattern).toBe('^I click on "([^"]*)"$')
+      expect(steps[1]!.pattern).toBe('^I should see (\\d+) items$')
+      expect(steps[2]!.pattern).toBe('^I fill "([^"]*)" with "([^"]*)"$')
+    })
+
+    it('should parse mixed string and regex patterns', () => {
+      const output = [
+        'List of all steps (4):',
+        '* Given I am on {string} page',
+        '* Given ^I am logged in as (admin|user|guest)$',
+        '* When I click on {string}',
+        '* When ^I type "([^"]*)" into "([^"]*)"$',
+      ].join('\n')
+
+      const steps = callParseExportOutput(output)
+      console.log('[DIAG] parseExportOutput mixed:', JSON.stringify(steps))
+      expect(steps).toHaveLength(4)
+      // String patterns
+      expect(steps[0]!.pattern).toBe('I am on {string} page')
+      // Regex patterns
+      expect(steps[1]!.pattern).toBe('^I am logged in as (admin|user|guest)$')
+      expect(steps[3]!.pattern).toBe('^I type "([^"]*)" into "([^"]*)"$')
+    })
+
+    it('full pipeline: regex enum pattern → parseArgs → step definition', () => {
+      const output = '* Given ^I am logged in as (manager|internal seller)$'
+      const steps = callParseExportOutput(output)
+      expect(steps).toHaveLength(1)
+
+      const step = steps[0]!
+      const args = parseArgs(step.pattern)
+      console.log('[DIAG] full pipeline — regex enum args:', JSON.stringify(args))
+
+      expect(args).toHaveLength(1)
+      expect(args[0].type).toBe('enum')
+      expect(args[0].enumValues).toContain('manager')
+      expect(args[0].enumValues).toContain('internal seller')
+    })
+
+    it('full pipeline: regex capture group → parseArgs → step definition', () => {
+      const output = '* When ^I click on "([^"]*)"$'
+      const steps = callParseExportOutput(output)
+      expect(steps).toHaveLength(1)
+
+      const step = steps[0]!
+      const args = parseArgs(step.pattern)
+      console.log('[DIAG] full pipeline — regex capture args:', JSON.stringify(args))
+      console.log('[DIAG] Number of args detected:', args.length)
+      // This reveals whether capture groups like ([^"]*) are detected
+    })
+
+    it('full pipeline: regex \\d+ capture → parseArgs → step definition', () => {
+      const output = '* Then ^I should see (\\d+) items$'
+      const steps = callParseExportOutput(output)
+      expect(steps).toHaveLength(1)
+
+      const step = steps[0]!
+      const args = parseArgs(step.pattern)
+      console.log('[DIAG] full pipeline — regex \\d+ args:', JSON.stringify(args))
+      console.log('[DIAG] Number of args detected:', args.length)
     })
   })
 })

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { formatStepPattern } from '~/utils/stepPatternFormatter'
 import type { StepKeyword, StepDefinition } from '@suisui/shared'
 
 const stepsStore = useStepsStore()
@@ -141,31 +142,27 @@ async function refreshSteps() {
         >
           <div class="step-pattern">
             <span class="keyword">{{ step.keyword }}</span>
-            {{ step.pattern }}
+            <span
+              :aria-label="step.pattern"
+              v-html="formatStepPattern(step.pattern).html"
+            />
           </div>
           <div
-            v-if="step.args.length > 0"
-            class="step-args"
+            v-if="formatStepPattern(step.pattern).argDescriptions.length > 0"
+            class="step-arg-descriptions"
           >
             <span
-              v-for="arg in step.args"
-              :key="arg.name"
-              class="arg-badge"
-              :class="{ 'enum-badge': arg.type === 'enum', 'table-badge': arg.type === 'table' }"
+              v-for="(argDesc, index) in formatStepPattern(step.pattern).argDescriptions"
+              :key="index"
+              class="arg-desc"
+              :class="{ 'enum-desc': argDesc.type === 'enum', 'table-desc': argDesc.type === 'table' }"
             >
-              {{ arg.name }}: {{ arg.type }}
-              <span
-                v-if="arg.enumValues"
-                class="enum-values"
-              >
-                ({{ arg.enumValues.join(' | ') }})
-              </span>
-              <span
-                v-if="arg.tableColumns"
-                class="table-columns"
-              >
-                ({{ arg.tableColumns.join(', ') }})
-              </span>
+              <template v-if="argDesc.type === 'enum' && argDesc.enumValues">
+                {{ argDesc.name }}: {{ argDesc.enumValues.join(' | ') }}
+              </template>
+              <template v-else-if="argDesc.type === 'table' && argDesc.tableColumns">
+                {{ argDesc.name }}: {{ argDesc.tableColumns.join(', ') }}
+              </template>
             </span>
           </div>
           <span
@@ -308,49 +305,53 @@ async function refreshSteps() {
   font-size: 0.875rem;
 }
 
-.step-args {
-  margin-top: 0.625rem;
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+/* Pattern variable styles */
+:deep(.pattern-variable) {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-weight: 600;
+  margin: 0 0.125rem;
 }
 
-.arg-badge {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  border-radius: 4px;
-  color: var(--primary-color);
-  font-weight: 500;
-  word-break: break-word;
-}
-
-.arg-badge.enum-badge {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.2);
+:deep(.pattern-enum) {
+  background: rgba(139, 92, 246, 0.15);
   color: #8b5cf6;
 }
 
-.arg-badge.table-badge {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.2);
+:deep(.pattern-table) {
+  background: rgba(34, 197, 94, 0.15);
   color: #22c55e;
 }
 
-.enum-values,
-.table-columns {
-  display: inline;
-  margin-left: 0.25rem;
-  opacity: 0.9;
+:deep(.pattern-string),
+:deep(.pattern-int),
+:deep(.pattern-float),
+:deep(.pattern-any) {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
 }
 
-.enum-values {
-  color: inherit;
+.step-arg-descriptions {
+  margin-top: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.table-columns {
-  color: inherit;
+.arg-desc {
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+  padding-left: 4.5rem;
+  font-family: monospace;
+}
+
+.arg-desc.enum-desc {
+  color: #8b5cf6;
+}
+
+.arg-desc.table-desc {
+  color: #22c55e;
 }
 
 .generic-badge,

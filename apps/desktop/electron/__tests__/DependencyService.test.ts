@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { DependencyService, resetDependencyService } from '../services/DependencyService'
 import { FakeCommandRunner } from '../services/CommandRunner'
 import type { INodeService } from '../services/NodeService'
@@ -208,7 +208,7 @@ describe('DependencyService', () => {
         }),
       }))
 
-      const result = await service.install(undefined as unknown as string)
+      await service.install(undefined as unknown as string)
       // Since we pass undefined, it should use workspaceService.getPath() which returns '/test/workspace' in our mock
       // Let's test with explicit null instead
     })
@@ -237,7 +237,7 @@ describe('DependencyService', () => {
 
       fakeRunner.setResponse('ci', { code: 0, stdout: 'installed', stderr: '' })
 
-      const result = await service.install('/test/workspace')
+      await service.install('/test/workspace')
 
       const ciCall = fakeRunner.callHistory.find(
         (call) => call.args.includes('ci')
@@ -250,7 +250,7 @@ describe('DependencyService', () => {
 
       fakeRunner.setResponse('install', { code: 0, stdout: 'installed', stderr: '' })
 
-      const result = await service.install('/test/workspace')
+      await service.install('/test/workspace')
 
       const installCall = fakeRunner.callHistory.find(
         (call) => call.args.includes('install')

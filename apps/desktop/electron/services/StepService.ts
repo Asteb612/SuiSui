@@ -6,8 +6,8 @@ import type {
   StepDefinition,
   StepExportResult,
   DecoratorDefinition,
-  StepArgDefinition,
 } from '@suisui/shared'
+import { parseArgs } from '@suisui/shared'
 import { getWorkspaceService } from './WorkspaceService'
 import { getNodeService } from './NodeService'
 import { createLogger } from '../utils/logger'
@@ -35,60 +35,6 @@ export class StepService {
 
   constructor() {
     // No dependencies needed
-  }
-
-  private parseArgs(pattern: string): StepArgDefinition[] {
-    const args: StepArgDefinition[] = []
-    let index = 0
-
-    // 1. Check for DataTable (pattern ends with ':')
-    if (pattern.trim().endsWith(':')) {
-      // Extract table columns from pattern like "(email, role) :"
-      const tableMatch = pattern.match(/\(([^)]+(?:,\s*[^)]+)+)\)\s*:$/)
-      if (tableMatch) {
-        const columns = tableMatch[1].split(',').map(c => c.trim())
-        args.push({
-          name: 'table',
-          type: 'table',
-          required: true,
-          tableColumns: columns,
-        })
-        return args
-      }
-      // Generic DataTable without column info
-      args.push({
-        name: 'table',
-        type: 'table',
-        required: true,
-      })
-      return args
-    }
-
-    // 2. Parse enum values from regex: (value1|value2|value3)
-    const enumRegex = /\(([^)]+\|[^)]+)\)/g
-    let enumMatch: RegExpExecArray | null
-    while ((enumMatch = enumRegex.exec(pattern)) !== null) {
-      const enumValues = enumMatch[1].split('|').map(v => v.trim())
-      args.push({
-        name: `arg${index}`,
-        type: 'enum',
-        required: true,
-        enumValues,
-      })
-      index++
-    }
-
-    // 3. Parse Cucumber expressions: {string}, {int}, etc.
-    const cucumberRegex = /\{(string|int|float|any)(?::(\w+))?\}/g
-    let cucumberMatch: RegExpExecArray | null
-    while ((cucumberMatch = cucumberRegex.exec(pattern)) !== null) {
-      const type = cucumberMatch[1] as StepArgDefinition['type']
-      const name = cucumberMatch[2] ?? `arg${index}`
-      args.push({ name, type, required: true })
-      index++
-    }
-
-    return args
   }
 
   private parseDecorator(pattern: string): string | undefined {
@@ -301,7 +247,7 @@ export class StepService {
         keyword: step.keyword,
         pattern: step.pattern,
         location: step.location,
-        args: this.parseArgs(step.pattern),
+        args: parseArgs(step.pattern),
         decorator: this.parseDecorator(step.pattern),
         isGeneric: false,
       }))

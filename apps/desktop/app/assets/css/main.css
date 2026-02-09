@@ -36,21 +36,31 @@ body,
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
   background: var(--surface-ground);
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--surface-border);
-  border-radius: 4px;
+  background: #94a3b8;
+  border-radius: 5px;
+  border: 2px solid var(--surface-ground);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-color-secondary);
+  background: #64748b;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #475569;
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--surface-ground);
 }
 
 /* Improve text button visibility */
@@ -84,4 +94,93 @@ body,
 
 .p-button.p-button-icon-only.p-button-text:hover {
   color: var(--primary-color);
+}
+
+/* Gherkin Help Tooltip */
+.gherkin-tooltip.p-tooltip {
+  max-width: 320px;
+}
+
+.gherkin-tooltip .p-tooltip-text {
+  padding: 0;
+  background: var(--surface-card);
+  border: 1px solid var(--surface-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.gherkin-help {
+  padding: 1rem;
+}
+
+.gherkin-help h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.gherkin-help .help-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-bottom: 0.625rem;
+}
+
+.gherkin-help .help-item span:last-child {
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+  line-height: 1.4;
+}
+
+.gherkin-help .help-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  width: fit-content;
+}
+
+.gherkin-help .help-label.preconditions {
+  background: rgba(251, 191, 36, 0.15);
+  color: #b45309;
+}
+
+.gherkin-help .help-label.given {
+  background: rgba(5, 150, 105, 0.1);
+  color: #059669;
+}
+
+.gherkin-help .help-label.when {
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+}
+
+.gherkin-help .help-label.then {
+  background: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
+}
+
+.gherkin-help .help-label.examples {
+  background: rgba(139, 92, 246, 0.1);
+  color: #6d28d9;
+}
+
+.gherkin-help .help-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--surface-border);
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+  line-height: 1.4;
+}
+
+.gherkin-help .help-tip i {
+  color: #f59e0b;
+  font-size: 0.875rem;
+  flex-shrink: 0;
 }

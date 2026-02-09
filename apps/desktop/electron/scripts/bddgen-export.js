@@ -17,6 +17,35 @@ if (!configPath) {
   process.exit(1);
 }
 
+/**
+ * Extract the pattern string from a step definition's pattern property.
+ * Handles: string patterns, RegExp objects, wrapper objects with .source/.regexp,
+ * and fallback to String() with regex literal slash stripping.
+ */
+function extractPattern(pattern) {
+  if (typeof pattern === 'string') {
+    return pattern;
+  }
+  if (pattern instanceof RegExp) {
+    return pattern.source;
+  }
+  if (pattern && typeof pattern === 'object') {
+    if (typeof pattern.source === 'string') {
+      return pattern.source;
+    }
+    if (pattern.regexp instanceof RegExp) {
+      return pattern.regexp.source;
+    }
+  }
+  // Fallback: stringify and strip regex literal slashes /pattern/flags
+  const str = String(pattern);
+  const regexLiteralMatch = str.match(/^\/(.+)\/[gimsuy]*$/);
+  if (regexLiteralMatch) {
+    return regexLiteralMatch[1];
+  }
+  return str;
+}
+
 async function main() {
   try {
     // Resolve playwright-bdd path from node_modules
@@ -53,7 +82,7 @@ async function main() {
 
       stepDefinitions.forEach((step) => {
         const keyword = step.keyword === 'Unknown' ? 'When' : step.keyword;
-        const pattern = typeof step.pattern === 'string' ? step.pattern : step.pattern.source;
+        const pattern = extractPattern(step.pattern);
         allSteps.add(`* ${keyword} ${pattern}`);
       });
     }
