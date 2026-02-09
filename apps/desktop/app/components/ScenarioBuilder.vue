@@ -160,24 +160,34 @@ const variations = computed(() => {
 // Format step text with argument values inline (for read mode)
 function formatStepText(step: ScenarioStep): string {
   let text = step.pattern
-
-  // Replace Cucumber expression placeholders
-  for (const arg of step.args) {
-    const placeholder = new RegExp(`\\{${arg.type}(:[^}]+)?\\}`)
-    const value = arg.value || `<${arg.name}>`
-    const formatted = arg.type === 'string' && arg.value ? `"${arg.value}"` : value
-    text = text.replace(placeholder, `<strong>${formatted}</strong>`)
-  }
-
-  // Replace regex enum patterns with the selected value
   let argIndex = 0
+
+  // Replace Cucumber expression placeholders {type} or {type:name}
+  text = text.replace(/\{([a-zA-Z]+)(:[^}]+)?\}/g, () => {
+    const arg = step.args[argIndex++]
+    if (arg) {
+      const value = arg.value || `<${arg.name}>`
+      const formatted = arg.type === 'string' && arg.value ? `"${arg.value}"` : value
+      return `<strong class="arg-value">${formatted}</strong>`
+    }
+    return '<strong class="arg-value">...</strong>'
+  })
+
+  // Replace regex enum patterns (value1|value2|...) with the selected value
   text = text.replace(/\(([^)]+\|[^)]+)\)/g, () => {
     const arg = step.args[argIndex++]
     if (arg) {
       const value = arg.value || `<${arg.name}>`
-      return `<strong>${value}</strong>`
+      return `<strong class="arg-value arg-enum">${value}</strong>`
     }
-    return '<strong>...</strong>'
+    return '<strong class="arg-value">...</strong>'
+  })
+
+  // Replace Scenario Outline placeholders <variable> with distinct styling
+  text = text.replace(/<([a-zA-Z_]\w*)>/g, (match, varName) => {
+    const arg = step.args.find(a => a.name === varName)
+    const value = arg?.value || varName
+    return `<strong class="arg-placeholder">&lt;${value}&gt;</strong>`
   })
 
   // Clean regex anchors
@@ -224,6 +234,10 @@ watch(
   () => throttledValidate(),
   { deep: true }
 )
+
+function updateBackgroundArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table', enumValues?: string[]) {
+  scenarioStore.updateBackgroundStepArg(stepId, argName, value, argType, enumValues)
+}
 
 function removeBackgroundStep(stepId: string) {
   scenarioStore.removeBackgroundStep(stepId)
@@ -604,8 +618,62 @@ function selectScenario(index: number) {
                   v-if="isBackgroundEditMode"
                   class="pi pi-bars drag-handle"
                 />
-                <!-- eslint-disable-next-line vue/no-v-html -- formatStepText returns safe formatted HTML from step data -->
-                <span v-html="formatStepText(step)" />
+                
+                <!-- Read mode: formatted text -->
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <span
+                  v-if="!isBackgroundEditMode"
+                  v-html="formatStepText(step)"
+                />
+                
+                <!-- Edit mode: inline editable inputs -->
+                <span
+                  v-else
+                  class="step-text step-text-editable"
+                >
+                  <template
+                    v-for="(segment, segIdx) in parseStepPattern(step)"
+                    :key="segIdx"
+                  >
+                    <span
+                      v-if="segment.type === 'text'"
+                      class="step-text-segment"
+                    >{{ cleanRegexText(segment.value) }}</span>
+
+                    <!-- Enum Select inline -->
+                    <Select
+                      v-else-if="segment.arg && segment.arg.type === 'enum' && segment.arg.enumValues"
+                      :model-value="segment.arg.value"
+                      :options="segment.arg.enumValues"
+                      :placeholder="segment.arg.name"
+                      class="inline-arg-select"
+                      data-testid="inline-arg-select-background"
+                      @click.stop
+                      @update:model-value="updateBackgroundArg(step.id, segment.arg!.name, $event, 'enum', segment.arg!.enumValues)"
+                    />
+
+                    <!-- Standard Input inline (string, int, float, any, etc.) -->
+                    <InputText
+                      v-else-if="segment.arg && segment.arg.type !== 'table'"
+                      :model-value="segment.arg.value"
+                      :placeholder="segment.arg.name"
+                      class="inline-arg-input"
+                      data-testid="inline-arg-input-background"
+                      @click.stop
+                      @update:model-value="updateBackgroundArg(step.id, segment.arg!.name, $event as string, segment.arg!.type as any, segment.arg!.enumValues)"
+                    />
+
+                    <!-- Table placeholder (shows below) -->
+                    <span
+                      v-else-if="segment.arg && segment.arg.type === 'table'"
+                      class="inline-arg-table-badge"
+                    >
+                      <i class="pi pi-table" />
+                      {{ segment.arg.name }}
+                    </span>
+                  </template>
+                </span>
+
                 <Button
                   v-if="isBackgroundEditMode"
                   icon="pi pi-times"
@@ -750,7 +818,7 @@ function selectScenario(index: number) {
                       />
 
                       <!-- Read mode: show formatted step text -->
-                      <!-- eslint-disable-next-line vue/no-v-html -- formatStepText returns safe formatted HTML from step data -->
+                      <!-- eslint-disable-next-line vue/no-v-html -->
                       <span
                         v-if="props.viewMode !== 'edit'"
                         class="step-text"
@@ -1042,7 +1110,7 @@ function selectScenario(index: number) {
               <span class="step-count">{{ scenarioStore.scenario.steps.length }} steps</span>
             </div>
             <ol class="steps-list">
-              <!-- eslint-disable-next-line vue/no-v-html -- formatStepText returns safe formatted HTML from step data -->
+              <!-- eslint-disable-next-line vue/no-v-html -->
               <li
                 v-for="step in scenarioStore.scenario.steps"
                 :key="step.id"
@@ -1683,6 +1751,25 @@ function selectScenario(index: number) {
 .step-text :deep(strong) {
   color: var(--primary-color);
   font-weight: 600;
+}
+
+/* Argument values in view mode - default (Cucumber expressions) */
+.step-text :deep(strong.arg-value) {
+  color: var(--primary-color); /* Blue for {string}, {int}, etc. */
+  font-weight: 600;
+}
+
+/* Enum values in view mode - purple/violet */
+.step-text :deep(strong.arg-enum) {
+  color: rgb(139, 92, 246); /* Purple/violet for (enum|values) */
+  font-weight: 600;
+}
+
+/* Scenario Outline placeholders in view mode - teal/cyan */
+.step-text :deep(strong.arg-placeholder) {
+  color: rgb(20, 184, 166); /* Teal for <placeholder> */
+  font-weight: 600;
+  font-style: normal;
 }
 
 .step-text-editable {

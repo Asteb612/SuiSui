@@ -37,9 +37,23 @@
       "Bash(pnpm vitest run:*)",
       "Bash(npx bddgen:*)",
       "Bash(pnpm --filter @suisui/desktop electron:build:*)",
-      "Bash(ELECTRON_RUN_AS_NODE=1 /home/grosso_a/Workspace/SuiSui/apps/desktop/release/linux-unpacked/suisui:*)",
       "Bash(cross-env NUXT_TYPECHECK=false nuxt build:*)",
-      "Bash(pnpm exec cross-env:*)"
+      "Bash(pnpm exec cross-env:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(timeout 15 pnpm dev:*)",
+      "Bash(tsc:*)",
+      "Bash(pnpm --filter @suisui/desktop exec vue-tsc:*)",
+      "Bash(pnpm --filter @suisui/desktop build:*)",
+      "Bash(pnpm --filter @suisui/desktop test -- --run)",
+      "Bash(pnpm --filter @suisui/desktop test:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm --filter @suisui/shared test:*)",
+      "Bash(pnpm --filter @suisui/shared typecheck:*)",
+      "Bash(node -e:*)",
+      "Bash(npx electron:*)",
+      "Bash(ELECTRON_RUN_AS_NODE=1 npx electron:*)",
+      "Bash(node:*)"
     ]
   }
 }

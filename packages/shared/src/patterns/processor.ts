@@ -276,7 +276,8 @@ export function parseSegments(
   // Combined regex to match:
   // 1. Cucumber expressions: {string}, {int}, {float}, {any}, {type:name}
   // 2. Regex enum patterns: (value1|value2|value3) - must have at least one |
-  const combinedRegex = /\{([a-zA-Z]+)(:[^}]+)?\}|\(([^)]+\|[^)]+)\)/g
+  // 3. Scenario Outline placeholders: <variable>
+  const combinedRegex = /\{([a-zA-Z]+)(:[^}]+)?\}|\(([^)]+\|[^)]+)\)|<([a-zA-Z_]\w*)>/g
   let lastIndex = 0
   let match
 
@@ -313,7 +314,25 @@ export function parseSegments(
         name: existingArg?.name || `arg${argIndex}`,
         type: 'enum',
         value: existingArg?.value ?? '',
-        enumValues: existingArg?.enumValues || patternEnumValues,
+        // Use existing enumValues only if it has items, otherwise extract from pattern
+        enumValues: (existingArg?.enumValues && existingArg.enumValues.length > 0) 
+          ? existingArg.enumValues 
+          : patternEnumValues,
+      }
+      segments.push({
+        type: 'arg',
+        value: match[0],
+        arg: mergedArg,
+      })
+    } else if (match[4]) {
+      // Scenario Outline placeholder: <variable>
+      const placeholderName = match[4]
+      const mergedArg: PatternSegment['arg'] = {
+        name: existingArg?.name || placeholderName,
+        type: existingArg?.type || 'string',
+        value: existingArg?.value ?? '',
+        enumValues: existingArg?.enumValues,
+        tableColumns: existingArg?.tableColumns,
       }
       segments.push({
         type: 'arg',

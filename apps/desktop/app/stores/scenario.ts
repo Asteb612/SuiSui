@@ -318,12 +318,24 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
-    updateBackgroundStepArg(stepId: string, argName: string, value: string) {
+    updateBackgroundStepArg(stepId: string, argName: string, value: string, argType?: StepArg['type'], enumValues?: string[]) {
       const step = this.background.find((s) => s.id === stepId)
       if (step) {
         const arg = step.args.find((a) => a.name === argName)
         if (arg) {
           arg.value = value
+          this.isDirty = true
+        } else {
+          // Arg doesn't exist yet - create it (handles regex patterns without pre-defined args)
+          const newArg: StepArg = {
+            name: argName,
+            type: argType || 'string',
+            value,
+          }
+          if (enumValues) {
+            newArg.enumValues = enumValues
+          }
+          step.args.push(newArg)
           this.isDirty = true
         }
       }
