@@ -225,6 +225,9 @@ export class FeatureService {
           const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
           
           if (entry.isDirectory()) {
+            // Hide internal directories (e.g., steps/) from the feature tree
+            if (entry.name === 'steps') continue
+
             const children = await scanDir(path.join(dir, entry.name), relativePath)
             nodes.push({
               type: 'folder',

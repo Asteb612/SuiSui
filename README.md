@@ -6,7 +6,7 @@ A desktop application for building BDD (Behavior-Driven Development) tests using
 
 - **Visual Scenario Builder** - Create Given/When/Then steps with an intuitive drag-and-drop interface
 - **Automatic Step Discovery** - Imports step definitions from your playwright-bdd project
-- **Smart Step Matching** - Recognizes Cucumber expressions (`{string}`, `{int}`, `{float}`) and regex patterns
+- **Smart Step Matching** - Recognizes Cucumber expressions (`{string}`, `{int}`, `{float}`, `{word}`), enum alternations, optional text, alternatives, and anonymous `{}` parameters
 - **Background & Examples Support** - Full support for Gherkin Background sections and Scenario Outline examples
 - **Real-time Validation** - Validates scenarios against available step definitions before execution
 - **Integrated Test Runner** - Run tests headless or with Playwright UI directly from the app
@@ -75,6 +75,7 @@ pnpm --filter @suisui/desktop dev
 | `pnpm dev`        | Start development mode with hot reload |
 | `pnpm build`      | Build for production                   |
 | `pnpm test`       | Run unit tests                         |
+| `pnpm test:e2e`   | Run E2E tests (requires build first)   |
 | `pnpm test:watch` | Run tests in watch mode                |
 | `pnpm typecheck`  | Full TypeScript type checking          |
 | `pnpm lint:fix`   | Fix linting issues                     |
@@ -98,7 +99,8 @@ pnpm --filter @suisui/desktop dist
 | Frontend          | Nuxt 4 (Vue 3)      |
 | UI Components     | PrimeVue 4          |
 | State Management  | Pinia               |
-| Testing           | Vitest + Playwright |
+| Unit Testing      | Vitest              |
+| E2E Testing       | Playwright Electron |
 | Runtime           | Embedded Node.js 22 |
 
 ## Project Structure
@@ -154,6 +156,23 @@ SuiSui includes built-in generic steps that work out of the box:
 - `the element {string} should be visible` - Assert element visibility
 
 These steps can be customized by editing `features/steps/generic.steps.ts` in your workspace.
+
+## Step Pattern Support
+
+SuiSui's pattern processor handles various step definition syntaxes:
+
+| Syntax           | Example                    | Description                             |
+| ---------------- | -------------------------- | --------------------------------------- |
+| `{string}`       | `I click on {string}`      | Quoted string parameter                 |
+| `{int}`          | `I wait {int} seconds`     | Integer (supports negatives: `-5`)      |
+| `{float}`        | `price is {float}`         | Decimal number (supports `-3.14`, `.5`) |
+| `{word}`         | `I click {word}`           | Single word without whitespace          |
+| `{}`             | `I see {}`                 | Anonymous parameter (matches any text)  |
+| `(a\|b\|c)`      | `I login as (admin\|user)` | Enum alternation                        |
+| `(text)`         | `{int} cucumber(s)`        | Optional text                           |
+| `word1/word2`    | `belly/stomach`            | Alternative text                        |
+| `\{`, `\(`, `\/` | `I see \{braces\}`         | Escaped literal characters              |
+| `(col1, col2) :` | `users (name, email) :`    | DataTable with column headers           |
 
 ## Documentation
 

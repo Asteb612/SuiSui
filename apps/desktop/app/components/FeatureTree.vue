@@ -126,9 +126,15 @@ async function refreshTree() {
 </script>
 
 <template>
-  <div class="feature-tree-container">
+  <div
+    class="feature-tree-container"
+    data-testid="feature-tree"
+  >
     <div class="feature-tree-header">
-      <span class="feature-count">{{ workspaceStore.featureCount }} features</span>
+      <span
+        class="feature-count"
+        data-testid="feature-count"
+      >{{ workspaceStore.featureCount }} features</span>
       <div class="header-actions">
         <Button
           icon="pi pi-refresh"

@@ -39,6 +39,7 @@
     "dist": "pnpm prebuild:nodejs && pnpm build:dist && electron-builder --publish=never",
     "clean": "node scripts/cleanup.js",
     "test": "vitest run",
+    "test:e2e": "playwright test --config playwright.config.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:deps": "node scripts/test-deps.js",
@@ -55,6 +56,7 @@
   "dependencies": {
     "@primevue/themes": "^4.5.4",
     "@suisui/shared": "workspace:*",
+    "isomorphic-git": "^1.37.1",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
@@ -63,6 +65,7 @@
     "@oxc-transform/binding-linux-x64-gnu": "^0.110.0",
     "@pinia/nuxt": "^0.11.3",
     "@pinia/testing": "^0.1.3",
+    "@playwright/test": "^1.58.2",
     "@primevue/nuxt-module": "^4.2.0",
     "@testing-library/vue": "^8.0.0",
     "@types/node": "^20.11.0",

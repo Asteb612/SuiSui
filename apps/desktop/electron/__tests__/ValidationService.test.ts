@@ -146,6 +146,84 @@ describe('ValidationService', () => {
       )
     })
 
+    it('should not error on outline placeholder for int argument', async () => {
+      const scenario: Scenario = {
+        name: 'Outline Scenario',
+        steps: [
+          {
+            id: 'step-1',
+            keyword: 'Given',
+            pattern: 'I wait for {int} seconds',
+            args: [{ name: 'seconds', type: 'int', value: '<duration>' }],
+          },
+          {
+            id: 'step-2',
+            keyword: 'Then',
+            pattern: 'I should see {string}',
+            args: [{ name: 'text', type: 'string', value: '<message>' }],
+          },
+        ],
+        examples: { columns: ['duration', 'message'], rows: [{ duration: '5', message: 'Done' }] },
+      }
+
+      const result = await service.validateScenario(scenario)
+
+      const intErrors = result.issues.filter(i => i.message.includes('must be an integer'))
+      expect(intErrors).toHaveLength(0)
+    })
+
+    it('should not error on outline placeholder for float argument', async () => {
+      const scenario: Scenario = {
+        name: 'Outline Scenario',
+        steps: [
+          {
+            id: 'step-1',
+            keyword: 'Given',
+            pattern: 'the price is {float}',
+            args: [{ name: 'price', type: 'float', value: '<amount>' }],
+          },
+          {
+            id: 'step-2',
+            keyword: 'Then',
+            pattern: 'I should see {string}',
+            args: [{ name: 'text', type: 'string', value: 'done' }],
+          },
+        ],
+        examples: { columns: ['amount'], rows: [{ amount: '9.99' }] },
+      }
+
+      const result = await service.validateScenario(scenario)
+
+      const floatErrors = result.issues.filter(i => i.message.includes('must be a number'))
+      expect(floatErrors).toHaveLength(0)
+    })
+
+    it('should not error on outline placeholder as missing argument', async () => {
+      const scenario: Scenario = {
+        name: 'Outline Scenario',
+        steps: [
+          {
+            id: 'step-1',
+            keyword: 'Given',
+            pattern: 'I am logged in as {string}',
+            args: [{ name: 'role', type: 'string', value: '<role>' }],
+          },
+          {
+            id: 'step-2',
+            keyword: 'Then',
+            pattern: 'I should see {string}',
+            args: [{ name: 'text', type: 'string', value: 'Welcome' }],
+          },
+        ],
+        examples: { columns: ['role'], rows: [{ role: 'admin' }] },
+      }
+
+      const result = await service.validateScenario(scenario)
+
+      const missingErrors = result.issues.filter(i => i.message.includes('Missing required argument'))
+      expect(missingErrors).toHaveLength(0)
+    })
+
     it('should pass with valid scenario', async () => {
       const scenario: Scenario = {
         name: 'Valid Scenario',

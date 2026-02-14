@@ -9,16 +9,18 @@ The `@suisui/shared` package contains all shared types and IPC contracts between
 ```
 packages/shared/
 ├── src/
-│   ├── types/           # Type definitions (9 files)
+│   ├── types/           # Type definitions (11 files)
 │   │   ├── workspace.ts
 │   │   ├── feature.ts
 │   │   ├── step.ts
 │   │   ├── validation.ts
 │   │   ├── runner.ts
 │   │   ├── git.ts
+│   │   ├── gitWorkspace.ts  # isomorphic-git types
 │   │   ├── settings.ts
 │   │   ├── command.ts
-│   │   └── github.ts
+│   │   ├── github.ts
+│   │   └── github.ts        # GitHub auth & repo types
 │   ├── ipc/             # IPC communication contracts
 │   │   ├── channels.ts
 │   │   └── api.ts
@@ -91,7 +93,23 @@ export const IPC_CHANNELS = {
   // App
   APP_GET_VERSION: 'app:getVersion',
   APP_OPEN_EXTERNAL: 'app:openExternal',
-} as const;
+
+  // Git Workspace (isomorphic-git)
+  GIT_WS_CLONE_OR_OPEN: 'gitws:cloneOrOpen',
+  GIT_WS_PULL: 'gitws:pull',
+  GIT_WS_STATUS: 'gitws:status',
+  GIT_WS_COMMIT_PUSH: 'gitws:commitPush',
+
+  // GitHub Auth
+  GITHUB_SAVE_TOKEN: 'github:saveToken',
+  GITHUB_GET_TOKEN: 'github:getToken',
+  GITHUB_DELETE_TOKEN: 'github:deleteToken',
+  GITHUB_VALIDATE_TOKEN: 'github:validateToken',
+  GITHUB_DEVICE_FLOW_START: 'github:deviceFlowStart',
+  GITHUB_DEVICE_FLOW_POLL: 'github:deviceFlowPoll',
+  GITHUB_GET_USER: 'github:getUser',
+  GITHUB_LIST_REPOS: 'github:listRepos',
+} as const
 ```
 
 ---
@@ -106,64 +124,88 @@ Defines the complete API exposed to the renderer:
 export interface ElectronAPI {
   // Workspace
   workspace: {
-    get(): Promise<WorkspaceInfo | null>;
-    set(path: string): Promise<void>;
-    select(): Promise<WorkspaceInfo | null>;
-    validate(path: string): Promise<WorkspaceValidation>;
-  };
+    get(): Promise<WorkspaceInfo | null>
+    set(path: string): Promise<void>
+    select(): Promise<WorkspaceInfo | null>
+    validate(path: string): Promise<WorkspaceValidation>
+  }
 
   // Features
   features: {
-    list(): Promise<FeatureFile[]>;
-    read(path: string): Promise<string>;
-    write(path: string, content: string): Promise<void>;
-    delete(path: string): Promise<void>;
-  };
+    list(): Promise<FeatureFile[]>
+    read(path: string): Promise<string>
+    write(path: string, content: string): Promise<void>
+    delete(path: string): Promise<void>
+  }
 
   // Steps
   steps: {
-    export(): Promise<StepExportResult>;
-    getCached(): Promise<StepDefinition[] | null>;
-    getDecorators(): Promise<DecoratorDefinition[]>;
-  };
+    export(): Promise<StepExportResult>
+    getCached(): Promise<StepDefinition[] | null>
+    getDecorators(): Promise<DecoratorDefinition[]>
+  }
 
   // Validation
   validation: {
-    scenario(scenario: Scenario): Promise<ValidationResult>;
-  };
+    scenario(scenario: Scenario): Promise<ValidationResult>
+  }
 
   // Runner
   runner: {
-    runHeadless(options?: RunOptions): Promise<RunResult>;
-    runUI(options?: RunOptions): Promise<RunResult>;
-    stop(): Promise<void>;
-  };
+    runHeadless(options?: RunOptions): Promise<RunResult>
+    runUI(options?: RunOptions): Promise<RunResult>
+    stop(): Promise<void>
+  }
 
   // Git
   git: {
-    status(): Promise<GitStatusResult>;
-    pull(): Promise<GitOperationResult>;
-    commitPush(message: string): Promise<GitOperationResult>;
-  };
+    status(): Promise<GitStatusResult>
+    pull(): Promise<GitOperationResult>
+    commitPush(message: string): Promise<GitOperationResult>
+  }
 
   // Settings
   settings: {
-    get(): Promise<AppSettings>;
-    set(settings: Partial<AppSettings>): Promise<void>;
-    reset(): Promise<void>;
-  };
+    get(): Promise<AppSettings>
+    set(settings: Partial<AppSettings>): Promise<void>
+    reset(): Promise<void>
+  }
 
   // App
   app: {
-    getVersion(): Promise<string>;
-    openExternal(url: string): Promise<void>;
-  };
+    getVersion(): Promise<string>
+    openExternal(url: string): Promise<void>
+  }
+
+  // Git Workspace (isomorphic-git)
+  gitWorkspace: {
+    cloneOrOpen(params: GitWorkspaceParams): Promise<WorkspaceMetadata>
+    pull(localPath: string, token: string): Promise<PullResult>
+    status(localPath: string): Promise<WorkspaceStatusResult>
+    commitAndPush(
+      localPath: string,
+      token: string,
+      options: CommitPushOptions
+    ): Promise<CommitPushResult>
+  }
+
+  // GitHub Auth
+  github: {
+    saveToken(token: string): Promise<void>
+    getToken(): Promise<string | null>
+    deleteToken(): Promise<void>
+    validateToken(token: string): Promise<GithubUser>
+    deviceFlowStart(): Promise<DeviceFlowResponse>
+    deviceFlowPoll(deviceCode: string): Promise<DeviceFlowPollResult>
+    getUser(token: string): Promise<GithubUser>
+    listRepos(token: string): Promise<GithubRepo[]>
+  }
 }
 
 // Global window augmentation
 declare global {
   interface Window {
-    api: ElectronAPI;
+    api: ElectronAPI
   }
 }
 ```
@@ -178,16 +220,16 @@ declare global {
 
 ```typescript
 export interface WorkspaceInfo {
-  path: string;
-  name: string;
-  isValid: boolean;
-  hasFeaturesDir: boolean;
-  hasPackageJson: boolean;
+  path: string
+  name: string
+  isValid: boolean
+  hasFeaturesDir: boolean
+  hasPackageJson: boolean
 }
 
 export interface WorkspaceValidation {
-  isValid: boolean;
-  errors: string[];
+  isValid: boolean
+  errors: string[]
 }
 ```
 
@@ -199,37 +241,37 @@ export interface WorkspaceValidation {
 
 ```typescript
 export interface FeatureFile {
-  name: string;           // File name (e.g., "login.feature")
-  path: string;           // Relative path from features/
-  fullPath: string;       // Absolute path
-  modifiedAt: number;     // Timestamp
+  name: string // File name (e.g., "login.feature")
+  path: string // Relative path from features/
+  fullPath: string // Absolute path
+  modifiedAt: number // Timestamp
 }
 
 export interface Feature {
-  name: string;
-  description?: string;
-  scenarios: Scenario[];
+  name: string
+  description?: string
+  scenarios: Scenario[]
 }
 
 export interface Scenario {
-  name: string;
-  steps: ScenarioStep[];
+  name: string
+  steps: ScenarioStep[]
 }
 
 export interface ScenarioStep {
-  id: string;                    // Unique ID
-  keyword: StepKeyword;          // Given | When | Then | And | But
-  pattern: string;               // Step pattern with placeholders
-  args: StepArg[];               // Argument values
+  id: string // Unique ID
+  keyword: StepKeyword // Given | When | Then | And | But
+  pattern: string // Step pattern with placeholders
+  args: StepArg[] // Argument values
 }
 
 export interface StepArg {
-  name: string;
-  value: string;
-  type: 'string' | 'int' | 'float';
+  name: string
+  value: string
+  type: 'string' | 'int' | 'float'
 }
 
-export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But';
+export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
 ```
 
 ---
@@ -240,31 +282,31 @@ export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But';
 
 ```typescript
 export interface StepDefinition {
-  id: string;                      // Unique hash
-  keyword: StepKeyword;
-  pattern: string;                 // e.g., "I click on {string}"
-  description?: string;
-  file?: string;                   // Source file
-  line?: number;                   // Source line
-  args: StepArgDefinition[];
-  decorators?: string[];
+  id: string // Unique hash
+  keyword: StepKeyword
+  pattern: string // e.g., "I click on {string}"
+  description?: string
+  file?: string // Source file
+  line?: number // Source line
+  args: StepArgDefinition[]
+  decorators?: string[]
 }
 
 export interface StepArgDefinition {
-  name: string;                    // Extracted from {int:name} or generated
-  type: 'string' | 'int' | 'float';
-  optional?: boolean;
+  name: string // Extracted from {int:name} or generated
+  type: 'string' | 'int' | 'float'
+  optional?: boolean
 }
 
 export interface DecoratorDefinition {
-  name: string;
-  description?: string;
+  name: string
+  description?: string
 }
 
 export interface StepExportResult {
-  steps: StepDefinition[];
-  decorators: DecoratorDefinition[];
-  exportedAt: number;              // Timestamp
+  steps: StepDefinition[]
+  decorators: DecoratorDefinition[]
+  exportedAt: number // Timestamp
 }
 
 // Generic steps are created as real step definition files in the workspace
@@ -279,18 +321,18 @@ export interface StepExportResult {
 **Location:** `src/types/validation.ts`
 
 ```typescript
-export type ValidationSeverity = 'error' | 'warning' | 'info';
+export type ValidationSeverity = 'error' | 'warning' | 'info'
 
 export interface ValidationIssue {
-  severity: ValidationSeverity;
-  message: string;
-  stepId?: string;          // Related step ID
-  field?: string;           // Related field name
+  severity: ValidationSeverity
+  message: string
+  stepId?: string // Related step ID
+  field?: string // Related field name
 }
 
 export interface ValidationResult {
-  isValid: boolean;         // No errors (warnings allowed)
-  issues: ValidationIssue[];
+  isValid: boolean // No errors (warnings allowed)
+  issues: ValidationIssue[]
 }
 ```
 
@@ -301,23 +343,23 @@ export interface ValidationResult {
 **Location:** `src/types/runner.ts`
 
 ```typescript
-export type RunMode = 'headless' | 'ui';
+export type RunMode = 'headless' | 'ui'
 
-export type RunStatus = 'idle' | 'running' | 'passed' | 'failed' | 'error';
+export type RunStatus = 'idle' | 'running' | 'passed' | 'failed' | 'error'
 
 export interface RunOptions {
-  mode?: RunMode;
-  featurePath?: string;      // Filter by feature file
-  scenarioName?: string;     // Filter by scenario (--grep)
+  mode?: RunMode
+  featurePath?: string // Filter by feature file
+  scenarioName?: string // Filter by scenario (--grep)
 }
 
 export interface RunResult {
-  status: RunStatus;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  duration: number;          // Milliseconds
-  reportPath?: string;       // Path to HTML report
+  status: RunStatus
+  exitCode: number
+  stdout: string
+  stderr: string
+  duration: number // Milliseconds
+  reportPath?: string // Path to HTML report
 }
 ```
 
@@ -328,22 +370,125 @@ export interface RunResult {
 **Location:** `src/types/git.ts`
 
 ```typescript
-export type GitStatus = 'clean' | 'dirty' | 'untracked' | 'error';
+export type GitStatus = 'clean' | 'dirty' | 'untracked' | 'error'
 
 export interface GitStatusResult {
-  status: GitStatus;
-  branch: string;
-  ahead: number;             // Commits ahead of remote
-  behind: number;            // Commits behind remote
-  modified: string[];        // Modified file paths
-  untracked: string[];       // Untracked file paths
-  staged: string[];          // Staged file paths
+  status: GitStatus
+  branch: string
+  ahead: number // Commits ahead of remote
+  behind: number // Commits behind remote
+  modified: string[] // Modified file paths
+  untracked: string[] // Untracked file paths
+  staged: string[] // Staged file paths
+  hasRemote: boolean // Whether an origin remote is configured
 }
 
 export interface GitOperationResult {
-  success: boolean;
-  message: string;
-  error?: string;
+  success: boolean
+  message: string
+  error?: string
+}
+```
+
+---
+
+### Git Workspace Types
+
+**Location:** `src/types/gitWorkspace.ts`
+
+```typescript
+export interface GitWorkspaceParams {
+  owner: string
+  repo: string
+  repoUrl: string
+  branch: string
+  localPath: string
+  token: string
+  username?: string
+}
+
+export interface WorkspaceMetadata {
+  owner: string
+  repo: string
+  branch: string
+  remoteUrl: string
+  lastPulledOid: string
+}
+
+export interface PullResult {
+  updatedFiles: string[]
+  conflicts: string[]
+  headOid: string
+}
+
+export type FileStatusType = 'modified' | 'added' | 'deleted' | 'untracked'
+
+export interface FileStatus {
+  path: string
+  status: FileStatusType
+}
+
+export interface WorkspaceStatusResult {
+  fullStatus: FileStatus[]
+  filteredStatus: FileStatus[]
+  counts: { modified: number; added: number; deleted: number; untracked: number }
+}
+
+export interface CommitPushOptions {
+  message: string
+  authorName?: string
+  authorEmail?: string
+  paths?: string[]
+}
+
+export interface CommitPushResult {
+  commitOid: string
+  pushed: boolean
+}
+
+export interface CloneProgress {
+  phase: string
+  loaded: number
+  total: number
+}
+```
+
+**Error Classes:** `WorkspaceNotFoundError`, `GitAuthError`, `MergeConflictError`, `RemoteDivergedError`
+
+---
+
+### GitHub Types
+
+**Location:** `src/types/github.ts`
+
+```typescript
+export interface GithubUser {
+  login: string
+  avatarUrl: string
+  name: string | null
+}
+
+export interface GithubRepo {
+  owner: string
+  name: string
+  fullName: string
+  cloneUrl: string
+  defaultBranch: string
+  private: boolean
+}
+
+export interface DeviceFlowResponse {
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  expiresIn: number
+  interval: number
+}
+
+export interface DeviceFlowPollResult {
+  status: 'pending' | 'complete' | 'expired' | 'error'
+  token?: string
+  error?: string
 }
 ```
 
@@ -355,12 +500,12 @@ export interface GitOperationResult {
 
 ```typescript
 export interface AppSettings {
-  workspacePath: string | null;
-  recentWorkspaces: string[];
-  theme: 'light' | 'dark' | 'system';
-  editorFontSize: number;
-  autoSave: boolean;
-  showLineNumbers: boolean;
+  workspacePath: string | null
+  recentWorkspaces: string[]
+  theme: 'light' | 'dark' | 'system'
+  editorFontSize: number
+  autoSave: boolean
+  showLineNumbers: boolean
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -369,8 +514,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   editorFontSize: 14,
   autoSave: true,
-  showLineNumbers: true
-};
+  showLineNumbers: true,
+}
 ```
 
 ---
@@ -381,15 +526,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 ```typescript
 export interface CommandResult {
-  code: number;              // Exit code
-  stdout: string;
-  stderr: string;
+  code: number // Exit code
+  stdout: string
+  stderr: string
 }
 
 export interface CommandOptions {
-  cwd?: string;              // Working directory
-  env?: Record<string, string>;
-  timeout?: number;          // Milliseconds (default 60000)
+  cwd?: string // Working directory
+  env?: Record<string, string>
+  timeout?: number // Milliseconds (default 60000)
 }
 ```
 

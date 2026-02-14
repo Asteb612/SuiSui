@@ -7,7 +7,7 @@ export interface ArgDescription {
   /** Argument name (arg0, arg1, etc. for enums or the named/type name for expressions) */
   name: string
   /** Type of argument */
-  type: 'enum' | 'string' | 'int' | 'float' | 'any' | 'table'
+  type: 'enum' | 'string' | 'int' | 'float' | 'word' | 'any' | 'table'
   /** Possible values for enums */
   enumValues?: string[]
   /** Column names for tables */

@@ -14,7 +14,7 @@ function escapeHtml(str: string): string {
 export const cucumberHandler: PatternType = {
   name: 'cucumber',
   priority: 30,
-  regex: /\{(string|int|float|any)(?::(\w+))?\}/g,
+  regex: /\{(string|int|float|word|any)(?::(\w+))?\}/g,
   specificity: 40, // base; int/float get higher specificity in findBestMatch
 
   toRegex(match: RegExpExecArray): string {
@@ -23,9 +23,11 @@ export const cucumberHandler: PatternType = {
       case 'string':
         return '("[^"]*"|\'[^\']*\'|\\S+)'
       case 'int':
-        return '(\\d+)'
+        return '(-?\\d+)'
       case 'float':
-        return '([\\d.]+)'
+        return '(-?\\d*\\.?\\d+)'
+      case 'word':
+        return '([^\\s]+)'
       case 'any':
         return '(\\S+)'
       default:
@@ -42,7 +44,7 @@ export const cucumberHandler: PatternType = {
   },
 
   toArgDef(match: RegExpExecArray, index: number) {
-    const type = match[1] as 'string' | 'int' | 'float' | 'any'
+    const type = match[1] as 'string' | 'int' | 'float' | 'word' | 'any'
     const name = match[2] ?? `arg${index}`
     return {
       name,
@@ -60,7 +62,7 @@ export const cucumberHandler: PatternType = {
       plain: `{${name}}`,
       desc: {
         name,
-        type: type as 'string' | 'int' | 'float' | 'any',
+        type: type as 'string' | 'int' | 'float' | 'word' | 'any',
       },
     }
   },

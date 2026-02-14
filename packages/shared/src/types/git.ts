@@ -8,6 +8,7 @@ export interface GitStatusResult {
   modified: string[]
   untracked: string[]
   staged: string[]
+  hasRemote: boolean
 }
 
 export interface GitOperationResult {

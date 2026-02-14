@@ -84,7 +84,11 @@ function showMenu(event: MouseEvent) {
 </script>
 
 <template>
-  <div class="tree-node-item">
+  <div
+    class="tree-node-item"
+    :data-testid="node.type === 'folder' ? 'tree-node-folder' : 'tree-node-file'"
+    :data-path="node.relativePath"
+  >
     <div
       class="node-content"
       :class="{ selected }"

@@ -25,6 +25,7 @@ apps/desktop/app/
 │   ├── FeatureList.vue          # Simple feature list
 │   ├── FeatureTree.vue          # Tree-based feature browser
 │   ├── GitPanel.vue             # Git operations panel
+│   ├── GithubConnect.vue        # GitHub auth & clone dialog
 │   ├── NewScenarioDialog.vue    # Create scenario dialog
 │   ├── ScenarioBuilder.vue      # Main scenario editor
 │   ├── StepAddDialog.vue        # Add step dialog
@@ -41,7 +42,9 @@ apps/desktop/app/
 │   ├── steps.ts
 │   ├── scenario.ts
 │   ├── runner.ts
-│   └── git.ts
+│   ├── git.ts
+│   ├── github.ts            # GitHub auth state
+│   └── gitWorkspace.ts      # Git workspace operations
 ├── composables/             # Vue composables
 │   ├── useApi.ts            # Electron API access
 │   ├── useDragDrop.ts       # Drag and drop logic
@@ -60,7 +63,15 @@ apps/desktop/app/
 
 ## Application Layout
 
-The main page (`pages/index.vue`) uses a three-column layout:
+The main page (`pages/index.vue`) uses a three-column layout when a workspace is loaded. When no workspace is selected, a welcome screen is shown with three options:
+
+1. **Create New Workspace** — Initialize a new bddgen project with git
+2. **Open Existing Workspace** — Select an existing directory
+3. **Clone from GitHub** — Authenticate with GitHub and clone a repository
+
+The header "Change Workspace" button opens a dropdown menu with "Open Local Workspace" and "Clone from GitHub" options.
+
+**Three-column layout:**
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -187,21 +198,56 @@ The main page (`pages/index.vue`) uses a three-column layout:
 
 ### GitPanel.vue
 
-**Purpose:** Git operations interface.
+**Purpose:** Git operations interface. Adapts UI based on whether a remote is configured.
 
 **Features:**
 
 - Current branch display
 - Modified/untracked file counts
 - Status indicators (color-coded)
-- Pull button
-- Commit message input
-- Commit & Push button
+- Pull button (only shown when remote exists)
+- Commit message input dialog
+- Commit button (local-only) or Commit & Push button (with remote)
 - Loading states for operations
+- Connected GitHub user display (avatar, login, disconnect button)
 
 **Store Dependencies:**
 
 - `useGitStore` - git status and operations
+- `useGithubStore` - GitHub connection state
+
+---
+
+### GithubConnect.vue
+
+**Purpose:** Multi-step dialog for GitHub authentication and repository cloning.
+
+**Steps:**
+
+1. **Auth** — Two tabs:
+   - **Personal Access Token** — Input field + validate button
+   - **Device Flow** — Shows device code + verification URL for browser auth
+2. **Select Repo** — Searchable list of user's GitHub repositories
+3. **Clone** — Directory picker, branch input, progress bar
+
+**Features:**
+
+- All elements have `data-testid` attributes for E2E testing
+- Clone progress display
+- Error handling at each step
+- Accessible from welcome screen and "Change Workspace" menu
+
+**Store Dependencies:**
+
+- `useGithubStore` - GitHub auth and repo listing
+- `useGitWorkspaceStore` - clone operations
+- `useWorkspaceStore` - directory selection
+
+**Events:**
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `cloned` | `string` (path) | Emitted after successful clone |
+| `update:visible` | `boolean` | Dialog visibility |
 
 ---
 
@@ -406,6 +452,8 @@ The main page (`pages/index.vue`) uses a three-column layout:
 |--------|-------------|
 | `loadWorkspace()` | Fetch current workspace from IPC |
 | `selectWorkspace()` | Open dialog, validate, persist |
+| `selectDirectory()` | Open directory dialog, return path only |
+| `setWorkspacePath(path)` | Set workspace by path, load features |
 | `loadFeatures()` | Fetch feature list from workspace |
 | `selectFeature(feature)` | Set selected feature |
 | `clearWorkspace()` | Reset all state |
@@ -596,6 +644,68 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 |--------|------|-------------|
 | `hasChanges` | boolean | Dirty or untracked files |
 | `branchName` | string | Current branch name |
+
+---
+
+### useGithubStore
+
+**Location:** `stores/github.ts`
+
+**State:**
+
+```typescript
+{
+  user: GithubUser | null
+  isConnected: boolean
+  isLoading: boolean
+  error: string | null
+  repos: GithubRepo[]
+  token: string | null  // In-memory only (not persisted in store)
+}
+```
+
+**Actions:**
+| Action | Description |
+|--------|-------------|
+| `connect(token)` | Validate PAT, save token, fetch user info |
+| `connectViaDeviceFlow()` | Start device flow OAuth, return codes |
+| `pollDeviceFlow(deviceCode)` | Poll for device flow completion |
+| `disconnect()` | Delete token, clear state |
+| `loadRepos()` | Fetch user's GitHub repositories |
+| `restoreSession()` | Restore saved token on app startup |
+
+**Getters:**
+| Getter | Type | Description |
+|--------|------|-------------|
+| `isConnected` | boolean | Whether GitHub is authenticated |
+
+---
+
+### useGitWorkspaceStore
+
+**Location:** `stores/gitWorkspace.ts`
+
+**State:**
+
+```typescript
+{
+  metadata: WorkspaceMetadata | null
+  isCloning: boolean
+  isPulling: boolean
+  isCommitting: boolean
+  status: WorkspaceStatusResult | null
+  error: string | null
+}
+```
+
+**Actions:**
+| Action | Description |
+|--------|-------------|
+| `cloneOrOpen(params)` | Clone or open a GitHub repository |
+| `pull()` | Pull latest changes from remote |
+| `refreshStatus()` | Get workspace file status |
+| `commitAndPush(options)` | Stage, commit, and push changes |
+| `clear()` | Reset all state |
 
 ---
 

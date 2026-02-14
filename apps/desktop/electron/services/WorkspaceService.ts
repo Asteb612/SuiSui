@@ -1,5 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
+import git from 'isomorphic-git'
 import type { WorkspaceInfo, WorkspaceValidation } from '@suisui/shared'
 import { getSettingsService } from './SettingsService'
 import { getDependencyService } from './DependencyService'
@@ -419,6 +421,59 @@ export class WorkspaceService {
     this.currentWorkspace = null
   }
 
+  private async ensureGitRepo(workspacePath: string): Promise<void> {
+    try {
+      const gitDir = path.join(workspacePath, '.git')
+      try {
+        await fs.access(gitDir)
+        logger.debug('Git repo already exists', { workspacePath })
+        return
+      } catch {
+        // No .git directory — initialize
+      }
+
+      logger.info('Initializing git repository', { workspacePath })
+      await git.init({ fs: fsSync, dir: workspacePath, defaultBranch: 'main' })
+
+      // Create .gitignore
+      const gitignorePath = path.join(workspacePath, '.gitignore')
+      try {
+        await fs.access(gitignorePath)
+        logger.debug('.gitignore already exists', { gitignorePath })
+      } catch {
+        const gitignoreContent = [
+          'node_modules/',
+          'dist/',
+          'build/',
+          '.features-gen/',
+          'test-results/',
+          'playwright-report/',
+          'blob-report/',
+          '.app/',
+          '',
+        ].join('\n')
+        await fs.writeFile(gitignorePath, gitignoreContent, 'utf-8')
+        logger.info('.gitignore created', { gitignorePath })
+      }
+
+      // Create initial commit with all files
+      await git.add({ fs: fsSync, dir: workspacePath, filepath: '.' })
+      await git.commit({
+        fs: fsSync,
+        dir: workspacePath,
+        message: 'Initial commit (created by SuiSui)',
+        author: { name: 'SuiSui', email: 'suisui@local' },
+      })
+
+      logger.info('Git repository initialized with initial commit', { workspacePath })
+    } catch (error) {
+      // Git init is best-effort — don't fail workspace init if it fails
+      logger.warn('Failed to initialize git repository', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   async init(workspacePath: string): Promise<WorkspaceInfo> {
     logger.info('Initializing workspace', { workspacePath })
     
@@ -457,6 +512,7 @@ export class WorkspaceService {
     await this.ensurePlaywrightConfig(workspacePath)
     await this.ensureCucumberJson(workspacePath)
     await this.ensureDefaultSteps(workspacePath)
+    await this.ensureGitRepo(workspacePath)
 
     // Now set the workspace
     await this.set(workspacePath)

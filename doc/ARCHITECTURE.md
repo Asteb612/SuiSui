@@ -8,16 +8,16 @@
 
 ## Technology Stack
 
-| Layer | Technology | Version |
-|-------|------------|---------|
-| Desktop Framework | Electron | 33.4.11 |
-| Frontend Framework | Nuxt 4 (Vue 3) | 3.15.0 |
-| State Management | Pinia | Latest |
-| UI Components | PrimeVue | 4.2.0 |
-| Unit Testing | Vitest | 2.0.0 |
-| E2E Testing | Playwright | 1.58.0 |
-| Package Manager | pnpm | 9.0.0+ |
-| Node.js | Node.js | 20.0.0+ |
+| Layer              | Technology     | Version |
+| ------------------ | -------------- | ------- |
+| Desktop Framework  | Electron       | 33.4.11 |
+| Frontend Framework | Nuxt 4 (Vue 3) | 3.15.0  |
+| State Management   | Pinia          | Latest  |
+| UI Components      | PrimeVue       | 4.2.0   |
+| Unit Testing       | Vitest         | 2.0.0   |
+| E2E Testing        | Playwright     | 1.58.0  |
+| Package Manager    | pnpm           | 9.0.0+  |
+| Node.js            | Node.js        | 20.0.0+ |
 
 ## Monorepo Structure
 
@@ -70,6 +70,55 @@ SuiSui follows a **layered architecture** with clear separation between the Elec
                               │ File System / CLI Commands │
                               │ (bddgen, playwright, git)  │
                               └────────────────────────────┘
+
+## Git & GitHub Integration
+
+SuiSui provides two layers of git integration:
+
+### Local Git (Default)
+When a new workspace is initialized, a git repository is automatically created with:
+- `git init` via `isomorphic-git` (pure JS, no system git required)
+- A `.gitignore` file (excludes `node_modules/`, `dist/`, `.features-gen/`, `test-results/`, `.app/`, etc.)
+- An initial commit
+
+This allows users to commit changes locally from day one, even without a remote.
+
+### GitHub Integration
+Users can optionally connect to GitHub for remote operations:
+
+1. **Authentication** — Two methods:
+   - **Personal Access Token (PAT)** — User provides a token, validated against GitHub API
+   - **Device Flow OAuth** — User authorizes via browser using a device code
+2. **Clone from GitHub** — Select a repository from the user's GitHub account and clone it locally
+3. **Push/Pull** — Sync changes with the remote repository
+
+**Token Storage:** GitHub tokens are encrypted using Electron's `safeStorage` API and stored in `userData/github-token.enc`.
+
+```
+
+┌──────────────────────────────────────────────────────┐
+│ GitHub Integration │
+│ │
+│ ┌─────────────┐ ┌──────────────────┐ │
+│ │ GithubAuth │ │ GitWorkspace │ │
+│ │ Service │ │ Service │ │
+│ │ │ │ (isomorphic-git) │ │
+│ │ - saveToken │ │ - cloneOrOpen │ │
+│ │ - validate │ │ - pull │ │
+│ │ - deviceFlow│ │ - getStatus │ │
+│ │ - listRepos │ │ - commitAndPush │ │
+│ └─────────────┘ └──────────────────┘ │
+│ │ │ │
+│ ▼ ▼ │
+│ ┌─────────────┐ ┌──────────────────┐ │
+│ │ safeStorage │ │ WorkspaceMeta │ │
+│ │ (encrypted) │ │ (.app/workspace │ │
+│ └─────────────┘ │ .json + lock) │ │
+│ └──────────────────┘ │
+└──────────────────────────────────────────────────────┘
+
+```
+
 ```
 
 ## Data Flow
@@ -87,6 +136,7 @@ SuiSui follows a **layered architecture** with clear separation between the Elec
 ## Process Isolation
 
 ### Main Process (`electron/`)
+
 - Node.js environment with full system access
 - Runs business logic services
 - Executes CLI commands (bddgen, playwright, git)
@@ -94,6 +144,7 @@ SuiSui follows a **layered architecture** with clear separation between the Elec
 - Handles IPC requests from renderer
 
 ### Renderer Process (`app/`)
+
 - Chromium-based browser environment
 - No direct Node.js access (security)
 - Communicates via IPC only
@@ -101,6 +152,7 @@ SuiSui follows a **layered architecture** with clear separation between the Elec
 - Renders Vue 3 components
 
 ### Preload Script (`electron/preload.ts`)
+
 - Bridge between main and renderer
 - Uses `contextBridge` for secure API exposure
 - Defines `window.api` interface
@@ -108,77 +160,85 @@ SuiSui follows a **layered architecture** with clear separation between the Elec
 
 ## Security Model
 
-| Feature | Status | Description |
-|---------|--------|-------------|
-| Context Isolation | ✅ Enabled | Renderer cannot access Node.js |
-| Node Integration | ❌ Disabled | No direct Node.js in renderer |
-| Preload Script | ✅ Required | Single entry point for API |
-| Path Validation | ✅ Implemented | Prevents directory traversal |
-| IPC Typing | ✅ Enforced | Type-safe communication |
+| Feature           | Status         | Description                    |
+| ----------------- | -------------- | ------------------------------ |
+| Context Isolation | ✅ Enabled     | Renderer cannot access Node.js |
+| Node Integration  | ❌ Disabled    | No direct Node.js in renderer  |
+| Preload Script    | ✅ Required    | Single entry point for API     |
+| Path Validation   | ✅ Implemented | Prevents directory traversal   |
+| IPC Typing        | ✅ Enforced    | Type-safe communication        |
 
 ## Key Design Patterns
 
 ### 1. Service Singleton Pattern
+
 Each service uses a factory function for lazy initialization:
+
 ```typescript
-let instance: WorkspaceService | null = null;
+let instance: WorkspaceService | null = null
 
 export function getWorkspaceService(): WorkspaceService {
   if (!instance) {
-    instance = new WorkspaceService();
+    instance = new WorkspaceService()
   }
-  return instance;
+  return instance
 }
 ```
 
 ### 2. Dependency Injection for Testing
+
 Services accept optional dependencies for testability:
+
 ```typescript
 class StepService {
   constructor(private commandRunner?: ICommandRunner) {
-    this.commandRunner = commandRunner ?? getCommandRunner();
+    this.commandRunner = commandRunner ?? getCommandRunner()
   }
 }
 ```
 
 ### 3. Command Abstraction
+
 Real and fake implementations for CLI command execution:
+
 ```typescript
 interface ICommandRunner {
-  run(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>;
+  run(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>
 }
 ```
 
 ### 4. Typed IPC Communication
+
 All channels and payloads are strongly typed:
+
 ```typescript
 // Shared package defines contracts
 export const IPC_CHANNELS = {
   WORKSPACE_GET: 'workspace:get',
   // ...
-} as const;
+} as const
 ```
 
 ## Module Boundaries
 
-| Module | Responsibility | Dependencies |
-|--------|---------------|--------------|
-| `@suisui/shared` | Types, interfaces, constants | None |
-| `electron/services` | Business logic | `@suisui/shared`, Node.js APIs |
-| `electron/ipc` | Request handling | Services, `@suisui/shared` |
-| `app/stores` | UI state management | `@suisui/shared`, API composable |
-| `app/components` | UI rendering | Stores, PrimeVue |
+| Module              | Responsibility               | Dependencies                     |
+| ------------------- | ---------------------------- | -------------------------------- |
+| `@suisui/shared`    | Types, interfaces, constants | None                             |
+| `electron/services` | Business logic               | `@suisui/shared`, Node.js APIs   |
+| `electron/ipc`      | Request handling             | Services, `@suisui/shared`       |
+| `app/stores`        | UI state management          | `@suisui/shared`, API composable |
+| `app/components`    | UI rendering                 | Stores, PrimeVue                 |
 
 ## File Naming Conventions
 
-| Type | Pattern | Example |
-|------|---------|---------|
-| Vue Component | PascalCase.vue | `ScenarioBuilder.vue` |
-| Pinia Store | camelCase.ts | `useWorkspaceStore.ts` |
-| Service | PascalCase.ts | `WorkspaceService.ts` |
-| Types | camelCase.ts | `workspace.ts` |
-| Tests | *.test.ts | `ValidationService.test.ts` |
-| E2E Tests | *.spec.ts | `app.spec.ts` |
+| Type          | Pattern        | Example                     |
+| ------------- | -------------- | --------------------------- |
+| Vue Component | PascalCase.vue | `ScenarioBuilder.vue`       |
+| Pinia Store   | camelCase.ts   | `useWorkspaceStore.ts`      |
+| Service       | PascalCase.ts  | `WorkspaceService.ts`       |
+| Types         | camelCase.ts   | `workspace.ts`              |
+| Tests         | \*.test.ts     | `ValidationService.test.ts` |
+| E2E Tests     | \*.spec.ts     | `app.spec.ts`               |
 
 ## Related Documentation
 

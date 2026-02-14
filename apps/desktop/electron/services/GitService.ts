@@ -22,6 +22,7 @@ export class GitService {
         modified: [],
         untracked: [],
         staged: [],
+        hasRemote: false,
       }
     }
 
@@ -54,17 +55,25 @@ export class GitService {
       }
     }
 
-    const aheadBehindResult = await this.commandRunner.exec(
-      'git',
-      ['rev-list', '--left-right', '--count', `origin/${branch}...HEAD`],
-      { cwd: workspacePath }
-    )
+    // Check ahead/behind only if remote origin exists
     let ahead = 0
     let behind = 0
-    if (aheadBehindResult.code === 0) {
-      const [b, a] = aheadBehindResult.stdout.trim().split(/\s+/)
-      behind = parseInt(b ?? '0', 10) || 0
-      ahead = parseInt(a ?? '0', 10) || 0
+    const hasOrigin = await this.commandRunner.exec(
+      'git',
+      ['remote', 'get-url', 'origin'],
+      { cwd: workspacePath }
+    )
+    if (hasOrigin.code === 0) {
+      const aheadBehindResult = await this.commandRunner.exec(
+        'git',
+        ['rev-list', '--left-right', '--count', `origin/${branch}...HEAD`],
+        { cwd: workspacePath }
+      )
+      if (aheadBehindResult.code === 0) {
+        const [b, a] = aheadBehindResult.stdout.trim().split(/\s+/)
+        behind = parseInt(b ?? '0', 10) || 0
+        ahead = parseInt(a ?? '0', 10) || 0
+      }
     }
 
     let gitStatus: GitStatus = 'clean'
@@ -81,6 +90,7 @@ export class GitService {
       behind,
       modified,
       untracked,
+      hasRemote: hasOrigin.code === 0,
       staged,
     }
   }
@@ -91,6 +101,17 @@ export class GitService {
 
     if (!workspacePath) {
       return { success: false, message: '', error: 'No workspace selected' }
+    }
+
+    // Check if remote origin exists before pulling
+    const hasOrigin = await this.commandRunner.exec(
+      'git',
+      ['remote', 'get-url', 'origin'],
+      { cwd: workspacePath }
+    )
+
+    if (hasOrigin.code !== 0) {
+      return { success: true, message: 'No remote configured — nothing to pull' }
     }
 
     const result = await this.commandRunner.exec('git', ['pull'], {
@@ -119,7 +140,8 @@ export class GitService {
       return { success: false, message: '', error: 'No workspace selected' }
     }
 
-    const addResult = await this.commandRunner.exec('git', ['add', 'features/'], {
+    // Stage all tracked changes + new files in features/ and step directories
+    const addResult = await this.commandRunner.exec('git', ['add', '-A'], {
       cwd: workspacePath,
     })
 
@@ -142,25 +164,38 @@ export class GitService {
       return {
         success: false,
         message: '',
-        error: `Commit failed: ${commitResult.stderr}`,
+        error: `Commit failed: ${commitResult.stderr || commitResult.stdout}`,
       }
     }
 
-    const pushResult = await this.commandRunner.exec('git', ['push'], {
-      cwd: workspacePath,
-    })
+    // Only push if remote origin exists
+    const hasOrigin = await this.commandRunner.exec(
+      'git',
+      ['remote', 'get-url', 'origin'],
+      { cwd: workspacePath }
+    )
 
-    if (pushResult.code !== 0) {
+    if (hasOrigin.code === 0) {
+      const pushResult = await this.commandRunner.exec('git', ['push'], {
+        cwd: workspacePath,
+      })
+
+      if (pushResult.code !== 0) {
+        return {
+          success: true,
+          message: 'Changes committed but push failed (no remote configured or push rejected)',
+        }
+      }
+
       return {
-        success: false,
-        message: 'Changes committed but push failed',
-        error: pushResult.stderr,
+        success: true,
+        message: 'Changes committed and pushed successfully',
       }
     }
 
     return {
       success: true,
-      message: 'Changes committed and pushed successfully',
+      message: 'Changes committed successfully',
     }
   }
 }

@@ -18,17 +18,33 @@ describe('GitService', () => {
   })
 
   describe('status', () => {
-    it('should return clean status', async () => {
+    it('should return clean status with remote', async () => {
       runner.setResponse('rev-parse', { code: 0, stdout: 'main\n', stderr: '' })
       runner.setResponse('status --porcelain', { code: 0, stdout: '', stderr: '' })
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('rev-list', { code: 0, stdout: '0\t0', stderr: '' })
 
       const result = await service.status()
 
       expect(result.status).toBe('clean')
       expect(result.branch).toBe('main')
+      expect(result.hasRemote).toBe(true)
       expect(result.modified).toHaveLength(0)
       expect(result.untracked).toHaveLength(0)
+    })
+
+    it('should return clean status without remote', async () => {
+      runner.setResponse('rev-parse', { code: 0, stdout: 'main\n', stderr: '' })
+      runner.setResponse('status --porcelain', { code: 0, stdout: '', stderr: '' })
+      runner.setResponse('remote get-url', { code: 2, stdout: '', stderr: 'fatal: No such remote' })
+
+      const result = await service.status()
+
+      expect(result.status).toBe('clean')
+      expect(result.branch).toBe('main')
+      expect(result.hasRemote).toBe(false)
+      expect(result.ahead).toBe(0)
+      expect(result.behind).toBe(0)
     })
 
     it('should detect modified files', async () => {
@@ -38,6 +54,7 @@ describe('GitService', () => {
         stdout: ' M modified.txt\n?? untracked.txt\nA  staged.txt\n',
         stderr: '',
       })
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('rev-list', { code: 0, stdout: '0\t0', stderr: '' })
 
       const result = await service.status()
@@ -51,6 +68,7 @@ describe('GitService', () => {
     it('should parse ahead/behind counts', async () => {
       runner.setResponse('rev-parse', { code: 0, stdout: 'feature\n', stderr: '' })
       runner.setResponse('status --porcelain', { code: 0, stdout: '', stderr: '' })
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('rev-list', { code: 0, stdout: '2\t5', stderr: '' })
 
       const result = await service.status()
@@ -62,6 +80,7 @@ describe('GitService', () => {
 
   describe('pull', () => {
     it('should return success on successful pull', async () => {
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('pull', {
         code: 0,
         stdout: 'Already up to date.',
@@ -75,6 +94,7 @@ describe('GitService', () => {
     })
 
     it('should return error on failed pull', async () => {
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('pull', {
         code: 1,
         stdout: '',
@@ -86,12 +106,22 @@ describe('GitService', () => {
       expect(result.success).toBe(false)
       expect(result.error).toContain('overwritten')
     })
+
+    it('should handle no remote gracefully', async () => {
+      runner.setResponse('remote get-url', { code: 2, stdout: '', stderr: 'fatal: No such remote' })
+
+      const result = await service.pull()
+
+      expect(result.success).toBe(true)
+      expect(result.message).toContain('No remote configured')
+    })
   })
 
   describe('commitPush', () => {
-    it('should commit and push successfully', async () => {
-      runner.setResponse('add features/', { code: 0, stdout: '', stderr: '' })
+    it('should commit and push successfully with remote', async () => {
+      runner.setResponse('add -A', { code: 0, stdout: '', stderr: '' })
       runner.setResponse('commit -m', { code: 0, stdout: 'committed', stderr: '' })
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('push', { code: 0, stdout: '', stderr: '' })
 
       const result = await service.commitPush('Test commit')
@@ -100,8 +130,19 @@ describe('GitService', () => {
       expect(result.message).toContain('committed and pushed')
     })
 
+    it('should commit without push when no remote', async () => {
+      runner.setResponse('add -A', { code: 0, stdout: '', stderr: '' })
+      runner.setResponse('commit -m', { code: 0, stdout: 'committed', stderr: '' })
+      runner.setResponse('remote get-url', { code: 2, stdout: '', stderr: 'fatal: No such remote' })
+
+      const result = await service.commitPush('Test commit')
+
+      expect(result.success).toBe(true)
+      expect(result.message).toContain('committed successfully')
+    })
+
     it('should handle nothing to commit', async () => {
-      runner.setResponse('add features/', { code: 0, stdout: '', stderr: '' })
+      runner.setResponse('add -A', { code: 0, stdout: '', stderr: '' })
       runner.setResponse('commit -m', {
         code: 1,
         stdout: 'nothing to commit, working tree clean',
@@ -114,16 +155,16 @@ describe('GitService', () => {
       expect(result.message).toBe('Nothing to commit')
     })
 
-    it('should handle push failure', async () => {
-      runner.setResponse('add features/', { code: 0, stdout: '', stderr: '' })
+    it('should handle push failure gracefully', async () => {
+      runner.setResponse('add -A', { code: 0, stdout: '', stderr: '' })
       runner.setResponse('commit -m', { code: 0, stdout: 'committed', stderr: '' })
+      runner.setResponse('remote get-url', { code: 0, stdout: 'https://github.com/user/repo.git\n', stderr: '' })
       runner.setResponse('push', { code: 1, stdout: '', stderr: 'push rejected' })
 
       const result = await service.commitPush('Test commit')
 
-      expect(result.success).toBe(false)
+      expect(result.success).toBe(true)
       expect(result.message).toContain('committed but push failed')
-      expect(result.error).toContain('push rejected')
     })
   })
 })

@@ -44,7 +44,7 @@ function createWindow() {
     mainWindow?.show()
   })
 
-  if (isDev) {
+  if (isDev && !isTestMode) {
     mainWindow.loadURL('http://localhost:3000')
     mainWindow.webContents.openDevTools()
   } else {
@@ -116,7 +116,7 @@ app.whenReady().then(() => {
   // Hide the application menu
   Menu.setApplicationMenu(null)
 
-  if (!isDev) {
+  if (!isDev || isTestMode) {
     registerAppProtocol()
   }
   registerIpcHandlers(ipcMain, dialog, shell, { isTestMode })

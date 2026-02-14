@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useGitStore } from '~/stores/git'
+import { useGithubStore } from '~/stores/github'
 
 const gitStore = useGitStore()
+const githubStore = useGithubStore()
 const commitMessage = ref('')
 const showCommitDialog = ref(false)
 
@@ -22,10 +24,35 @@ async function commitAndPush() {
     showCommitDialog.value = false
   }
 }
+
+async function disconnectGithub() {
+  await githubStore.disconnect()
+}
 </script>
 
 <template>
   <div class="git-panel">
+    <!-- GitHub connected user -->
+    <div
+      v-if="githubStore.isConnected && githubStore.user"
+      class="github-user"
+    >
+      <img
+        :src="githubStore.user.avatarUrl"
+        :alt="githubStore.user.login"
+        class="github-avatar"
+      >
+      <span class="github-login">{{ githubStore.user.login }}</span>
+      <Button
+        icon="pi pi-sign-out"
+        text
+        rounded
+        size="small"
+        title="Disconnect from GitHub"
+        @click="disconnectGithub"
+      />
+    </div>
+
     <div
       v-if="gitStore.status"
       class="git-status"
@@ -57,6 +84,7 @@ async function commitAndPush() {
 
     <div class="git-actions">
       <Button
+        v-if="gitStore.status?.hasRemote"
         label="Pull"
         icon="pi pi-download"
         size="small"
@@ -65,8 +93,8 @@ async function commitAndPush() {
         @click="pull"
       />
       <Button
-        label="Commit & Push"
-        icon="pi pi-upload"
+        :label="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
+        :icon="gitStore.status?.hasRemote ? 'pi pi-upload' : 'pi pi-check'"
         size="small"
         :disabled="!gitStore.hasChanges"
         :loading="gitStore.isPushing"
@@ -92,7 +120,7 @@ async function commitAndPush() {
     <Dialog
       v-model:visible="showCommitDialog"
       modal
-      header="Commit & Push"
+      :header="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
       :style="{ width: '400px' }"
     >
       <div class="commit-dialog">
@@ -112,8 +140,8 @@ async function commitAndPush() {
           @click="showCommitDialog = false"
         />
         <Button
-          label="Commit & Push"
-          icon="pi pi-upload"
+          :label="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
+          :icon="gitStore.status?.hasRemote ? 'pi pi-upload' : 'pi pi-check'"
           :disabled="!commitMessage.trim()"
           :loading="gitStore.isPushing"
           @click="commitAndPush"
@@ -131,6 +159,25 @@ async function commitAndPush() {
   padding: 0.75rem;
   border-top: 1px solid var(--surface-border);
   background: var(--surface-ground);
+}
+
+.github-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.github-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.github-login {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-color);
 }
 
 .git-status {

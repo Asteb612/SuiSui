@@ -40,7 +40,7 @@ export interface ScenarioStep {
 export interface StepArg {
   name: string
   value: string
-  type: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table'
+  type: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table'
   enumValues?: string[]
   tableColumns?: string[]
 }

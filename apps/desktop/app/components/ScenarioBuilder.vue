@@ -8,7 +8,7 @@ import ExamplesEditor from './ExamplesEditor.vue'
 import StepAddDialog from './StepAddDialog.vue'
 import { parseTableValue } from '~/utils/tableUtils'
 import { useThrottle } from '~/composables/useThrottle'
-import { stripAnchors, parseSegments as sharedParseSegments } from '@suisui/shared'
+import { stripAnchors, parseSegments as sharedParseSegments, getOutlinePlaceholder } from '@suisui/shared'
 import type { ScenarioStep, StepDefinition, PatternSegment } from '@suisui/shared'
 
 interface TableRow {
@@ -124,6 +124,12 @@ const isScenarioEditMode = computed(() => props.editMode === 'scenario' && isEdi
 const isOutline = computed(() => !!scenarioStore.scenario.examples)
 const scenarioTags = computed(() => scenarioStore.scenario.tags || [])
 
+// Outline arg options: columns formatted as <col> for editable Select dropdown
+const outlineArgOptions = computed(() => {
+  if (!scenarioStore.scenario.examples) return []
+  return scenarioStore.scenario.examples.columns.map(col => `<${col}>`)
+})
+
 // Group steps by main keyword (Given/When/Then), hiding And/But
 const groupedSteps = computed((): StepGroup[] => {
   const groups: StepGroup[] = []
@@ -149,23 +155,44 @@ const groupedSteps = computed((): StepGroup[] => {
   return groups
 })
 
-// Get variations (first column values from examples)
-const variations = computed(() => {
-  if (!scenarioStore.scenario.examples) return []
-  const firstCol = scenarioStore.scenario.examples.columns[0]
-  if (!firstCol) return []
-  return scenarioStore.scenario.examples.rows.map(row => row[firstCol] || '')
-})
-
 // Format step text with argument values inline (for read mode)
 function formatStepText(step: ScenarioStep): string {
   let text = step.pattern
   let argIndex = 0
 
+  // Strip escape backslashes for display: \{ → {, \( → (, \/ → /
+  text = text.replace(/\\([{}()/])/g, '$1')
+
+  // Expand optional text: (s) → s (parens without | inside, not enum)
+  text = text.replace(/\(([^)|]+)\)/g, '$1')
+
+  // Pick first alternative: belly/stomach → belly
+  text = text.replace(/\b([\w-]+(?:\/[\w-]+)+)\b/g, (match) => {
+    return match.split('/')[0]!
+  })
+
+  // Replace anonymous {} parameters
+  text = text.replace(/\{\}/g, () => {
+    const arg = step.args[argIndex++]
+    if (arg) {
+      const placeholderName = getOutlinePlaceholder(arg.value)
+      if (placeholderName) {
+        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+      }
+      const value = arg.value || `<${arg.name}>`
+      return `<strong class="arg-value">${value}</strong>`
+    }
+    return '<strong class="arg-value">...</strong>'
+  })
+
   // Replace Cucumber expression placeholders {type} or {type:name}
   text = text.replace(/\{([a-zA-Z]+)(:[^}]+)?\}/g, () => {
     const arg = step.args[argIndex++]
     if (arg) {
+      const placeholderName = getOutlinePlaceholder(arg.value)
+      if (placeholderName) {
+        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+      }
       const value = arg.value || `<${arg.name}>`
       const formatted = arg.type === 'string' && arg.value ? `"${arg.value}"` : value
       return `<strong class="arg-value">${formatted}</strong>`
@@ -177,6 +204,10 @@ function formatStepText(step: ScenarioStep): string {
   text = text.replace(/\(([^)]+\|[^)]+)\)/g, () => {
     const arg = step.args[argIndex++]
     if (arg) {
+      const placeholderName = getOutlinePlaceholder(arg.value)
+      if (placeholderName) {
+        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+      }
       const value = arg.value || `<${arg.name}>`
       return `<strong class="arg-value arg-enum">${value}</strong>`
     }
@@ -184,21 +215,25 @@ function formatStepText(step: ScenarioStep): string {
   })
 
   // Replace Scenario Outline placeholders <variable> with distinct styling
+  // (only matches placeholders literally in the pattern, not from arg values)
   text = text.replace(/<([a-zA-Z_]\w*)>/g, (match, varName) => {
     const arg = step.args.find(a => a.name === varName)
-    const value = arg?.value || varName
-    return `<strong class="arg-placeholder">&lt;${value}&gt;</strong>`
+    const rawValue = arg?.value || varName
+    // If the value is itself an outline placeholder like <col>, extract the clean name
+    const placeholderName = getOutlinePlaceholder(rawValue)
+    const displayName = placeholderName || rawValue
+    return `<strong class="arg-placeholder">&lt;${displayName}&gt;</strong>`
   })
 
   // Clean regex anchors
-  text = stripAnchors(text).replace(/\\/g, '').trim()
+  text = stripAnchors(text).trim()
 
   return text
 }
 
-// Clean regex anchors and special characters from display text
+// Clean regex anchors and escape backslashes from display text
 function cleanRegexText(text: string): string {
-  return stripAnchors(text).replace(/\\/g, '').trim()
+  return stripAnchors(text).replace(/\\([{}()/])/g, '$1').trim()
 }
 
 function parseStepPattern(step: ScenarioStep): PatternSegment[] {
@@ -209,7 +244,7 @@ function removeStep(stepId: string) {
   scenarioStore.removeStep(stepId)
 }
 
-function updateArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table', enumValues?: string[]) {
+function updateArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table', enumValues?: string[]) {
   scenarioStore.updateStepArg(stepId, argName, value, argType, enumValues)
 }
 
@@ -235,7 +270,7 @@ watch(
   { deep: true }
 )
 
-function updateBackgroundArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table', enumValues?: string[]) {
+function updateBackgroundArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table', enumValues?: string[]) {
   scenarioStore.updateBackgroundStepArg(stepId, argName, value, argType, enumValues)
 }
 
@@ -851,6 +886,20 @@ function selectScenario(index: number) {
                             @update:model-value="updateArg(step.id, segment.arg!.name, $event, 'enum', segment.arg!.enumValues)"
                           />
 
+                          <!-- Outline: Editable Select with column suggestions -->
+                          <Select
+                            v-else-if="segment.arg && segment.arg.type !== 'table' && isOutline"
+                            :model-value="segment.arg.value"
+                            :options="outlineArgOptions"
+                            :editable="true"
+                            :placeholder="segment.arg.name"
+                            class="inline-arg-input"
+                            :class="{ 'inline-arg-placeholder': !!getOutlinePlaceholder(segment.arg.value) }"
+                            data-testid="inline-arg-outline-select"
+                            @click.stop
+                            @update:model-value="updateArg(step.id, segment.arg!.name, $event as string, segment.arg!.type as any, segment.arg!.enumValues)"
+                          />
+
                           <!-- Standard Input inline (string, int, float, any, etc.) -->
                           <InputText
                             v-else-if="segment.arg && segment.arg.type !== 'table'"
@@ -1151,7 +1200,7 @@ function selectScenario(index: number) {
 
         <!-- Examples / Variations - shown in read/edit modes -->
         <div
-          v-if="(isOutline || variations.length > 0) && !isRunMode"
+          v-if="isOutline && !isRunMode"
           key="variations-section"
           class="variations-section"
         >
@@ -1170,19 +1219,37 @@ function selectScenario(index: number) {
             />
           </div>
 
-          <!-- Read mode: show variations as chips -->
-          <div
-            v-if="!isEditMode"
-            class="variations-chips"
+          <!-- Read mode: show full examples table -->
+          <table
+            v-if="!isEditMode && scenarioStore.scenario.examples"
+            class="examples-readonly-table"
           >
-            <span
-              v-for="(v, index) in variations"
-              :key="index"
-              class="variation-chip"
-            >
-              {{ v }}
-            </span>
-          </div>
+            <thead>
+              <tr>
+                <th
+                  v-for="col in scenarioStore.scenario.examples.columns"
+                  :key="col"
+                  class="examples-readonly-header"
+                >
+                  &lt;{{ col }}&gt;
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(row, rowIndex) in scenarioStore.scenario.examples.rows"
+                :key="rowIndex"
+              >
+                <td
+                  v-for="col in scenarioStore.scenario.examples.columns"
+                  :key="col"
+                  class="examples-readonly-cell"
+                >
+                  {{ row[col] || '' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
           <!-- Edit mode: full examples table editor -->
           <ExamplesEditor
@@ -1224,6 +1291,7 @@ function selectScenario(index: number) {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 480px;
   padding: 1.5rem;
   overflow-y: auto;
   background: var(--surface-ground);
@@ -1826,6 +1894,19 @@ function selectScenario(index: number) {
   font-size: 0.75rem !important;
 }
 
+/* Outline placeholder styling - teal accent when value is <var> */
+.inline-arg-placeholder.p-select,
+.inline-arg-placeholder :deep(.p-select) {
+  background: rgba(20, 184, 166, 0.12) !important;
+  border-color: rgba(20, 184, 166, 0.4) !important;
+}
+
+.inline-arg-placeholder :deep(.p-select-label),
+.inline-arg-placeholder :deep(input) {
+  color: rgb(20, 184, 166) !important;
+  font-weight: 600 !important;
+}
+
 /* Inline argument selects */
 .inline-arg-select {
   display: inline-flex !important;
@@ -1913,24 +1994,29 @@ function selectScenario(index: number) {
   color: #6d28d9;
 }
 
-.variations-chips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
+/* Read-only examples table */
+.examples-readonly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
 }
 
-.variation-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.625rem;
-  background: white;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  border-radius: 16px;
-  font-size: 0.8125rem;
+.examples-readonly-header {
+  padding: 0.375rem 0.75rem;
+  text-align: left;
   font-weight: 500;
-  color: #6d28d9;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 4px;
+}
+
+.examples-readonly-cell {
+  padding: 0.375rem 0.75rem;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 0.8125rem;
 }
 
 .add-variations-trigger {

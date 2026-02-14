@@ -1,0 +1,9 @@
+{
+  "name": "test-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "playwright-bdd": "^8.0.0"
+  }
+}

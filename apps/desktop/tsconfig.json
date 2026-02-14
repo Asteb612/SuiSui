@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "exclude": ["dist-electron", "electron", "nodejs-runtime"]
+  "exclude": ["dist-electron", "electron", "nodejs-runtime", "e2e"]
 }

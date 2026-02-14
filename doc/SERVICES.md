@@ -27,6 +27,17 @@ The backend services are located in `apps/desktop/electron/services/` and handle
 ┌───────────────┐  ┌───────────────┐  ┌──────────┴────────────┐
 │ ValidationService│ RunnerService │  │ GitService           │
 └───────────────┘  └───────────────┘  └───────────────────────┘
+
+┌────────────────────┐  ┌───────────────────────┐
+│ GitWorkspaceService │  │ GithubAuthService     │
+│ (isomorphic-git)   │  │ (safeStorage)         │
+└────────────────────┘  └───────────────────────┘
+        │
+        ▼
+┌────────────────────┐
+│ WorkspaceMeta      │
+│ (.app/workspace)   │
+└────────────────────┘
 ```
 
 ## Services Reference
@@ -262,7 +273,7 @@ interface RunResult {
 
 **Location:** `electron/services/GitService.ts`
 
-**Purpose:** Git repository operations for feature file management.
+**Purpose:** Git repository operations using system `git` binary. Handles both local-only repos and repos with remotes.
 
 **Methods:**
 
@@ -283,14 +294,95 @@ interface GitStatusResult {
   modified: string[]
   untracked: string[]
   staged: string[]
+  hasRemote: boolean // Whether an origin remote is configured
 }
 ```
 
+**Remote Detection:**
+The service checks for a remote origin via `git remote get-url origin`. When no remote exists:
+
+- `hasRemote` is `false`
+- `ahead`/`behind` are both `0`
+- `pull()` returns a success message ("No remote configured")
+- `commitPush()` commits locally without attempting to push
+
 **Commit & Push Flow:**
 
-1. `git add features/` - Only stages feature files
+1. `git add -A` - Stages all changes
 2. `git commit -m "message"`
-3. `git push origin <current-branch>`
+3. If remote exists: `git push origin <current-branch>` (push failure is non-fatal)
+
+---
+
+### GitWorkspaceService
+
+**Location:** `electron/services/GitWorkspaceService.ts`
+
+**Purpose:** Pure JavaScript git operations using `isomorphic-git`. Used for GitHub-connected workspaces (clone, pull, push) without requiring system git.
+
+**Methods:**
+
+| Method                          | Parameters                          | Returns                 | Description                       |
+| ------------------------------- | ----------------------------------- | ----------------------- | --------------------------------- |
+| `cloneOrOpen(params)`           | `GitWorkspaceParams`                | `WorkspaceMetadata`     | Clone repo or open existing       |
+| `pull(localPath, token)`        | `string, string`                    | `PullResult`            | Fetch + fast-forward merge        |
+| `getStatus(localPath)`          | `string`                            | `WorkspaceStatusResult` | Status matrix with glob filtering |
+| `commitAndPush(localPath, ...)` | `string, string, CommitPushOptions` | `CommitPushResult`      | Stage, commit, push               |
+
+**Key Features:**
+
+- Auth via `onAuth` callback: `{ username: 'x-access-token', password: token }`
+- All operations wrapped in file-based lock via `WorkspaceMeta`
+- Status filtering: only reports files matching `features/**/*.feature`, `**/steps/**/*.{ts,js}`, `playwright/**`
+- Error mapping: HTTP 401/403 → `GitAuthError`, 404 → `WorkspaceNotFoundError`
+
+---
+
+### GithubAuthService
+
+**Location:** `electron/services/GithubAuthService.ts`
+
+**Purpose:** GitHub authentication and API operations. Manages token storage using Electron's `safeStorage` API.
+
+**Methods:**
+
+| Method                 | Parameters | Returns                | Description                       |
+| ---------------------- | ---------- | ---------------------- | --------------------------------- |
+| `saveToken(token)`     | `string`   | `void`                 | Encrypt and store token           |
+| `getToken()`           | -          | `string \| null`       | Retrieve stored token             |
+| `deleteToken()`        | -          | `void`                 | Delete stored token               |
+| `validateToken(token)` | `string`   | `GithubUser`           | Validate token against GitHub API |
+| `deviceFlowStart()`    | -          | `DeviceFlowResponse`   | Start device flow OAuth           |
+| `deviceFlowPoll(code)` | `string`   | `DeviceFlowPollResult` | Poll for device flow completion   |
+| `getUser(token)`       | `string`   | `GithubUser`           | Get authenticated user info       |
+| `listRepos(token)`     | `string`   | `GithubRepo[]`         | List user's repositories          |
+
+**Token Storage:**
+
+- Encrypted using `safeStorage.encryptString()` (OS-level encryption via DPAPI/Keychain/libsecret)
+- Stored as binary file at `{userData}/github-token.enc`
+
+---
+
+### WorkspaceMeta
+
+**Location:** `electron/services/WorkspaceMeta.ts`
+
+**Purpose:** Manages workspace metadata and file-based locking for git operations.
+
+**Functions:**
+
+| Function                      | Parameters                  | Returns                     | Description                  |
+| ----------------------------- | --------------------------- | --------------------------- | ---------------------------- |
+| `readMeta(localPath)`         | `string`                    | `WorkspaceMetadata \| null` | Read `.app/workspace.json`   |
+| `writeMeta(localPath, meta)`  | `string, WorkspaceMetadata` | `void`                      | Write `.app/workspace.json`  |
+| `withWorkspaceLock(path, fn)` | `string, () => T`           | `T`                         | Execute with file-based lock |
+
+**Lock Mechanism:**
+
+- Creates `{localPath}/.app/lock` file with PID
+- Stale lock detection (30s timeout)
+- Automatic cleanup on completion
 
 ---
 

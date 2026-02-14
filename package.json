@@ -10,6 +10,7 @@
     "clean": "pnpm --filter @suisui/desktop clean",
     "test": "pnpm -r test",
     "test:unit": "pnpm --filter @suisui/shared test",
+    "test:e2e": "pnpm --filter @suisui/desktop test:e2e",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

@@ -55,6 +55,22 @@ export const IPC_CHANNELS = {
   DEPS_CHECK_PACKAGE_JSON: 'deps:checkPackageJson',
   DEPS_ENSURE_REQUIRED: 'deps:ensureRequired',
   DEPS_INSTALL: 'deps:install',
+
+  // Git Workspace (isomorphic-git)
+  GIT_WS_CLONE_OR_OPEN: 'gitws:cloneOrOpen',
+  GIT_WS_PULL: 'gitws:pull',
+  GIT_WS_STATUS: 'gitws:status',
+  GIT_WS_COMMIT_PUSH: 'gitws:commitPush',
+
+  // GitHub Auth
+  GITHUB_SAVE_TOKEN: 'github:saveToken',
+  GITHUB_GET_TOKEN: 'github:getToken',
+  GITHUB_DELETE_TOKEN: 'github:deleteToken',
+  GITHUB_VALIDATE_TOKEN: 'github:validateToken',
+  GITHUB_DEVICE_FLOW_START: 'github:deviceFlowStart',
+  GITHUB_DEVICE_FLOW_POLL: 'github:deviceFlowPoll',
+  GITHUB_GET_USER: 'github:getUser',
+  GITHUB_LIST_REPOS: 'github:listRepos',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

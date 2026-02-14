@@ -179,6 +179,7 @@ export function createMockGitStatus(overrides: Partial<GitStatusResult> = {}): G
     modified: [],
     staged: [],
     untracked: [],
+    hasRemote: false,
     ...overrides,
   }
 }

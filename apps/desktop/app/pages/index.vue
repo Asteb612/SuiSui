@@ -5,12 +5,43 @@ import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitStore } from '~/stores/git'
 import { useRunnerStore } from '~/stores/runner'
+//import { useGithubStore } from '~/stores/github'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
 const gitStore = useGitStore()
 const runnerStore = useRunnerStore()
+//const githubStore = useGithubStore()
+
+const showGithubConnect = ref(false)
+const changeWorkspaceMenuRef = ref()
+
+const changeWorkspaceMenuItems = [
+  {
+    label: 'Open Local Workspace',
+    icon: 'pi pi-folder',
+    command: () => workspaceStore.selectWorkspace(),
+  },
+  {
+    label: 'Clone from GitHub',
+    icon: 'pi pi-github',
+    command: () => { showGithubConnect.value = true },
+  },
+]
+
+function showChangeWorkspaceMenu(event: Event) {
+  changeWorkspaceMenuRef.value?.toggle(event)
+}
+
+async function handleGithubCloned(localPath: string) {
+  // After clone, set the cloned directory as workspace and initialize it
+  await workspaceStore.setWorkspacePath(localPath)
+  if (!isMounted.value) return
+  if (workspaceStore.hasWorkspace) {
+    await loadWorkspaceDependencies()
+  }
+}
 
 // Guard against async operations completing after unmount
 const isMounted = ref(true)
@@ -54,13 +85,28 @@ onMounted(async () => {
   await workspaceStore.loadWorkspace()
   if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
-    await stepsStore.loadCached()
-    if (!isMounted.value) return
-    await gitStore.refreshStatus()
-    if (!isMounted.value) return
-    await runnerStore.loadBaseUrl()
+    await loadWorkspaceDependencies()
   }
 })
+
+// When workspace changes (e.g. user selects a workspace from welcome screen),
+// load steps, git status, and runner config
+watch(
+  () => workspaceStore.workspace,
+  async (workspace) => {
+    if (workspace && !stepsStore.exportedAt) {
+      await loadWorkspaceDependencies()
+    }
+  }
+)
+
+async function loadWorkspaceDependencies() {
+  await stepsStore.loadCached()
+  if (!isMounted.value) return
+  await gitStore.refreshStatus()
+  if (!isMounted.value) return
+  await runnerStore.loadBaseUrl()
+}
 
 watch(
   () => workspaceStore.selectedFeature,
@@ -120,7 +166,10 @@ function cancelInit() {
 </script>
 
 <template>
-  <div class="main-container">
+  <div
+    class="main-container"
+    data-testid="main-container"
+  >
     <!-- Header -->
     <header class="header titlebar">
       <h1 class="title">
@@ -140,7 +189,14 @@ function cancelInit() {
         icon="pi pi-folder"
         text
         size="small"
-        @click="workspaceStore.selectWorkspace"
+        aria-haspopup="true"
+        data-testid="change-workspace-btn"
+        @click="showChangeWorkspaceMenu"
+      />
+      <Menu
+        ref="changeWorkspaceMenuRef"
+        :model="changeWorkspaceMenuItems"
+        :popup="true"
       />
     </header>
 
@@ -160,6 +216,7 @@ function cancelInit() {
       <div
         v-else-if="!workspaceStore.hasWorkspace"
         class="no-workspace"
+        data-testid="welcome-screen"
       >
         <div class="no-workspace-content">
           <div class="workspace-icon">
@@ -174,6 +231,7 @@ function cancelInit() {
               label="Select Existing Workspace"
               icon="pi pi-folder"
               size="large"
+              data-testid="select-workspace-btn"
               @click="workspaceStore.selectWorkspace"
             />
             <Button
@@ -183,6 +241,15 @@ function cancelInit() {
               size="large"
               outlined
               @click="workspaceStore.selectWorkspace"
+            />
+            <Button
+              label="Clone from GitHub"
+              icon="pi pi-github"
+              severity="info"
+              size="large"
+              outlined
+              data-testid="github-connect-btn"
+              @click="showGithubConnect = true"
             />
           </div>
           <div class="workspace-requirements">
@@ -286,6 +353,7 @@ function cancelInit() {
                 <span
                   v-else-if="currentViewMode !== 'edit' && scenarioStore.isValid"
                   class="validation-indicator valid"
+                  data-testid="validation-indicator"
                   title="Scenario is valid"
                 >
                   <i class="pi pi-check-circle" />
@@ -307,6 +375,7 @@ function cancelInit() {
                   label="Edit"
                   text
                   size="small"
+                  data-testid="edit-mode-btn"
                   :disabled="currentViewMode === 'run'"
                   @click="handleModeChange('edit')"
                 />
@@ -328,6 +397,7 @@ function cancelInit() {
                     icon="pi pi-save"
                     label="Save"
                     size="small"
+                    data-testid="save-btn"
                     :disabled="!scenarioStore.isValid"
                     :title="!scenarioStore.isValid ? 'Fix validation errors before saving' : 'Save changes'"
                     @click="saveScenario"
@@ -338,6 +408,7 @@ function cancelInit() {
                     label="Done"
                     text
                     size="small"
+                    data-testid="done-btn"
                     :disabled="scenarioStore.isDirty"
                     :title="scenarioStore.isDirty ? 'Save or discard changes first' : 'Close edit mode'"
                     @click="handleModeChange('read')"
@@ -351,6 +422,7 @@ function cancelInit() {
                   label="Run"
                   text
                   size="small"
+                  data-testid="run-mode-btn"
                   :disabled="currentViewMode === 'edit' || !scenarioStore.isValid || scenarioStore.isDirty"
                   :title="getRunButtonTitle()"
                   @click="handleModeChange('run')"
@@ -410,7 +482,10 @@ function cancelInit() {
     </main>
 
     <!-- Status bar -->
-    <footer class="status-bar">
+    <footer
+      class="status-bar"
+      data-testid="status-bar"
+    >
       <span>{{ workspaceStore.workspace?.path ?? 'No workspace' }}</span>
       <span
         v-if="stepsStore.exportedAt"
@@ -491,6 +566,7 @@ function cancelInit() {
         <Button
           label="Initialize Workspace"
           icon="pi pi-check"
+          data-testid="init-workspace-btn"
           :disabled="workspaceStore.isInitializing"
           :loading="workspaceStore.isInitializing"
           @click="initializeWorkspace"
@@ -582,6 +658,12 @@ function cancelInit() {
         />
       </template>
     </Dialog>
+
+    <!-- GitHub Connect Dialog -->
+    <GithubConnect
+      v-model:visible="showGithubConnect"
+      @cloned="handleGithubCloned"
+    />
 
     <!-- Help Dialog -->
     <Dialog

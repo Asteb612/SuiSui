@@ -394,7 +394,11 @@ export const useScenarioStore = defineStore('scenario', {
               type: arg.type,
               value: arg.value
             }))
-          }))
+          })),
+          examples: current.examples ? {
+            columns: [...current.examples.columns],
+            rows: current.examples.rows.map(row => ({ ...row })),
+          } : undefined,
         }
         
         this.validation = await window.api.validate.scenario(serializedScenario)

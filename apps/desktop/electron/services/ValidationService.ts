@@ -1,5 +1,5 @@
 import type { Scenario, ValidationResult, ValidationIssue, StepExportResult, ScenarioStep } from '@suisui/shared'
-import { patternToRegex, resolvePattern } from '@suisui/shared'
+import { patternToRegex, resolvePattern, getOutlinePlaceholder } from '@suisui/shared'
 import { getStepService } from './StepService'
 
 export class ValidationService {
@@ -93,7 +93,7 @@ export class ValidationService {
         })
       }
 
-      if (arg.type === 'int' && arg.value && isNaN(parseInt(arg.value, 10))) {
+      if (arg.type === 'int' && arg.value && !getOutlinePlaceholder(arg.value) && isNaN(parseInt(arg.value, 10))) {
         issues.push({
           severity: 'error',
           message: `Argument "${arg.name}" must be an integer`,
@@ -102,7 +102,7 @@ export class ValidationService {
         })
       }
 
-      if (arg.type === 'float' && arg.value && isNaN(parseFloat(arg.value))) {
+      if (arg.type === 'float' && arg.value && !getOutlinePlaceholder(arg.value) && isNaN(parseFloat(arg.value))) {
         issues.push({
           severity: 'error',
           message: `Argument "${arg.name}" must be a number`,

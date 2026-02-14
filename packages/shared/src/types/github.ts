@@ -30,3 +30,12 @@ export interface GithubAuthStatus {
   connected: boolean
   user?: GithubUser
 }
+
+export interface GithubRepo {
+  owner: string
+  name: string
+  fullName: string
+  cloneUrl: string
+  defaultBranch: string
+  private: boolean
+}

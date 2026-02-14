@@ -7,6 +7,8 @@ import type { GitStatusResult, GitOperationResult } from '../types/git'
 import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
+import type { GitWorkspaceParams, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
+import type { DeviceFlowResponse, DeviceFlowPollResult, GithubUser, GithubRepo } from '../types/github'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -80,6 +82,24 @@ export interface ElectronAPI {
     checkPackageJson: () => Promise<PackageJsonCheckResult>
     ensureRequired: () => Promise<PackageJsonCheckResult>
     install: () => Promise<DependencyInstallResult>
+  }
+
+  gitWorkspace: {
+    cloneOrOpen: (params: GitWorkspaceParams) => Promise<WorkspaceMetadata>
+    pull: (localPath: string, token: string) => Promise<PullResult>
+    status: (localPath: string) => Promise<WorkspaceStatusResult>
+    commitAndPush: (localPath: string, token: string, options: CommitPushOptions) => Promise<CommitPushResult>
+  }
+
+  github: {
+    saveToken: (token: string) => Promise<void>
+    getToken: () => Promise<string | null>
+    deleteToken: () => Promise<void>
+    validateToken: (token: string) => Promise<GithubUser>
+    deviceFlowStart: () => Promise<DeviceFlowResponse>
+    deviceFlowPoll: (deviceCode: string) => Promise<DeviceFlowPollResult>
+    getUser: (token: string) => Promise<GithubUser>
+    listRepos: (token: string) => Promise<GithubRepo[]>
   }
 }
 

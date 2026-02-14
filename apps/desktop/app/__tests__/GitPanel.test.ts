@@ -43,19 +43,28 @@ describe('GitPanel', () => {
     })
 
     it('displays branch name', () => {
-      // branchName is a getter based on status.branch
       createWrapper({ status: createMockGitStatus({ branch: 'feature/test' }) })
       expect(screen.getByText('feature/test')).toBeTruthy()
     })
 
-    it('renders Pull button', () => {
-      createWrapper()
+    it('renders Pull button when remote exists', () => {
+      createWrapper({ status: createMockGitStatus({ hasRemote: true }) })
       expect(screen.getByText('Pull')).toBeTruthy()
     })
 
-    it('renders Commit & Push button', () => {
-      createWrapper()
+    it('does not render Pull button when no remote', () => {
+      createWrapper({ status: createMockGitStatus({ hasRemote: false }) })
+      expect(screen.queryByText('Pull')).toBeNull()
+    })
+
+    it('renders Commit & Push button when remote exists', () => {
+      createWrapper({ status: createMockGitStatus({ hasRemote: true }) })
       expect(screen.getByText('Commit & Push')).toBeTruthy()
+    })
+
+    it('renders Commit button when no remote', () => {
+      createWrapper({ status: createMockGitStatus({ hasRemote: false }) })
+      expect(screen.getByText('Commit')).toBeTruthy()
     })
   })
 
@@ -67,7 +76,7 @@ describe('GitPanel', () => {
 
     it('shows ahead count when ahead of remote', () => {
       createWrapper({
-        status: createMockGitStatus({ ahead: 3 }),
+        status: createMockGitStatus({ ahead: 3, hasRemote: true }),
       })
 
       expect(screen.getByText('3')).toBeTruthy()
@@ -75,7 +84,7 @@ describe('GitPanel', () => {
 
     it('shows behind count when behind remote', () => {
       createWrapper({
-        status: createMockGitStatus({ behind: 2 }),
+        status: createMockGitStatus({ behind: 2, hasRemote: true }),
       })
 
       expect(screen.getByText('2')).toBeTruthy()
@@ -83,7 +92,7 @@ describe('GitPanel', () => {
 
     it('shows both ahead and behind', () => {
       createWrapper({
-        status: createMockGitStatus({ ahead: 1, behind: 2 }),
+        status: createMockGitStatus({ ahead: 1, behind: 2, hasRemote: true }),
       })
 
       expect(screen.getByText('1')).toBeTruthy()
@@ -127,7 +136,7 @@ describe('GitPanel', () => {
 
   describe('pull action', () => {
     it('calls pull when Pull button clicked', async () => {
-      createWrapper()
+      createWrapper({ status: createMockGitStatus({ hasRemote: true }) })
 
       await fireEvent.click(screen.getByText('Pull'))
 
@@ -136,34 +145,31 @@ describe('GitPanel', () => {
     })
 
     it('shows loading state when pulling', () => {
-      createWrapper({ isPulling: true })
+      createWrapper({ isPulling: true, status: createMockGitStatus({ hasRemote: true }) })
 
-      // Button should have loading prop - check it's rendered
       expect(screen.getByText('Pull')).toBeTruthy()
     })
   })
 
   describe('commit and push', () => {
-    it('disables Commit & Push when no changes', () => {
-      // hasChanges is a getter based on status.modified/untracked/staged
+    it('disables Commit button when no changes (local repo)', () => {
       createWrapper({ status: createMockGitStatus({ modified: [], untracked: [], staged: [] }) })
 
-      const button = screen.getByText('Commit & Push')
+      const button = screen.getByText('Commit')
       expect(button.closest('button')?.hasAttribute('disabled')).toBe(true)
     })
 
-    it('enables Commit & Push when there are changes', () => {
-      // hasChanges is a getter based on status.modified/untracked/staged
+    it('enables Commit button when there are changes (local repo)', () => {
       createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      const button = screen.getByText('Commit & Push')
+      const button = screen.getByText('Commit')
       expect(button.closest('button')?.hasAttribute('disabled')).toBe(false)
     })
 
     it('opens commit dialog when button clicked', async () => {
       createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
 
       expect(screen.getByTestId('dialog')).toBeTruthy()
     })
@@ -171,15 +177,14 @@ describe('GitPanel', () => {
     it('shows textarea for commit message in dialog', async () => {
       createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
 
       expect(screen.getByTestId('textarea')).toBeTruthy()
     })
 
     it('shows loading state when pushing', () => {
-      createWrapper({ isPushing: true })
+      createWrapper({ isPushing: true, status: createMockGitStatus({ hasRemote: true }) })
 
-      // The button should indicate loading state
       expect(screen.getByText('Commit & Push')).toBeTruthy()
     })
   })
@@ -188,7 +193,7 @@ describe('GitPanel', () => {
     it('has cancel button in dialog', async () => {
       createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
 
       expect(screen.getByText('Cancel')).toBeTruthy()
     })
@@ -196,22 +201,19 @@ describe('GitPanel', () => {
     it('closes dialog when cancel clicked', async () => {
       createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
       await fireEvent.click(screen.getByText('Cancel'))
 
-      // Dialog should be closed (not visible)
       expect(screen.queryByTestId('dialog')).toBeNull()
     })
 
     it('disables commit button when message is empty', async () => {
       const { container } = createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
 
-      // Find all buttons in the dialog footer (within the dialog)
       const dialog = container.querySelector('.p-dialog')
       const footerButtons = dialog?.querySelectorAll('button[data-testid="button"]')
-      // The second button in footer is "Commit & Push"
       const submitButton = footerButtons?.[1]
       expect(submitButton?.hasAttribute('disabled')).toBe(true)
     })
@@ -219,15 +221,13 @@ describe('GitPanel', () => {
     it('calls commitPush when dialog submit clicked', async () => {
       const { container } = createWrapper({ status: createMockGitStatus({ modified: ['file.ts'] }) })
 
-      await fireEvent.click(screen.getByText('Commit & Push'))
+      await fireEvent.click(screen.getByText('Commit'))
 
       const textarea = screen.getByTestId('textarea')
       await fireEvent.update(textarea, 'Test commit message')
 
-      // Find the submit button in dialog footer
       const dialog = container.querySelector('.p-dialog')
       const footerButtons = dialog?.querySelectorAll('button[data-testid="button"]')
-      // The second button in footer is "Commit & Push"
       const submitButton = footerButtons?.[1]
       await fireEvent.click(submitButton!)
 
@@ -275,7 +275,6 @@ describe('GitPanel', () => {
     it('handles null status gracefully', () => {
       createWrapper({ status: null })
 
-      // Should not crash, branch section shouldn't render
       expect(screen.queryByText('main')).toBeNull()
     })
   })

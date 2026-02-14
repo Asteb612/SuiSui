@@ -2,7 +2,7 @@ export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
 
 export interface StepArgDefinition {
   name: string
-  type: 'string' | 'int' | 'float' | 'any' | 'enum' | 'table'
+  type: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table'
   required: boolean
   enumValues?: string[]
   tableColumns?: string[]

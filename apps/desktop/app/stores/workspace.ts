@@ -204,6 +204,30 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.expandedFolders.delete(path)
     },
 
+    async selectDirectory(): Promise<string | null> {
+      // Reuses the workspace directory picker dialog, only returns the selected path
+      const result = await window.api.workspace.select()
+      if (!result?.selectedPath) return null
+      return result.selectedPath
+    },
+
+    async setWorkspacePath(path: string) {
+      this.isLoading = true
+      this.error = null
+      try {
+        const validation = await window.api.workspace.set(path)
+        if (validation.isValid) {
+          this.workspace = await window.api.workspace.get()
+          await this.loadFeatures()
+          await this.loadFeatureTree()
+        }
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to set workspace'
+      } finally {
+        this.isLoading = false
+      }
+    },
+
     clearWorkspace() {
       this.workspace = null
       this.features = []
