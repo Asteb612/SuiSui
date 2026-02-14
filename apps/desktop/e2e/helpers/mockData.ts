@@ -12,6 +12,7 @@ const DEFAULT_STEP_PATTERNS: Array<{ keyword: 'Given' | 'When' | 'Then'; pattern
   { keyword: 'When', pattern: 'I fill {string} with {string}' },
   { keyword: 'When', pattern: 'I select {string} from {string}' },
   { keyword: 'When', pattern: 'I wait for {int} seconds' },
+  { keyword: 'When', pattern: 'I fill in the form with the following data (Field, Value):' },
   { keyword: 'Then', pattern: 'I should see {string}' },
   { keyword: 'Then', pattern: 'I should not see {string}' },
   { keyword: 'Then', pattern: 'the URL should contain {string}' },

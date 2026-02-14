@@ -8,14 +8,14 @@ SuiSui is a BDD Test Builder desktop application built with Electron + Nuxt 4 (V
 
 **Before making any changes, consult the relevant documentation:**
 
-| Document | When to Read |
-|----------|--------------|
+| Document                                   | When to Read                                            |
+| ------------------------------------------ | ------------------------------------------------------- |
 | [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) | Understanding overall design, data flow, security model |
-| [doc/SERVICES.md](doc/SERVICES.md) | Working with backend services in `electron/services/` |
-| [doc/FRONTEND.md](doc/FRONTEND.md) | Working with Vue components in `app/`, Pinia stores |
-| [doc/IPC_TYPES.md](doc/IPC_TYPES.md) | Adding/modifying IPC channels, shared types |
-| [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md) | Development workflow, scripts, debugging |
-| [doc/TESTING.md](doc/TESTING.md) | Writing unit tests, E2E tests |
+| [doc/SERVICES.md](doc/SERVICES.md)         | Working with backend services in `electron/services/`   |
+| [doc/FRONTEND.md](doc/FRONTEND.md)         | Working with Vue components in `app/`, Pinia stores     |
+| [doc/IPC_TYPES.md](doc/IPC_TYPES.md)       | Adding/modifying IPC channels, shared types             |
+| [doc/DEVELOPMENT.md](doc/DEVELOPMENT.md)   | Development workflow, scripts, debugging                |
+| [doc/TESTING.md](doc/TESTING.md)           | Writing unit tests, E2E tests                           |
 
 ## Project Structure
 
@@ -44,19 +44,21 @@ SuiSui/
 ## Critical Rules
 
 ### 1. Process Separation
+
 - **Main Process** (`electron/`): Node.js, full system access
 - **Renderer Process** (`app/`): Browser only, no Node.js
 - **Bridge**: `preload.ts` exposes typed API via `window.api`
 
 ```typescript
 // In renderer (app/), access API like this:
-const api = useApi();
-await api.workspace.get();
+const api = useApi()
+await api.workspace.get()
 
 // NEVER import Node.js modules in app/
 ```
 
 ### 2. IPC Communication
+
 All main-renderer communication goes through typed IPC channels:
 
 ```typescript
@@ -83,12 +85,13 @@ feature: {
 ```
 
 ### 3. Service Pattern
+
 Services use singleton + dependency injection for testability:
 
 ```typescript
 export class WorkspaceService {
   constructor(private commandRunner?: ICommandRunner) {
-    this.commandRunner = commandRunner ?? getCommandRunner();
+    this.commandRunner = commandRunner ?? getCommandRunner()
   }
 
   async validate(path: string): Promise<WorkspaceValidation> {
@@ -96,31 +99,34 @@ export class WorkspaceService {
   }
 }
 
-let instance: WorkspaceService | null = null;
+let instance: WorkspaceService | null = null
 export function getWorkspaceService(): WorkspaceService {
-  if (!instance) instance = new WorkspaceService();
-  return instance;
+  if (!instance) instance = new WorkspaceService()
+  return instance
 }
 ```
 
 ### 4. Testing Requirements
+
 **CRITICAL: Never call real CLI tools in tests**
 
 ```typescript
 // Use FakeCommandRunner for all service tests
-const fakeRunner = new FakeCommandRunner();
+const fakeRunner = new FakeCommandRunner()
 fakeRunner.setResponse('npx', {
   code: 0,
   stdout: JSON.stringify([{ keyword: 'Given', pattern: 'I am logged in' }]),
-  stderr: ''
-});
+  stderr: '',
+})
 
-const service = new StepService(fakeRunner);
-const result = await service.export();
+const service = new StepService(fakeRunner)
+const result = await service.export()
 ```
 
 ### 5. Shared Package Workflow
+
 After modifying `packages/shared/`:
+
 ```bash
 pnpm --filter @suisui/shared build
 ```
@@ -128,6 +134,7 @@ pnpm --filter @suisui/shared build
 ## Common Tasks
 
 ### Add New Backend Service
+
 1. Create `electron/services/NewService.ts` (see pattern above)
 2. Add types in `packages/shared/src/types/`
 3. Add IPC channels (see IPC Communication above)
@@ -135,6 +142,7 @@ pnpm --filter @suisui/shared build
 5. Export from `electron/services/index.ts`
 
 ### Add New Frontend Component
+
 1. Create `app/components/MyComponent.vue`
 2. Use `<script setup lang="ts">`
 3. Access stores via `useXxxStore()`
@@ -142,27 +150,29 @@ pnpm --filter @suisui/shared build
 5. Use PrimeVue components for UI
 
 ### Add New Pinia Store
+
 1. Create `app/stores/myStore.ts`
 2. Define state, getters, actions
 3. Use `useApi()` for IPC calls
 4. Export `useMyStore`
 
 ### Add New Type
+
 1. Add/update file in `packages/shared/src/types/`
 2. Export from `packages/shared/src/index.ts`
 3. Run `pnpm --filter @suisui/shared build`
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start development mode |
-| `pnpm build` | Production build |
-| `pnpm test` | Run unit tests |
-| `pnpm test:e2e` | Run E2E tests (requires build) |
-| `pnpm lint:fix` | Fix linting issues |
-| `pnpm typecheck` | Full type checking |
-| `pnpm --filter @suisui/shared build` | Rebuild shared package |
+| Command                              | Description                    |
+| ------------------------------------ | ------------------------------ |
+| `pnpm dev`                           | Start development mode         |
+| `pnpm build`                         | Production build               |
+| `pnpm test`                          | Run unit tests                 |
+| `pnpm test:e2e`                      | Run E2E tests (requires build) |
+| `pnpm lint:fix`                      | Fix linting issues             |
+| `pnpm typecheck`                     | Full type checking             |
+| `pnpm --filter @suisui/shared build` | Rebuild shared package         |
 
 ## Code Style
 
@@ -177,39 +187,64 @@ pnpm --filter @suisui/shared build
 ## Key Patterns
 
 ### Validation Service
+
 Returns structured results with severity levels:
+
 ```typescript
 interface ValidationResult {
-  isValid: boolean;  // No errors (warnings allowed)
-  issues: ValidationIssue[];
+  isValid: boolean // No errors (warnings allowed)
+  issues: ValidationIssue[]
 }
 
 interface ValidationIssue {
-  severity: 'error' | 'warning' | 'info';
-  message: string;
-  stepId?: string;
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  stepId?: string
 }
 ```
 
 ### Command Execution
+
 Always go through CommandRunner abstraction:
+
 ```typescript
 const result = await this.commandRunner.run('npx', ['bddgen', 'export'], {
   cwd: workspacePath,
-  timeout: 30000
-});
+  timeout: 30000,
+})
 ```
 
 ### Gherkin Conversion
+
 ScenarioStore handles bidirectional conversion:
-- `toGherkin()` - Scenario object → .feature content
-- `parseGherkin()` - .feature content → Scenario object
+
+- `toGherkin()` - Scenario object → .feature content (including DataTable rows after steps)
+- `parseGherkin()` - .feature content → Scenario object (including step DataTables)
+
+### DataTable Arguments
+
+Steps can accept Gherkin DataTables. The pattern declares columns with a `(Col1, Col2):` suffix:
+
+```typescript
+// Pattern: 'I fill in the form with the following data (Field, Value):'
+// Gherkin output:
+//   When I fill in the form with the following data:
+//     | Field | Value |
+//     | Name  | John  |
+```
+
+- Table data is stored as JSON in `StepArg.value`, columns in `StepArg.tableColumns`
+- `patternToRegex()` strips the column suffix for matching; `matchStep()` skips capture index for table args
+- `resolvePattern()` strips the column suffix for Gherkin text output
+- `TableEditor.vue` handles edit mode; read mode shows an inline read-only table
+- Table utility functions: `parseTableValue()`, `stringifyTableValue()`, `toGherkinTable()`, `parseGherkinTable()` in `app/utils/tableUtils.ts`
 
 ## Default Steps
 
-When a workspace is initialized, the app creates `features/steps/generic.steps.ts` with 10 default step definitions that can be used by bddgen and Playwright:
+When a workspace is initialized, the app creates `features/steps/generic.steps.ts` with 11 default step definitions that can be used by bddgen and Playwright:
+
 - Given: "I am on the {string} page", "I am logged in as {string}"
-- When: "I click on {string}", "I fill {string} with {string}", etc.
+- When: "I click on {string}", "I fill {string} with {string}", "I fill in the form with the following data (Field, Value):", etc.
 - Then: "I should see {string}", "the URL should contain {string}", etc.
 
 These are real playwright-bdd step definitions that users can customize or extend.

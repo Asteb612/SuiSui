@@ -53,7 +53,8 @@
       "Bash(node -e:*)",
       "Bash(npx electron:*)",
       "Bash(ELECTRON_RUN_AS_NODE=1 npx electron:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(pnpm test:e2e:*)"
     ]
   }
 }

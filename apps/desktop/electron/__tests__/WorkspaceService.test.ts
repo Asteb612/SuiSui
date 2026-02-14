@@ -114,6 +114,42 @@ describe('WorkspaceService', () => {
       expect(result.errors).toContain('Missing features/ directory')
     })
 
+    it('should validate when playwright config points to a custom features directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/tests/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.ts`]: [
+          "import { defineBddConfig } from 'playwright-bdd'",
+          "const testDir = defineBddConfig({",
+          "  paths: ['tests/features/**/*.feature'],",
+          '})',
+        ].join('\n'),
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+
+    it('should validate when cucumber.json points to a custom features directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/specs/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({
+          default: { paths: ['specs/**/*.feature'] },
+        }),
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.errors).toHaveLength(0)
+    })
+
     it('should return error when cucumber.json is missing', async () => {
       const workspacePath = '/test/workspace'
       vol.fromJSON({
@@ -175,7 +211,39 @@ describe('WorkspaceService', () => {
       expect(String(configContent)).toContain('defineBddConfig')
     })
 
-    it('should create generic.steps.ts when missing', async () => {
+    it('should set feature paths from cucumber.json when creating playwright.config.ts', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/specs/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({
+          default: { paths: ['specs/**/*.feature'] },
+        }),
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = await vol.promises.readFile(configPath, 'utf-8')
+      expect(String(configContent)).toContain("paths: featureFile ? [featureFile] : ['specs/**/*.feature']")
+    })
+
+    it('should not create playwright.config.ts when playwright.config.js exists', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.js`]: 'module.exports = {}',
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      await expect(vol.promises.readFile(configPath, 'utf-8')).rejects.toBeTruthy()
+    })
+
+    it('should not create generic.steps.ts when cucumber.json exists', async () => {
       const workspacePath = '/test/workspace'
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
@@ -186,11 +254,21 @@ describe('WorkspaceService', () => {
       await service.set(workspacePath)
 
       const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
-      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
-      expect(String(stepsContent)).toContain('createBdd')
-      expect(String(stepsContent)).toContain('I am on the {string} page')
-      expect(String(stepsContent)).toContain('I click on {string}')
-      expect(String(stepsContent)).toContain('I should see {string}')
+      await expect(vol.promises.readFile(stepsPath, 'utf-8')).rejects.toBeTruthy()
+    })
+
+    it('should not create generic.steps.ts when workspace has features', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/example.feature`]: 'Feature: Example',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      await service.set(workspacePath)
+
+      const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
+      await expect(vol.promises.readFile(stepsPath, 'utf-8')).rejects.toBeTruthy()
     })
 
     it('should not overwrite existing generic.steps.ts', async () => {
@@ -610,7 +688,7 @@ describe('WorkspaceService', () => {
       expect(cucumberJson.default.paths).toContain('features/**/*.feature')
     })
 
-    it('should create generic.steps.ts with default step definitions', async () => {
+    it('should not create generic.steps.ts when configs are created during init', async () => {
       const workspacePath = '/test/workspace'
       vol.fromJSON({
         [`${workspacePath}/.gitkeep`]: '',
@@ -619,26 +697,7 @@ describe('WorkspaceService', () => {
       await service.init(workspacePath)
 
       const stepsPath = path.join(workspacePath, 'features', 'steps', 'generic.steps.ts')
-      const stepsContent = await vol.promises.readFile(stepsPath, 'utf-8')
-
-      // Check imports
-      expect(String(stepsContent)).toContain("import { createBdd } from 'playwright-bdd'")
-
-      // Check Given steps
-      expect(String(stepsContent)).toContain("Given('I am on the {string} page'")
-      expect(String(stepsContent)).toContain("Given('I am logged in as {string}'")
-
-      // Check When steps
-      expect(String(stepsContent)).toContain("When('I click on {string}'")
-      expect(String(stepsContent)).toContain("When('I fill {string} with {string}'")
-      expect(String(stepsContent)).toContain("When('I select {string} from {string}'")
-      expect(String(stepsContent)).toContain("When('I wait for {int} seconds'")
-
-      // Check Then steps
-      expect(String(stepsContent)).toContain("Then('I should see {string}'")
-      expect(String(stepsContent)).toContain("Then('I should not see {string}'")
-      expect(String(stepsContent)).toContain("Then('the URL should contain {string}'")
-      expect(String(stepsContent)).toContain("Then('the element {string} should be visible'")
+      await expect(vol.promises.readFile(stepsPath, 'utf-8')).rejects.toBeTruthy()
     })
 
     it('should not overwrite existing generic.steps.ts', async () => {

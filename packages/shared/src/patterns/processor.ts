@@ -131,6 +131,9 @@ export function patternToRegex(pattern: string): RegExp {
     .replace(/\\\)/g, '___ESC_RPAREN___')
     .replace(/\\\//g, '___ESC_FSLASH___')
 
+  // Stage 1b: Strip table column suffix — table patterns don't participate in text matching
+  str = str.replace(/\s*\(([^)]+(?:,\s*[^)]+)+)\)\s*:\s*$/, ':')
+
   // Stage 2: Protect cucumber expressions (named and unnamed)
   str = str
     .replace(/\{string(?::\w+)?\}/g, '___STRING___')
@@ -225,6 +228,17 @@ export function matchStep(
   let captureIndex = 1
 
   for (const argDef of stepDef.args) {
+    // Table args have no capture group in the regex
+    if (argDef.type === 'table') {
+      args.push({
+        name: argDef.name,
+        type: argDef.type,
+        value: '',
+        tableColumns: argDef.tableColumns,
+      })
+      continue
+    }
+
     let capturedValue = match[captureIndex++] || ''
 
     // Strip quotes from string values (they may be captured with quotes)
@@ -365,6 +379,9 @@ export function resolvePattern(
 
   // Strip escape backslashes
   text = stripEscapes(text)
+
+  // Strip table column spec before optional text handler
+  text = text.replace(/\s*\(([^)]+(?:,\s*[^)]+)+)\)\s*:\s*$/, ':')
 
   // Expand optional text: (s) → s (show expanded form)
   text = text.replace(/\(([^)|]+)\)/g, '$1')

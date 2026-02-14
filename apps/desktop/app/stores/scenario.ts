@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { Scenario, ScenarioStep, StepArg, ValidationResult, StepKeyword, StepArgDefinition, ExampleTable, ExampleRow, StepDefinition } from '@suisui/shared'
 import { resolvePattern, findBestMatch } from '@suisui/shared'
+import { toGherkinTable, parseTableValue, parseGherkinTable, stringifyTableValue } from '~/utils/tableUtils'
 
 function generateStepId(): string {
   return `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -455,6 +456,19 @@ export const useScenarioStore = defineStore('scenario', {
         for (const step of this.background) {
           const text = resolvePattern(step.pattern, step.args)
           lines.push(`    ${step.keyword} ${text}`)
+          // Output DataTable rows for table args
+          for (const arg of step.args) {
+            if (arg.type === 'table' && arg.value) {
+              const rows = parseTableValue(arg.value)
+              const columns = arg.tableColumns || []
+              if (rows.length > 0 && columns.length > 0) {
+                const tableStr = toGherkinTable(rows, columns)
+                for (const tableLine of tableStr.split('\n')) {
+                  lines.push(`      ${tableLine}`)
+                }
+              }
+            }
+          }
         }
         lines.push('')
       }
@@ -473,6 +487,19 @@ export const useScenarioStore = defineStore('scenario', {
         for (const step of scenario.steps) {
           const text = resolvePattern(step.pattern, step.args)
           lines.push(`    ${step.keyword} ${text}`)
+          // Output DataTable rows for table args
+          for (const arg of step.args) {
+            if (arg.type === 'table' && arg.value) {
+              const rows = parseTableValue(arg.value)
+              const columns = arg.tableColumns || []
+              if (rows.length > 0 && columns.length > 0) {
+                const tableStr = toGherkinTable(rows, columns)
+                for (const tableLine of tableStr.split('\n')) {
+                  lines.push(`      ${tableLine}`)
+                }
+              }
+            }
+          }
         }
 
         // Examples table for Scenario Outline
@@ -529,6 +556,36 @@ export const useScenarioStore = defineStore('scenario', {
       let descriptionLines: string[] = []
       let exampleColumns: string[] = []
 
+      // DataTable tracking for step tables
+      let lastStep: ScenarioStep | null = null
+      let dataTableLines: string[] = []
+
+      const flushDataTable = () => {
+        if (lastStep && dataTableLines.length > 0) {
+          const tableText = dataTableLines.join('\n')
+          const { columns, rows } = parseGherkinTable(tableText)
+          if (columns.length > 0 && rows.length > 0) {
+            // Find existing table arg or create one
+            const tableArg = lastStep.args.find(a => a.type === 'table')
+            if (tableArg) {
+              tableArg.value = stringifyTableValue(rows)
+              if (!tableArg.tableColumns || tableArg.tableColumns.length === 0) {
+                tableArg.tableColumns = columns
+              }
+            } else {
+              lastStep.args.push({
+                name: 'table',
+                type: 'table',
+                value: stringifyTableValue(rows),
+                tableColumns: columns,
+              })
+            }
+          }
+          dataTableLines = []
+        }
+        lastStep = null
+      }
+
       const lines = content.split('\n')
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? ''
@@ -536,6 +593,7 @@ export const useScenarioStore = defineStore('scenario', {
 
         // Parse tags (lines starting with @)
         if (trimmed.startsWith('@')) {
+          flushDataTable()
           const tags = trimmed.split(/\s+/).filter(t => t.startsWith('@')).map(t => t.slice(1))
           pendingTags.push(...tags)
           parsingDescription = false
@@ -543,12 +601,14 @@ export const useScenarioStore = defineStore('scenario', {
         }
 
         if (trimmed.startsWith('Feature:')) {
+          flushDataTable()
           this.featureName = trimmed.replace('Feature:', '').trim()
           this.featureTags = pendingTags
           pendingTags = []
           parsingDescription = true
           descriptionLines = []
         } else if (trimmed.startsWith('Background:')) {
+          flushDataTable()
           // Save description if we were collecting it
           if (parsingDescription && descriptionLines.length > 0) {
             this.featureDescription = descriptionLines.join('\n').trim()
@@ -557,6 +617,7 @@ export const useScenarioStore = defineStore('scenario', {
           parsingBackground = true
           parsingExamples = false
         } else if (trimmed.startsWith('Scenario Outline:') || trimmed.startsWith('Scenario:')) {
+          flushDataTable()
           // Save description if we were collecting it
           if (parsingDescription && descriptionLines.length > 0) {
             this.featureDescription = descriptionLines.join('\n').trim()
@@ -585,10 +646,11 @@ export const useScenarioStore = defineStore('scenario', {
 
           pendingTags = []
         } else if (trimmed.startsWith('Examples:')) {
+          flushDataTable()
           parsingExamples = true
           exampleColumns = []
         } else if (trimmed.startsWith('|') && parsingExamples && currentScenario?.examples) {
-          // Parse table row
+          // Parse Examples table row
           const cells = trimmed.split('|').slice(1, -1).map(c => c.trim())
 
           if (exampleColumns.length === 0) {
@@ -606,7 +668,11 @@ export const useScenarioStore = defineStore('scenario', {
             })
             currentScenario.examples.rows.push(row)
           }
+        } else if (trimmed.startsWith('|') && !parsingExamples && lastStep) {
+          // Accumulate step DataTable lines
+          dataTableLines.push(trimmed)
         } else if (trimmed.startsWith('Given ') || trimmed.startsWith('When ') || trimmed.startsWith('Then ') || trimmed.startsWith('And ') || trimmed.startsWith('But ')) {
+          flushDataTable()
           parsingExamples = false
           const match = trimmed.match(/^(Given|When|Then|And|But)\s+(.*)$/)
           if (match) {
@@ -628,12 +694,17 @@ export const useScenarioStore = defineStore('scenario', {
             } else if (currentScenario) {
               currentScenario.steps.push(step)
             }
+
+            lastStep = step
           }
         } else if (parsingDescription && trimmed !== '' && !trimmed.startsWith('#')) {
           // Collect description lines (between Feature: and Background:/Scenario:)
           descriptionLines.push(trimmed)
         }
       }
+
+      // Flush any remaining DataTable
+      flushDataTable()
 
       // Push last scenario
       if (currentScenario) {

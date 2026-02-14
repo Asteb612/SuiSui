@@ -155,6 +155,24 @@ const groupedSteps = computed((): StepGroup[] => {
   return groups
 })
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, '\'')
+}
+
 // Format step text with argument values inline (for read mode)
 function formatStepText(step: ScenarioStep): string {
   let text = step.pattern
@@ -177,10 +195,11 @@ function formatStepText(step: ScenarioStep): string {
     if (arg) {
       const placeholderName = getOutlinePlaceholder(arg.value)
       if (placeholderName) {
-        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+        const safeName = escapeHtml(placeholderName)
+        return `<strong class="arg-placeholder">&lt;${safeName}&gt;</strong>`
       }
       const value = arg.value || `<${arg.name}>`
-      return `<strong class="arg-value">${value}</strong>`
+      return `<strong class="arg-value">${escapeHtml(value)}</strong>`
     }
     return '<strong class="arg-value">...</strong>'
   })
@@ -191,11 +210,12 @@ function formatStepText(step: ScenarioStep): string {
     if (arg) {
       const placeholderName = getOutlinePlaceholder(arg.value)
       if (placeholderName) {
-        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+        const safeName = escapeHtml(placeholderName)
+        return `<strong class="arg-placeholder">&lt;${safeName}&gt;</strong>`
       }
       const value = arg.value || `<${arg.name}>`
       const formatted = arg.type === 'string' && arg.value ? `"${arg.value}"` : value
-      return `<strong class="arg-value">${formatted}</strong>`
+      return `<strong class="arg-value">${escapeHtml(formatted)}</strong>`
     }
     return '<strong class="arg-value">...</strong>'
   })
@@ -206,10 +226,11 @@ function formatStepText(step: ScenarioStep): string {
     if (arg) {
       const placeholderName = getOutlinePlaceholder(arg.value)
       if (placeholderName) {
-        return `<strong class="arg-placeholder">&lt;${placeholderName}&gt;</strong>`
+        const safeName = escapeHtml(placeholderName)
+        return `<strong class="arg-placeholder">&lt;${safeName}&gt;</strong>`
       }
       const value = arg.value || `<${arg.name}>`
-      return `<strong class="arg-value arg-enum">${value}</strong>`
+      return `<strong class="arg-value arg-enum">${escapeHtml(value)}</strong>`
     }
     return '<strong class="arg-value">...</strong>'
   })
@@ -222,13 +243,53 @@ function formatStepText(step: ScenarioStep): string {
     // If the value is itself an outline placeholder like <col>, extract the clean name
     const placeholderName = getOutlinePlaceholder(rawValue)
     const displayName = placeholderName || rawValue
-    return `<strong class="arg-placeholder">&lt;${displayName}&gt;</strong>`
+    return `<strong class="arg-placeholder">&lt;${escapeHtml(displayName)}&gt;</strong>`
   })
 
   // Clean regex anchors
   text = stripAnchors(text).trim()
 
   return text
+}
+
+type StepRenderSegment = {
+  type: 'text' | 'strong'
+  className?: string
+  text: string
+}
+
+function formatStepSegments(step: ScenarioStep): StepRenderSegment[] {
+  const html = formatStepText(step)
+  const segments: StepRenderSegment[] = []
+  const regex = /<strong class="([^"]+)">([^<]*)<\/strong>/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = regex.exec(html)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({
+        type: 'text',
+        text: decodeHtml(html.slice(lastIndex, match.index)),
+      })
+    }
+    const className = match[1] ?? ''
+    const segmentText = match[2] ?? ''
+    segments.push({
+      type: 'strong',
+      className,
+      text: decodeHtml(segmentText),
+    })
+    lastIndex = regex.lastIndex
+  }
+
+  if (lastIndex < html.length) {
+    segments.push({
+      type: 'text',
+      text: decodeHtml(html.slice(lastIndex)),
+    })
+  }
+
+  return segments
 }
 
 // Clean regex anchors and escape backslashes from display text
@@ -655,11 +716,20 @@ function selectScenario(index: number) {
                 />
                 
                 <!-- Read mode: formatted text -->
-                <!-- eslint-disable-next-line vue/no-v-html -->
                 <span
                   v-if="!isBackgroundEditMode"
-                  v-html="formatStepText(step)"
-                />
+                >
+                  <template
+                    v-for="(segment, segIdx) in formatStepSegments(step)"
+                    :key="segIdx"
+                  >
+                    <strong
+                      v-if="segment.type === 'strong'"
+                      :class="segment.className"
+                    >{{ segment.text }}</strong>
+                    <span v-else>{{ segment.text }}</span>
+                  </template>
+                </span>
                 
                 <!-- Edit mode: inline editable inputs -->
                 <span
@@ -853,12 +923,21 @@ function selectScenario(index: number) {
                       />
 
                       <!-- Read mode: show formatted step text -->
-                      <!-- eslint-disable-next-line vue/no-v-html -->
                       <span
                         v-if="props.viewMode !== 'edit'"
                         class="step-text"
-                        v-html="formatStepText(step)"
-                      />
+                      >
+                        <template
+                          v-for="(segment, segIdx) in formatStepSegments(step)"
+                          :key="segIdx"
+                        >
+                          <strong
+                            v-if="segment.type === 'strong'"
+                            :class="segment.className"
+                          >{{ segment.text }}</strong>
+                          <span v-else>{{ segment.text }}</span>
+                        </template>
+                      </span>
 
                       <!-- Edit mode: show inline editable inputs -->
                       <span
@@ -936,6 +1015,43 @@ function selectScenario(index: number) {
                             :columns="arg.tableColumns || []"
                             @update:model-value="updateTableArg(step.id, arg.name, $event)"
                           />
+                        </template>
+                      </div>
+
+                      <!-- Table args (read mode, shown below text) -->
+                      <div
+                        v-if="!isEditMode && step.args.some(a => a.type === 'table' && a.value)"
+                        class="step-table-args step-table-readonly"
+                      >
+                        <template
+                          v-for="arg in step.args.filter(a => a.type === 'table' && a.value)"
+                          :key="arg.name"
+                        >
+                          <table class="datatable-readonly">
+                            <thead>
+                              <tr>
+                                <th
+                                  v-for="col in (arg.tableColumns || [])"
+                                  :key="col"
+                                >
+                                  {{ col }}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr
+                                v-for="(row, rowIdx) in parseTableValue(arg.value)"
+                                :key="rowIdx"
+                              >
+                                <td
+                                  v-for="col in (arg.tableColumns || [])"
+                                  :key="col"
+                                >
+                                  {{ row[col] || '' }}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </template>
                       </div>
 
@@ -1159,12 +1275,21 @@ function selectScenario(index: number) {
               <span class="step-count">{{ scenarioStore.scenario.steps.length }} steps</span>
             </div>
             <ol class="steps-list">
-              <!-- eslint-disable-next-line vue/no-v-html -->
               <li
                 v-for="step in scenarioStore.scenario.steps"
                 :key="step.id"
-                v-html="formatStepText(step)"
-              />
+              >
+                <template
+                  v-for="(segment, segIdx) in formatStepSegments(step)"
+                  :key="segIdx"
+                >
+                  <strong
+                    v-if="segment.type === 'strong'"
+                    :class="segment.className"
+                  >{{ segment.text }}</strong>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
+              </li>
             </ol>
           </div>
 
@@ -1961,6 +2086,30 @@ function selectScenario(index: number) {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px dashed var(--surface-border);
+}
+
+/* Read-only DataTable */
+.datatable-readonly {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+.datatable-readonly th {
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+  border-bottom: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.datatable-readonly td {
+  padding: 0.25rem 0.5rem;
+  color: var(--text-color);
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .step-actions {

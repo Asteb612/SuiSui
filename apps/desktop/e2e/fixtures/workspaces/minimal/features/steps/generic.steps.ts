@@ -47,6 +47,12 @@ When('I wait for {int} seconds', async ({ page }, seconds: number) => {
   await page.waitForTimeout(seconds * 1000);
 });
 
+When('I fill in the form with the following data (Field, Value):', async ({ page }, table) => {
+  for (const row of table.rows()) {
+    await page.fill(row[0], row[1]);
+  }
+});
+
 // Assertion steps
 Then('I should see {string}', async ({ page }, text: string) => {
   await page.locator(`text=${text}`).waitFor({ state: 'visible' });

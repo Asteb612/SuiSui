@@ -1310,6 +1310,90 @@ describe('PatternProcessor', () => {
     })
   })
 
+  describe('table pattern handling', () => {
+    const tablePattern = 'I fill in the form with the following data (Field, Value):'
+
+    it('patternToRegex matches step text without column spec', () => {
+      const regex = patternToRegex(tablePattern)
+      expect(regex.test('I fill in the form with the following data:')).toBe(true)
+    })
+
+    it('patternToRegex does not match without trailing colon', () => {
+      const regex = patternToRegex(tablePattern)
+      expect(regex.test('I fill in the form with the following data')).toBe(false)
+    })
+
+    it('matchStep creates table arg without consuming capture groups', () => {
+      const stepDef: StepDefinition = {
+        id: 'table-1',
+        keyword: 'When',
+        pattern: tablePattern,
+        location: '',
+        args: parseArgs(tablePattern),
+      }
+
+      const result = matchStep('I fill in the form with the following data:', stepDef)
+      expect(result).not.toBeNull()
+      expect(result!.args).toHaveLength(1)
+      expect(result!.args[0]!.type).toBe('table')
+      expect(result!.args[0]!.tableColumns).toEqual(['Field', 'Value'])
+      expect(result!.args[0]!.value).toBe('')
+    })
+
+    it('resolvePattern strips column spec and keeps colon', () => {
+      const result = resolvePattern(
+        tablePattern,
+        [{ type: 'table', value: '' }]
+      )
+      expect(result).toBe('I fill in the form with the following data:')
+    })
+
+    it('findBestMatch matches table step definitions', () => {
+      const stepDef: StepDefinition = {
+        id: 'table-match',
+        keyword: 'When',
+        pattern: tablePattern,
+        location: '',
+        args: parseArgs(tablePattern),
+      }
+
+      const result = findBestMatch(
+        'I fill in the form with the following data:',
+        'When',
+        [stepDef]
+      )
+      expect(result.pattern).toBe(tablePattern)
+      expect(result.args).toHaveLength(1)
+      expect(result.args[0]!.type).toBe('table')
+      expect(result.args[0]!.tableColumns).toEqual(['Field', 'Value'])
+    })
+
+    it('table step has highest specificity', () => {
+      const tableStepDef: StepDefinition = {
+        id: 'table-def',
+        keyword: 'When',
+        pattern: tablePattern,
+        location: '',
+        args: parseArgs(tablePattern),
+      }
+      const stringStepDef: StepDefinition = {
+        id: 'string-def',
+        keyword: 'When',
+        pattern: 'I fill in the form with the following data {string}',
+        location: '',
+        args: [{ name: 'arg0', type: 'string', required: true }],
+      }
+
+      // Table step should be preferred over string step
+      const result = findBestMatch(
+        'I fill in the form with the following data:',
+        'When',
+        [stringStepDef, tableStepDef]
+      )
+      expect(result.pattern).toBe(tablePattern)
+    })
+  })
+
   describe('parseSegments with new types', () => {
     it('handles optional text as regular text segment', () => {
       const segments = parseSegments('I have {int} cucumber(s)', [

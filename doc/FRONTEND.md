@@ -105,20 +105,30 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 
 - Scenario name input field
 - Step rows with keyword display (Given/When/Then/And/But)
-- Argument input fields for each step
-- Step reordering (move up/down buttons)
+- Argument input fields for each step (string, int, enum, table)
+- DataTable display: editable `TableEditor` in edit mode, read-only table in read mode
+- Step reordering via drag and drop
 - Step deletion
 - Inline validation issue display
 - Error highlighting on invalid steps
+- Scenario pagination for multi-scenario features
+- Background steps section with drag-and-drop
 
-**Props:** None (uses stores directly)
+**Props:**
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `editMode` | `'scenario' \| 'background'` | `'scenario'` | Which section is being edited |
+| `viewMode` | `'read' \| 'edit' \| 'run'` | `'read'` | Current view mode |
 
-**Events:** None (updates stores directly)
+**Events:**
+| Event | Description |
+|-------|-------------|
+| `toggle-edit-mode` | Toggle between scenario and background editing |
 
 **Store Dependencies:**
 
 - `useScenarioStore` - scenario data and mutations
-- `useStepsStore` - step definitions for pattern matching
+- `useRunnerStore` - test runner status and controls
 
 ---
 
@@ -298,8 +308,9 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 
 - Keyword badge (Given/When/Then/And/But)
 - Pattern text with argument placeholders
-- Inline argument input fields
+- Inline argument input fields (string, int, float, word, any)
 - Enum argument dropdown selectors
+- DataTable argument badge (table editing handled by ScenarioBuilder)
 - Delete and reorder controls
 - Drag handle for reordering
 - Validation error highlighting
@@ -576,17 +587,18 @@ interface Examples {
 **Step Pattern Matching:**
 When parsing Gherkin, the store matches step text against step definitions:
 
-- Supports Cucumber expressions: `{string}`, `{int}`, `{float}`, `{any}`
+- Supports Cucumber expressions: `{string}`, `{int}`, `{float}`, `{word}`, `{any}`
 - Supports regex enum patterns: `(option1|option2|option3)`
+- Supports DataTable patterns: `(Column1, Column2):` suffix
 - Extracts argument values from matched text
 - Falls back to simple pattern if no match found
 
 **Gherkin Conversion:**
 The store handles bidirectional conversion between the internal `Scenario` object and Gherkin text format:
 
-- `toGherkin()` - Serialize scenario to `.feature` file content
-- `parseGherkin()` - Parse `.feature` content into scenario object
-- Supports Background, Scenario, Scenario Outline, and Examples
+- `toGherkin()` - Serialize scenario to `.feature` file content, including DataTable rows after steps with table args
+- `parseGherkin()` - Parse `.feature` content into scenario object, including step DataTables (pipe-delimited rows below steps)
+- Supports Background, Scenario, Scenario Outline, Examples, and DataTables
 
 ---
 

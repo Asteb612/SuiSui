@@ -14,14 +14,15 @@ export class FeatureService {
     }
   }
 
-  private getFullPath(relativePath: string): string {
+  private async getFullPath(relativePath: string): Promise<string> {
     const workspaceService = getWorkspaceService()
     const workspacePath = workspaceService.getPath()
     if (!workspacePath) {
       throw new Error('No workspace selected')
     }
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
     this.validatePath(relativePath)
-    return path.join(workspacePath, 'features', relativePath)
+    return path.join(workspacePath, featuresDir, relativePath)
   }
 
   async list(): Promise<FeatureFile[]> {
@@ -31,7 +32,7 @@ export class FeatureService {
       return []
     }
 
-    const featuresDir = path.join(workspacePath, 'features')
+    const featuresDir = path.join(workspacePath, await workspaceService.getFeaturesDir(workspacePath))
     const features: FeatureFile[] = []
 
     async function scanDir(dir: string, prefix = ''): Promise<void> {
@@ -61,7 +62,7 @@ export class FeatureService {
   }
 
   async read(relativePath: string): Promise<string> {
-    const fullPath = this.getFullPath(relativePath)
+    const fullPath = await this.getFullPath(relativePath)
     
     try {
       return await fs.readFile(fullPath, 'utf-8')
@@ -75,20 +76,20 @@ export class FeatureService {
   }
 
   async write(relativePath: string, content: string): Promise<void> {
-    const fullPath = this.getFullPath(relativePath)
+    const fullPath = await this.getFullPath(relativePath)
     const dir = path.dirname(fullPath)
     await fs.mkdir(dir, { recursive: true })
     await fs.writeFile(fullPath, content, 'utf-8')
   }
 
   async delete(relativePath: string): Promise<void> {
-    const fullPath = this.getFullPath(relativePath)
+    const fullPath = await this.getFullPath(relativePath)
     await fs.unlink(fullPath)
   }
 
   async exists(relativePath: string): Promise<boolean> {
     try {
-      const fullPath = this.getFullPath(relativePath)
+      const fullPath = await this.getFullPath(relativePath)
       await fs.access(fullPath)
       return true
     } catch {
@@ -103,7 +104,8 @@ export class FeatureService {
     if (!workspacePath) {
       throw new Error('No workspace selected')
     }
-    const fullPath = path.join(workspacePath, 'features', relativePath)
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+    const fullPath = path.join(workspacePath, featuresDir, relativePath)
     await fs.mkdir(fullPath, { recursive: true })
   }
 
@@ -115,8 +117,9 @@ export class FeatureService {
     if (!workspacePath) {
       throw new Error('No workspace selected')
     }
-    const oldFullPath = path.join(workspacePath, 'features', oldPath)
-    const newFullPath = path.join(workspacePath, 'features', newPath)
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+    const oldFullPath = path.join(workspacePath, featuresDir, oldPath)
+    const newFullPath = path.join(workspacePath, featuresDir, newPath)
     
     try {
       await fs.rename(oldFullPath, newFullPath)
@@ -136,7 +139,8 @@ export class FeatureService {
     if (!workspacePath) {
       throw new Error('No workspace selected')
     }
-    const fullPath = path.join(workspacePath, 'features', relativePath)
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+    const fullPath = path.join(workspacePath, featuresDir, relativePath)
     
     try {
       await fs.rm(fullPath, { recursive: true, force: false })
@@ -157,8 +161,9 @@ export class FeatureService {
     if (!workspacePath) {
       throw new Error('No workspace selected')
     }
-    const oldFullPath = path.join(workspacePath, 'features', oldPath)
-    const newFullPath = path.join(workspacePath, 'features', newPath)
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+    const oldFullPath = path.join(workspacePath, featuresDir, oldPath)
+    const newFullPath = path.join(workspacePath, featuresDir, newPath)
     
     try {
       await fs.rename(oldFullPath, newFullPath)
@@ -190,8 +195,9 @@ export class FeatureService {
       throw new Error('No workspace selected')
     }
     
-    const sourceFullPath = path.join(workspacePath, 'features', sourcePath)
-    const targetFullPath = path.join(workspacePath, 'features', targetPath)
+    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+    const sourceFullPath = path.join(workspacePath, featuresDir, sourcePath)
+    const targetFullPath = path.join(workspacePath, featuresDir, targetPath)
     
     try {
       const content = await fs.readFile(sourceFullPath, 'utf-8')
@@ -214,7 +220,7 @@ export class FeatureService {
       return []
     }
 
-    const featuresDir = path.join(workspacePath, 'features')
+    const featuresDir = path.join(workspacePath, await workspaceService.getFeaturesDir(workspacePath))
 
     async function scanDir(dir: string, prefix = ''): Promise<FeatureTreeNode[]> {
       try {

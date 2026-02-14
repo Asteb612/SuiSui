@@ -241,26 +241,39 @@ export interface WorkspaceValidation {
 
 ```typescript
 export interface FeatureFile {
-  name: string // File name (e.g., "login.feature")
-  path: string // Relative path from features/
-  fullPath: string // Absolute path
-  modifiedAt: number // Timestamp
+  path: string
+  name: string
+  relativePath: string
+  content?: string
 }
 
-export interface Feature {
+export interface FeatureTreeNode {
+  type: 'folder' | 'file'
   name: string
-  description?: string
-  scenarios: Scenario[]
+  relativePath: string
+  children?: FeatureTreeNode[] // For folders
+  feature?: FeatureFile // For files
 }
 
 export interface Scenario {
   name: string
+  tags?: string[]
   steps: ScenarioStep[]
+  examples?: ExampleTable // When present, this is a Scenario Outline
+}
+
+export interface ExampleTable {
+  columns: string[]
+  rows: ExampleRow[]
+}
+
+export interface ExampleRow {
+  [column: string]: string
 }
 
 export interface ScenarioStep {
   id: string // Unique ID
-  keyword: StepKeyword // Given | When | Then | And | But
+  keyword: 'Given' | 'When' | 'Then' | 'And' | 'But'
   pattern: string // Step pattern with placeholders
   args: StepArg[] // Argument values
 }
@@ -268,11 +281,21 @@ export interface ScenarioStep {
 export interface StepArg {
   name: string
   value: string
-  type: 'string' | 'int' | 'float'
+  type: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table'
+  enumValues?: string[] // For enum args: available options
+  tableColumns?: string[] // For table args: column headers
 }
 
-export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
+export interface Feature {
+  name: string
+  description?: string
+  tags?: string[]
+  background?: ScenarioStep[]
+  scenarios: Scenario[]
+}
 ```
+
+**DataTable args:** When `type` is `'table'`, the `value` field contains a JSON-serialized array of row objects (e.g., `[{"Field":"Name","Value":"John"}]`), and `tableColumns` lists the column names in order (e.g., `["Field", "Value"]`).
 
 ---
 
@@ -281,38 +304,45 @@ export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
 **Location:** `src/types/step.ts`
 
 ```typescript
+export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
+
 export interface StepDefinition {
   id: string // Unique hash
   keyword: StepKeyword
   pattern: string // e.g., "I click on {string}"
-  description?: string
-  file?: string // Source file
-  line?: number // Source line
+  location: string // Source file path
   args: StepArgDefinition[]
-  decorators?: string[]
+  decorator?: string
+  isGeneric?: boolean // True for default generic.steps.ts steps
 }
 
 export interface StepArgDefinition {
-  name: string // Extracted from {int:name} or generated
-  type: 'string' | 'int' | 'float'
-  optional?: boolean
+  name: string // Extracted from {int:name} or generated (arg0, arg1, ...)
+  type: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table'
+  required: boolean
+  enumValues?: string[] // For enum: available options
+  tableColumns?: string[] // For table: column headers
 }
 
 export interface DecoratorDefinition {
   name: string
   description?: string
+  location: string
+  tags?: string[]
 }
 
 export interface StepExportResult {
   steps: StepDefinition[]
   decorators: DecoratorDefinition[]
-  exportedAt: number // Timestamp
+  exportedAt: string // ISO timestamp
 }
 
 // Generic steps are created as real step definition files in the workspace
 // during workspace initialization. See features/steps/generic.steps.ts
 // They are exported along with other project steps via bddgen.
 ```
+
+**Table patterns:** A step definition like `'I fill in the form with the following data (Field, Value):'` declares a DataTable arg. The `(Field, Value)` suffix specifies column names and is stripped during regex matching and Gherkin text resolution.
 
 ---
 

@@ -112,14 +112,18 @@ export class RunnerService {
     let specPath: string | undefined
 
     if (options.featurePath) {
+      const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
+      const normalizedFeaturesDir = featuresDir.replace(/\\/g, '/').replace(/\/+$/, '')
       const normalized = options.featurePath.replace(/\\/g, '/')
-      const isInFeaturesDir = normalized.startsWith('features/')
+      const isInFeaturesDir = normalizedFeaturesDir
+        ? normalized.startsWith(`${normalizedFeaturesDir}/`)
+        : false
 
-      // Ensure the path starts with 'features/'
-      featurePath = isInFeaturesDir ? normalized : `features/${normalized}`
+      // Ensure the path starts with the configured features dir
+      featurePath = isInFeaturesDir ? normalized : `${normalizedFeaturesDir}/${normalized}`
 
       // Convert to the generated spec file path:
-      // features/auth/login.feature -> .features-gen/features/auth/login.feature.spec.js
+      // <featuresDir>/auth/login.feature -> .features-gen/<featuresDir>/auth/login.feature.spec.js
       specPath = `.features-gen/${featurePath.replace(/\.feature$/, '.feature.spec.js')}`
     }
 

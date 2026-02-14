@@ -14,7 +14,7 @@ vi.mock('../services/WorkspaceService', () => ({
 describe('FeatureService', () => {
   let tempDir: string
   let featureService: FeatureService
-  let workspaceService: { getPath: () => string }
+  let workspaceService: { getPath: () => string; getFeaturesDir: (workspacePath?: string) => Promise<string> }
 
   beforeEach(async () => {
     // Create temporary directory
@@ -24,6 +24,7 @@ describe('FeatureService', () => {
     const { getWorkspaceService } = await import('../services/WorkspaceService')
     workspaceService = {
       getPath: () => tempDir,
+      getFeaturesDir: async () => 'features',
     }
     vi.mocked(getWorkspaceService).mockReturnValue(workspaceService)
 

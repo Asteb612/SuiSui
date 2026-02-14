@@ -33,6 +33,7 @@ export class WorkspaceService {
    */
   async detectStepPaths(workspacePath: string): Promise<string[]> {
     const stepDirs = new Set<string>()
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
 
     const scan = async (dir: string, depth: number): Promise<void> => {
       if (depth > 4) return
@@ -71,8 +72,12 @@ export class WorkspaceService {
       roots.add(firstSegment)
     }
 
-    // Build glob patterns. Always include features/steps/ as the default.
-    const defaultPatterns = ['features/steps/**/*.ts', 'features/steps/**/*.js']
+    // Build glob patterns. Always include <featuresDir>/steps/ as the default.
+    const normalizedFeaturesDir = featuresDir.replace(/\\/g, '/')
+    const defaultPatterns = [
+      `${normalizedFeaturesDir}/steps/**/*.ts`,
+      `${normalizedFeaturesDir}/steps/**/*.js`,
+    ]
     const extraPatterns: string[] = []
     for (const root of [...roots].sort()) {
       // Skip if already covered by the default features/steps/ glob
@@ -83,7 +88,7 @@ export class WorkspaceService {
     return [...defaultPatterns, ...extraPatterns]
   }
 
-  private getPlaywrightConfigContent(stepPaths: string[]): string {
+  private getPlaywrightConfigContent(stepPaths: string[], featureGlob: string): string {
     const stepsLine = `  steps: [${stepPaths.map(p => `'${p}'`).join(', ')}],`
     return [
       '// This file is managed by SuiSui - changes may be overwritten',
@@ -94,7 +99,7 @@ export class WorkspaceService {
       'const featureFile = process.env.FEATURE',
       '',
       'const testDir = defineBddConfig({',
-      "  paths: featureFile ? [featureFile] : ['features/**/*.feature'],",
+      `  paths: featureFile ? [featureFile] : ['${featureGlob}'],`,
       stepsLine,
       "  missingSteps: 'fail-on-run',",
       '  verbose: true,',
@@ -121,7 +126,22 @@ export class WorkspaceService {
   private async ensurePlaywrightConfig(workspacePath: string): Promise<void> {
     const playwrightConfigPath = path.join(workspacePath, 'playwright.config.ts')
     const stepPaths = await this.detectStepPaths(workspacePath)
-    const expectedContent = this.getPlaywrightConfigContent(stepPaths)
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
+    const featureGlob = path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')
+    const expectedContent = this.getPlaywrightConfigContent(stepPaths, featureGlob)
+    const configCandidates = [
+      'playwright.config.ts',
+      'playwright.config.js',
+      'playwright.config.mjs',
+      'playwright.config.cjs',
+      path.join('tests', 'playwright.config.ts'),
+      path.join('tests', 'playwright.config.js'),
+      path.join('tests', 'playwright.config.mjs'),
+      path.join('tests', 'playwright.config.cjs'),
+    ]
+    const existingConfigPath = configCandidates
+      .map(candidate => path.join(workspacePath, candidate))
+      .find(candidate => fsSync.existsSync(candidate))
 
     try {
       const existingContent = await fs.readFile(playwrightConfigPath, 'utf-8')
@@ -139,6 +159,10 @@ export class WorkspaceService {
         logger.debug('playwright.config.ts exists but is custom, skipping update', { playwrightConfigPath })
       }
     } catch {
+      if (existingConfigPath && existingConfigPath !== playwrightConfigPath) {
+        logger.debug('Playwright config already exists, skipping creation', { existingConfigPath })
+        return
+      }
       logger.info('Creating playwright.config.ts', { playwrightConfigPath })
       await fs.writeFile(playwrightConfigPath, expectedContent, 'utf-8')
       logger.info('playwright.config.ts created', { playwrightConfigPath })
@@ -152,13 +176,15 @@ export class WorkspaceService {
       await fs.access(cucumberJsonPath)
       logger.debug('cucumber.json already exists', { cucumberJsonPath })
     } catch {
+      const featuresDir = await this.detectFeaturesDir(workspacePath)
+      const featuresGlob = path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')
       logger.info('Creating cucumber.json', { cucumberJsonPath })
       const cucumberConfig = {
         default: {
           formatOptions: {
             snippetInterface: 'async-await',
           },
-          paths: ['features/**/*.feature'],
+          paths: [featuresGlob],
           require: stepPaths,
           format: [
             'progress-bar',
@@ -173,8 +199,15 @@ export class WorkspaceService {
   }
 
   private async ensureDefaultSteps(workspacePath: string): Promise<void> {
-    const stepsPath = path.join(workspacePath, 'features', 'steps')
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
+    const stepsPath = path.join(workspacePath, featuresDir, 'steps')
     const defaultStepsPath = path.join(stepsPath, 'generic.steps.ts')
+
+    const shouldCreate = await this.shouldCreateDefaultSteps(workspacePath)
+    if (!shouldCreate) {
+      logger.debug('Skipping default steps creation', { workspacePath })
+      return
+    }
 
     try {
       await fs.access(defaultStepsPath)
@@ -197,6 +230,112 @@ export class WorkspaceService {
       await fs.writeFile(defaultStepsPath, defaultStepsContent, 'utf-8')
       logger.info('generic.steps.ts created', { defaultStepsPath })
     }
+  }
+
+  private async shouldCreateDefaultSteps(workspacePath: string): Promise<boolean> {
+    const configCandidates = [
+      'playwright.config.ts',
+      'playwright.config.js',
+      'playwright.config.mjs',
+      'playwright.config.cjs',
+      path.join('tests', 'playwright.config.ts'),
+      path.join('tests', 'playwright.config.js'),
+      path.join('tests', 'playwright.config.mjs'),
+      path.join('tests', 'playwright.config.cjs'),
+    ]
+
+    for (const candidate of configCandidates) {
+      const fullPath = path.join(workspacePath, candidate)
+      if (fsSync.existsSync(fullPath)) {
+        return false
+      }
+    }
+
+    try {
+      await fs.access(path.join(workspacePath, 'cucumber.json'))
+      return false
+    } catch {
+      return true
+    }
+  }
+
+  private normalizeFeatureDir(pattern: string): string | null {
+    const trimmed = pattern.trim()
+    if (!trimmed) return null
+
+    // Extract base path before any glob chars
+    const globIndex = trimmed.search(/[{}*?[\]]/)
+    let base = globIndex >= 0 ? trimmed.slice(0, globIndex) : trimmed
+    base = base.replace(/\\/g, '/')
+    base = base.replace(/\/+$/, '')
+
+    if (!base) return null
+
+    // If base still looks like a file, use its directory
+    if (base.endsWith('.feature')) {
+      return path.dirname(base).replace(/\\/g, '/')
+    }
+
+    if (base.startsWith('./')) {
+      base = base.slice(2)
+    }
+
+    return base
+  }
+
+  private extractFeatureDirFromPlaywrightConfig(content: string): string | null {
+    // Look for string literals that reference .feature paths
+    const match = content.match(/['"`]([^'"`]*\.feature[^'"`]*)['"`]/)
+    if (!match || !match[1]) return null
+    return this.normalizeFeatureDir(match[1])
+  }
+
+  private extractFeatureDirFromCucumberJson(content: string): string | null {
+    try {
+      const parsed = JSON.parse(content)
+      const pathsValue = parsed?.default?.paths ?? parsed?.paths
+      if (Array.isArray(pathsValue) && typeof pathsValue[0] === 'string') {
+        return this.normalizeFeatureDir(pathsValue[0])
+      }
+    } catch {
+      // Ignore parse errors and fall back to defaults
+    }
+    return null
+  }
+
+  private async detectFeaturesDir(workspacePath: string): Promise<string> {
+    const configCandidates = [
+      'playwright.config.ts',
+      'playwright.config.js',
+      'playwright.config.mjs',
+      'playwright.config.cjs',
+      path.join('tests', 'playwright.config.ts'),
+      path.join('tests', 'playwright.config.js'),
+      path.join('tests', 'playwright.config.mjs'),
+      path.join('tests', 'playwright.config.cjs'),
+    ]
+
+    for (const candidate of configCandidates) {
+      const configPath = path.join(workspacePath, candidate)
+      try {
+        const content = await fs.readFile(configPath, 'utf-8')
+        const detected = this.extractFeatureDirFromPlaywrightConfig(content)
+        if (detected) return detected
+      } catch {
+        // Ignore missing/unreadable config files
+      }
+    }
+
+    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+    try {
+      const content = await fs.readFile(cucumberJsonPath, 'utf-8')
+      const detected = this.extractFeatureDirFromCucumberJson(content)
+      if (detected) return detected
+    } catch {
+      // Ignore missing/unreadable cucumber.json
+    }
+
+    return 'features'
   }
 
   private getExpectedScripts(): Record<string, string> {
@@ -285,14 +424,20 @@ export class WorkspaceService {
       logger.debug('Missing package.json', { packageJsonPath })
     }
 
-    const featuresPath = path.join(workspacePath, 'features')
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
+    const featuresPath = path.join(workspacePath, featuresDir)
     let hasFeaturesDir = false
     try {
       const stat = await fs.stat(featuresPath)
       hasFeaturesDir = stat.isDirectory()
     } catch {
-      errors.push('Missing features/ directory')
-      logger.debug('Missing features/ directory', { featuresPath })
+      if (featuresDir === 'features') {
+        errors.push('Missing features/ directory')
+        logger.debug('Missing features/ directory', { featuresPath })
+      } else {
+        errors.push(`Missing ${featuresDir} directory`)
+        logger.debug('Missing configured features directory', { featuresPath, featuresDir })
+      }
     }
 
     const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
@@ -417,6 +562,12 @@ export class WorkspaceService {
     return this.currentWorkspace?.path ?? null
   }
 
+  async getFeaturesDir(workspacePath?: string): Promise<string> {
+    const resolvedPath = workspacePath ?? this.getPath()
+    if (!resolvedPath) return 'features'
+    return await this.detectFeaturesDir(resolvedPath)
+  }
+
   clear(): void {
     this.currentWorkspace = null
   }
@@ -498,15 +649,18 @@ export class WorkspaceService {
       logger.info('package.json created', { packageJsonPath })
     }
 
-    // Create features directory if missing
-    const featuresPath = path.join(workspacePath, 'features')
-    try {
-      await fs.access(featuresPath)
-      logger.debug('features/ directory already exists', { featuresPath })
-    } catch {
-      logger.info('Creating features/ directory', { featuresPath })
-      await fs.mkdir(featuresPath, { recursive: true })
-      logger.info('features/ directory created', { featuresPath })
+    // Create features directory if missing and no custom features dir is configured
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
+    const featuresPath = path.join(workspacePath, featuresDir)
+    if (featuresDir === 'features') {
+      try {
+        await fs.access(featuresPath)
+        logger.debug('features/ directory already exists', { featuresPath })
+      } catch {
+        logger.info('Creating features/ directory', { featuresPath })
+        await fs.mkdir(featuresPath, { recursive: true })
+        logger.info('features/ directory created', { featuresPath })
+      }
     }
 
     await this.ensurePlaywrightConfig(workspacePath)
