@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ref } from 'vue'
 import { render, screen, fireEvent } from '@testing-library/vue'
 import TreeNodeItem from '../components/TreeNodeItem.vue'
 import { primeVueStubs } from './testUtils'
@@ -376,7 +377,7 @@ describe('TreeNodeItem', () => {
   })
 
   describe('recursive children events', () => {
-    it('propagates select event from child', async () => {
+    it('propagates select event from child via injected onNodeSelect', async () => {
       const childNode: FeatureTreeNode = {
         type: 'file',
         name: 'login',
@@ -391,14 +392,32 @@ describe('TreeNodeItem', () => {
         children: [childNode],
       }
 
-      const { emitted } = createWrapper({ node, expanded: true })
+      // TreeNodeItem uses inject('onNodeSelect') to propagate selection from children.
+      // Without providing it, the child click is silently dropped.
+      const onNodeSelectSpy = vi.fn()
+      render(TreeNodeItem, {
+        props: {
+          node,
+          expanded: true,
+          selected: false,
+        },
+        global: {
+          stubs: primeVueStubs,
+          provide: {
+            onNodeSelect: onNodeSelectSpy,
+            expandedKeys: ref({}),
+            selectedKey: ref(''),
+            toggleExpanded: vi.fn(),
+          },
+        },
+      })
 
       // Click on child node
       const childContent = screen.getByText('login').closest('.node-content')!
       await fireEvent.click(childContent)
 
-      // Select event should have propagated
-      expect(emitted()['select']).toBeTruthy()
+      // The injected onNodeSelect should have been called with the child node
+      expect(onNodeSelectSpy).toHaveBeenCalledWith(childNode)
     })
   })
 })

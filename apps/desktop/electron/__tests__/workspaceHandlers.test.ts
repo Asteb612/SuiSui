@@ -9,6 +9,13 @@ import { resetWorkspaceService } from '../services/WorkspaceService'
 import type { AppSettings } from '@suisui/shared'
 import { DEFAULT_SETTINGS } from '@suisui/shared'
 
+/** IPC handler signature used by ipcMain.handle */
+type IpcHandler = (event: unknown, ...args: unknown[]) => Promise<unknown>
+/** Mock IpcMain with test helper to invoke handlers */
+type MockIpcMainWithInvoke = IpcMain & {
+  invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+}
+
 // Read the actual asset file content for mocking
 const assetFilePath = path.join(__dirname, '..', 'assets', 'generic.steps.ts')
 const defaultStepsContent = readFileSync(assetFilePath, 'utf-8')
@@ -18,6 +25,20 @@ vi.mock('node:fs/promises', async () => {
   const memfs = await import('memfs')
   return {
     default: memfs.vol.promises,
+  }
+})
+
+// Mock node:fs sync with memfs for existsSync, but keep real readFileSync for asset loading
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  const memfs = await import('memfs')
+  return {
+    default: {
+      ...actual,
+      existsSync: memfs.fs.existsSync.bind(memfs.fs),
+    },
+    ...actual,
+    existsSync: memfs.fs.existsSync.bind(memfs.fs),
   }
 })
 
@@ -86,9 +107,9 @@ describe('Workspace IPC Handlers', () => {
     mockGet.mockResolvedValue({ ...DEFAULT_SETTINGS })
 
     // Create mock IPC main
-    const handlers = new Map<string, (...args: any[]) => Promise<any>>()
+    const handlers = new Map<string, IpcHandler>()
     mockIpcMain = {
-      handle: vi.fn((channel: string, handler: (...args: any[]) => Promise<any>) => {
+      handle: vi.fn((channel: string, handler: IpcHandler) => {
         handlers.set(channel, handler)
       }),
       removeHandler: vi.fn(),
@@ -108,16 +129,16 @@ describe('Workspace IPC Handlers', () => {
     registerIpcHandlers(mockIpcMain, mockDialog, mockShell, { isTestMode: false })
 
     // Helper to invoke handler
-    const invokeHandler = async (channel: string, ...args: any[]) => {
+    const invokeHandler = async (channel: string, ...args: unknown[]) => {
       const handler = handlers.get(channel)
       if (!handler) {
         throw new Error(`No handler registered for channel: ${channel}`)
       }
-      return handler({} as any, ...args)
+      return handler({} as unknown, ...args)
     }
 
     // Attach helper to mockIpcMain for easier access
-    ;(mockIpcMain as any).invoke = invokeHandler
+    ;(mockIpcMain as MockIpcMainWithInvoke).invoke = invokeHandler
   })
 
   describe('WORKSPACE_GET', () => {
@@ -130,7 +151,7 @@ describe('Workspace IPC Handlers', () => {
       })
 
       // First set the workspace
-      const setHandler = (mockIpcMain as any).invoke
+      const setHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       await setHandler(IPC_CHANNELS.WORKSPACE_SET, workspacePath)
 
       // Then get it
@@ -141,7 +162,7 @@ describe('Workspace IPC Handlers', () => {
     })
 
     it('should return null when no workspace is set', async () => {
-      const getHandler = (mockIpcMain as any).invoke
+      const getHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await getHandler(IPC_CHANNELS.WORKSPACE_GET)
 
       expect(result).toBeNull()
@@ -157,7 +178,7 @@ describe('Workspace IPC Handlers', () => {
         [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
-      const setHandler = (mockIpcMain as any).invoke
+      const setHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await setHandler(IPC_CHANNELS.WORKSPACE_SET, workspacePath)
 
       expect(result.isValid).toBe(true)
@@ -168,7 +189,7 @@ describe('Workspace IPC Handlers', () => {
     it('should return validation errors for invalid workspace', async () => {
       const invalidPath = '/invalid/workspace'
 
-      const setHandler = (mockIpcMain as any).invoke
+      const setHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await setHandler(IPC_CHANNELS.WORKSPACE_SET, invalidPath)
 
       expect(result.isValid).toBe(false)
@@ -183,7 +204,7 @@ describe('Workspace IPC Handlers', () => {
         filePaths: [],
       })
 
-      const selectHandler = (mockIpcMain as any).invoke
+      const selectHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await selectHandler(IPC_CHANNELS.WORKSPACE_SELECT)
 
       expect(result.workspace).toBeNull()
@@ -204,7 +225,7 @@ describe('Workspace IPC Handlers', () => {
         filePaths: [workspacePath],
       })
 
-      const selectHandler = (mockIpcMain as any).invoke
+      const selectHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await selectHandler(IPC_CHANNELS.WORKSPACE_SELECT)
 
       expect(result.workspace).not.toBeNull()
@@ -222,7 +243,7 @@ describe('Workspace IPC Handlers', () => {
         filePaths: [invalidPath],
       })
 
-      const selectHandler = (mockIpcMain as any).invoke
+      const selectHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await selectHandler(IPC_CHANNELS.WORKSPACE_SELECT)
 
       expect(result.workspace).toBeNull()
@@ -238,7 +259,7 @@ describe('Workspace IPC Handlers', () => {
         filePaths: [],
       })
 
-      const selectHandler = (mockIpcMain as any).invoke
+      const selectHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await selectHandler(IPC_CHANNELS.WORKSPACE_SELECT)
 
       expect(result.workspace).toBeNull()
@@ -251,6 +272,7 @@ describe('Workspace IPC Handlers', () => {
       vol.fromJSON({
         [`${testWorkspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${testWorkspacePath}/features/.gitkeep`]: '',
+        [`${testWorkspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
       // Save original env
@@ -259,9 +281,9 @@ describe('Workspace IPC Handlers', () => {
 
       try {
         // Re-register handlers in test mode
-        const handlers = new Map<string, (...args: any[]) => Promise<any>>()
+        const handlers = new Map<string, IpcHandler>()
         const testMockIpcMain = {
-          handle: vi.fn((channel: string, handler: (...args: any[]) => Promise<any>) => {
+          handle: vi.fn((channel: string, handler: IpcHandler) => {
             handlers.set(channel, handler)
           }),
         } as unknown as IpcMain
@@ -269,7 +291,7 @@ describe('Workspace IPC Handlers', () => {
         registerIpcHandlers(testMockIpcMain, mockDialog, mockShell, { isTestMode: true })
 
         const selectHandler = handlers.get(IPC_CHANNELS.WORKSPACE_SELECT)!
-        const result = await selectHandler({} as any)
+        const result = await selectHandler({} as unknown)
 
         expect(result.workspace).not.toBeNull()
         expect(result.workspace?.path).toBe(testWorkspacePath)
@@ -294,7 +316,7 @@ describe('Workspace IPC Handlers', () => {
         [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
       })
 
-      const validateHandler = (mockIpcMain as any).invoke
+      const validateHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await validateHandler(IPC_CHANNELS.WORKSPACE_VALIDATE, workspacePath)
 
       expect(result.isValid).toBe(true)
@@ -304,7 +326,7 @@ describe('Workspace IPC Handlers', () => {
     it('should return validation errors for invalid path', async () => {
       const invalidPath = '/invalid/workspace'
 
-      const validateHandler = (mockIpcMain as any).invoke
+      const validateHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await validateHandler(IPC_CHANNELS.WORKSPACE_VALIDATE, invalidPath)
 
       expect(result.isValid).toBe(false)
@@ -319,7 +341,7 @@ describe('Workspace IPC Handlers', () => {
         [`${workspacePath}/features/.gitkeep`]: '',
       })
 
-      const initHandler = (mockIpcMain as any).invoke
+      const initHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await initHandler(IPC_CHANNELS.WORKSPACE_INIT, workspacePath)
 
       expect(result.isValid).toBe(true)
@@ -342,7 +364,7 @@ describe('Workspace IPC Handlers', () => {
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
       })
 
-      const initHandler = (mockIpcMain as any).invoke
+      const initHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       const result = await initHandler(IPC_CHANNELS.WORKSPACE_INIT, workspacePath)
 
       expect(result.isValid).toBe(true)
@@ -359,11 +381,161 @@ describe('Workspace IPC Handlers', () => {
         [`${workspacePath}/features/.gitkeep`]: '',
       })
 
-      const initHandler = (mockIpcMain as any).invoke
+      const initHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       await initHandler(IPC_CHANNELS.WORKSPACE_INIT, workspacePath)
 
       expect(mockSave).toHaveBeenCalledWith({ workspacePath })
       expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
+    })
+  })
+
+  describe('WORKSPACE_GET — cold load from settings', () => {
+    it('should load workspace from settings on cold start', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      // Configure settings to return a workspace path
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath,
+      })
+
+      // Fresh handler set (no workspace previously set)
+      const handlers = new Map<string, IpcHandler>()
+      const freshIpcMain = {
+        handle: vi.fn((channel: string, handler: IpcHandler) => {
+          handlers.set(channel, handler)
+        }),
+        removeHandler: vi.fn(),
+      } as unknown as IpcMain
+
+      resetWorkspaceService()
+      registerIpcHandlers(freshIpcMain, mockDialog, mockShell, { isTestMode: false })
+
+      const getHandler = handlers.get(IPC_CHANNELS.WORKSPACE_GET)!
+      const result = await getHandler({} as unknown)
+
+      expect(result).not.toBeNull()
+      expect(result?.path).toBe(workspacePath)
+    })
+
+    it('should return null when settings have no workspace path', async () => {
+      mockGet.mockResolvedValue({ ...DEFAULT_SETTINGS })
+
+      const handlers = new Map<string, IpcHandler>()
+      const freshIpcMain = {
+        handle: vi.fn((channel: string, handler: IpcHandler) => {
+          handlers.set(channel, handler)
+        }),
+        removeHandler: vi.fn(),
+      } as unknown as IpcMain
+
+      resetWorkspaceService()
+      registerIpcHandlers(freshIpcMain, mockDialog, mockShell, { isTestMode: false })
+
+      const getHandler = handlers.get(IPC_CHANNELS.WORKSPACE_GET)!
+      const result = await getHandler({} as unknown)
+
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('WORKSPACE_VALIDATE — edge cases', () => {
+    it('should return multiple errors for empty directory', async () => {
+      const workspacePath = '/test/empty-workspace'
+      vol.fromJSON({
+        [`${workspacePath}/.gitkeep`]: '',
+      })
+
+      const validateHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
+      const result = await validateHandler(IPC_CHANNELS.WORKSPACE_VALIDATE, workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing package.json')
+      expect(result.errors).toContain('Missing features/ directory')
+      expect(result.errors).toContain('Missing cucumber.json')
+    })
+
+    it('should validate workspace with custom features dir from cucumber.json', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/specs/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({
+          default: { paths: ['specs/**/*.feature'] },
+        }),
+      })
+
+      const validateHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
+      const result = await validateHandler(IPC_CHANNELS.WORKSPACE_VALIDATE, workspacePath)
+
+      expect(result.isValid).toBe(true)
+    })
+  })
+
+  describe('WORKSPACE_SELECT — full flow', () => {
+    it('should set workspace, save to settings, and return full workspace info', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      ;(mockDialog.showOpenDialog as ReturnType<typeof vi.fn>).mockResolvedValue({
+        canceled: false,
+        filePaths: [workspacePath],
+      })
+
+      const selectHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
+      const result = await selectHandler(IPC_CHANNELS.WORKSPACE_SELECT)
+
+      // Full workspace info should be returned
+      expect(result.workspace?.path).toBe(workspacePath)
+      expect(result.workspace?.name).toBe('workspace')
+      expect(result.workspace?.isValid).toBe(true)
+      expect(result.workspace?.hasPackageJson).toBe(true)
+      expect(result.workspace?.hasFeaturesDir).toBe(true)
+      expect(result.workspace?.hasCucumberJson).toBe(true)
+      expect(result.validation?.isValid).toBe(true)
+      expect(result.selectedPath).toBe(workspacePath)
+    })
+  })
+
+  describe('WORKSPACE_INIT — full flow', () => {
+    it('should create all missing files during init', async () => {
+      const workspacePath = '/test/empty-init'
+      vol.fromJSON({
+        [`${workspacePath}/.gitkeep`]: '',
+      })
+
+      const initHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
+      const result = await initHandler(IPC_CHANNELS.WORKSPACE_INIT, workspacePath)
+
+      expect(result.isValid).toBe(true)
+
+      // All required files should have been created
+      const packageJson = JSON.parse(
+        String(await vol.promises.readFile(path.join(workspacePath, 'package.json'), 'utf-8'))
+      )
+      expect(packageJson.name).toBe('empty-init')
+
+      const cucumberJson = JSON.parse(
+        String(await vol.promises.readFile(path.join(workspacePath, 'cucumber.json'), 'utf-8'))
+      )
+      expect(cucumberJson.default).toBeDefined()
+
+      const playwrightConfig = String(
+        await vol.promises.readFile(path.join(workspacePath, 'playwright.config.ts'), 'utf-8')
+      )
+      expect(playwrightConfig).toContain('defineBddConfig')
+
+      const featuresStat = await vol.promises.stat(path.join(workspacePath, 'features'))
+      expect(featuresStat.isDirectory()).toBe(true)
     })
   })
 })

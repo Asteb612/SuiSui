@@ -97,8 +97,14 @@ function onCancel() {
           class="w-full"
           data-testid="custom-filename-input"
         />
+        <small
+          v-if="useCustomFileName && customFileName.length > 0 && !customFileName.endsWith('.feature')"
+          class="feature-warning"
+        >
+          File name must end with .feature
+        </small>
         <div
-          v-else
+          v-if="!useCustomFileName"
           class="suggested-filename"
         >
           <i class="pi pi-file" />
@@ -179,5 +185,10 @@ function onCancel() {
 
 .w-full {
   width: 100%;
+}
+
+.feature-warning {
+  color: #dc3545;
+  font-size: 0.75rem;
 }
 </style>

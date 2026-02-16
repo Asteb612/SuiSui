@@ -472,7 +472,7 @@ describe('ScenarioBuilder', () => {
       expect(container.querySelector('.scenario-pagination')).toBeTruthy()
     })
 
-    it('hides pagination in edit mode', () => {
+    it('shows pagination in edit mode with add/remove buttons', () => {
       const { container } = createWrapper({ viewMode: 'edit' }, {
         scenario: {
           currentFeaturePath: 'test.feature',
@@ -483,7 +483,9 @@ describe('ScenarioBuilder', () => {
         },
       })
 
-      expect(container.querySelector('.scenario-pagination')).toBeNull()
+      expect(container.querySelector('.scenario-pagination')).not.toBeNull()
+      expect(container.querySelector('[title="Add new scenario"]')).not.toBeNull()
+      expect(container.querySelector('[title="Remove current scenario"]')).not.toBeNull()
     })
 
     it('shows pagination dots for each scenario', () => {

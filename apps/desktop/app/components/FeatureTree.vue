@@ -28,7 +28,7 @@ const treeData = computed(() => workspaceStore.featureTree)
 function onNodeSelect(node: FeatureTreeNode) {
   selectedKey.value = node.relativePath
   if (node.type === 'file' && node.feature) {
-    scenarioStore.loadFromFeature(node.feature.relativePath, stepsStore.steps)
+    workspaceStore.selectFeature(node.feature)
   }
 }
 

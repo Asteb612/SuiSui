@@ -343,6 +343,10 @@ function removeBackgroundStep(stepId: string) {
 const activeDropZone = ref<{ target: 'scenario' | 'background'; index: number } | null>(null)
 const draggingStepId = ref<string | null>(null)
 
+// Track when any drag (internal or catalog) is active
+const catalogDragOver = ref(false)
+const isDraggingActive = computed(() => draggingStepId.value !== null || catalogDragOver.value)
+
 // Get flat list of all scenario steps for indexing
 const flatSteps = computed(() => scenarioStore.scenario.steps)
 
@@ -399,6 +403,7 @@ function handleDropOnZone(event: DragEvent, target: 'scenario' | 'background', i
   event.preventDefault()
   event.stopPropagation()
   activeDropZone.value = null
+  catalogDragOver.value = false
 
   // Check if reordering existing step
   if (draggingStepId.value) {
@@ -468,6 +473,7 @@ function handleStepDragStart(event: DragEvent, target: 'scenario' | 'background'
 function handleStepDragEnd() {
   draggingStepId.value = null
   activeDropZone.value = null
+  catalogDragOver.value = false
 }
 
 // Check if step is being dragged
@@ -525,9 +531,9 @@ function selectScenario(index: number) {
 
     <!-- Scenario content -->
     <template v-else>
-      <!-- Scenario Pagination (when multiple scenarios, hidden in edit mode) -->
+      <!-- Scenario Pagination -->
       <div
-        v-if="scenarioStore.scenarios.length > 1 && !isEditMode"
+        v-if="scenarioStore.scenarios.length > 1 || isEditMode"
         class="scenario-pagination"
       >
         <Button
@@ -556,10 +562,38 @@ function selectScenario(index: number) {
           :disabled="scenarioStore.activeScenarioIndex === scenarioStore.scenarios.length - 1"
           @click="selectScenario(scenarioStore.activeScenarioIndex + 1)"
         />
+        <!-- Add/Remove scenario buttons (edit mode only) -->
+        <template v-if="isEditMode">
+          <div class="pagination-separator" />
+          <Button
+            icon="pi pi-plus"
+            text
+            rounded
+            size="small"
+            title="Add new scenario"
+            @click="scenarioStore.addScenario()"
+          />
+          <Button
+            icon="pi pi-trash"
+            text
+            rounded
+            size="small"
+            severity="danger"
+            title="Remove current scenario"
+            :disabled="scenarioStore.scenarios.length <= 1"
+            @click="scenarioStore.removeScenario(scenarioStore.activeScenarioIndex)"
+          />
+        </template>
       </div>
 
       <!-- Scenario Card -->
-      <div class="scenario-card">
+      <div
+        class="scenario-card"
+        :class="{ 'dragging-active': isDraggingActive }"
+        @dragover.prevent="catalogDragOver = true"
+        @dragleave.self="catalogDragOver = false"
+        @drop="catalogDragOver = false"
+      >
         <!-- Header: Name + Tags -->
         <div class="scenario-header">
           <div class="scenario-title-row">
@@ -626,7 +660,7 @@ function selectScenario(index: number) {
           </div>
 
           <div
-            v-if="scenarioTags.length > 0"
+            v-if="scenarioTags.length > 0 && !isEditMode"
             class="scenario-tags"
           >
             <span
@@ -645,6 +679,17 @@ function selectScenario(index: number) {
             @update:tags="updateScenarioTags"
           />
         </div>
+
+        <!-- Add Preconditions button (edit mode, no background, not in background edit mode) -->
+        <Button
+          v-if="isEditMode && !isBackgroundEditMode && scenarioStore.background.length === 0 && !isRunMode"
+          icon="pi pi-key"
+          label="Add Preconditions"
+          text
+          size="small"
+          class="add-preconditions-trigger"
+          @click="$emit('toggle-edit-mode')"
+        />
 
         <!-- Preconditions (Background) - shown in read/edit modes -->
         <div
@@ -691,8 +736,8 @@ function selectScenario(index: number) {
               <div class="drop-indicator" />
               <Button
                 icon="pi pi-plus"
+                label="Add step"
                 text
-                rounded
                 size="small"
                 class="add-step-btn"
                 @click="openAddStepDialog('background', 0)"
@@ -803,8 +848,8 @@ function selectScenario(index: number) {
                 <div class="drop-indicator" />
                 <Button
                   icon="pi pi-plus"
+                  label="Add step"
                   text
-                  rounded
                   size="small"
                   class="add-step-btn"
                   @click="openAddStepDialog('background', index + 1)"
@@ -879,8 +924,8 @@ function selectScenario(index: number) {
               <div class="drop-indicator" />
               <Button
                 icon="pi pi-plus"
+                label="Add step"
                 text
-                rounded
                 size="small"
                 class="add-step-btn"
                 @click="openAddStepDialog('scenario', 0)"
@@ -1097,8 +1142,8 @@ function selectScenario(index: number) {
                       <div class="drop-indicator" />
                       <Button
                         icon="pi pi-plus"
+                        label="Add step"
                         text
-                        rounded
                         size="small"
                         class="add-step-btn"
                         @click="openAddStepDialog('scenario', flatSteps.findIndex(s => s.id === step.id) + 1)"
@@ -1462,6 +1507,13 @@ function selectScenario(index: number) {
   height: 8px;
 }
 
+.pagination-separator {
+  width: 1px;
+  height: 16px;
+  background: var(--surface-border);
+  margin: 0 0.25rem;
+}
+
 /* Empty state */
 .empty-state {
   display: flex;
@@ -1726,21 +1778,23 @@ function selectScenario(index: number) {
 }
 
 .drop-zone:hover,
-.drop-zone.active {
-  height: 28px;
+.drop-zone.active,
+.dragging-active .drop-zone {
+  height: 32px;
   background: rgba(59, 130, 246, 0.08);
 }
 
 .drop-zone:hover .drop-indicator,
-.drop-zone.active .drop-indicator {
-  background: var(--primary-color);
+.drop-zone.active .drop-indicator,
+.dragging-active .drop-zone .drop-indicator {
   opacity: 1;
   left: 0.5rem;
   right: 0.5rem;
 }
 
 .drop-zone:hover::before,
-.drop-zone.active::before {
+.drop-zone.active::before,
+.dragging-active .drop-zone::before {
   opacity: 0;
 }
 
@@ -1783,17 +1837,19 @@ function selectScenario(index: number) {
   transform: translate(-50%, -50%);
   opacity: 0;
   transition: opacity 0.15s;
-  width: 20px;
-  height: 20px;
-  padding: 0;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
   z-index: 1;
+  white-space: nowrap;
 }
 
-.drop-zone:hover .add-step-btn {
+.drop-zone:hover .add-step-btn,
+.dragging-active .drop-zone .add-step-btn {
   opacity: 1;
 }
 
-.drop-zone:hover .drop-indicator {
+.drop-zone:hover .drop-indicator,
+.dragging-active .drop-zone .drop-indicator {
   opacity: 0;
 }
 
@@ -2168,10 +2224,16 @@ function selectScenario(index: number) {
   font-size: 0.8125rem;
 }
 
+.add-preconditions-trigger {
+  margin-bottom: 1rem;
+  color: #b45309;
+}
+
 .add-variations-trigger {
   margin-top: 0.75rem;
   color: var(--text-color-secondary);
 }
+
 
 /* Drop zone */
 .drop-active {
@@ -2534,6 +2596,7 @@ function selectScenario(index: number) {
 /* Mode-specific adjustments */
 .mode-read .scenario-card {
   max-width: 700px;
+  min-width: 700px;
   margin: 0 auto;
 }
 

@@ -14,6 +14,23 @@ vi.mock('node:fs/promises', async () => {
   }
 })
 
+// Mock node:fs (sync) — full memfs replacement with real readFileSync fallback for assets
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  const memfs = await import('memfs')
+  const realReadFileSync = actual.readFileSync
+  // Use memfs for existsSync, real fs for readFileSync (needed for asset loading at import time)
+  const merged = {
+    ...actual,
+    ...memfs.fs,
+    readFileSync: realReadFileSync,
+  }
+  return {
+    ...merged,
+    default: merged,
+  }
+})
+
 // Mock SettingsService
 const mockSave = vi.fn()
 const mockAddRecentWorkspace = vi.fn()
@@ -810,6 +827,148 @@ describe('WorkspaceService', () => {
       const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
       const packageJson = JSON.parse(packageJsonContent as string)
       expect(packageJson.name).toBe('workspace')
+    })
+  })
+
+  describe('detectFeaturesDir', () => {
+    it('should return "features" as default when no config exists', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+      })
+
+      const result = await service.detectFeaturesDir(workspacePath)
+      expect(result).toBe('features')
+    })
+
+    it('should detect features dir from playwright.config.ts', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/playwright.config.ts`]: [
+          "import { defineBddConfig } from 'playwright-bdd'",
+          "const testDir = defineBddConfig({",
+          "  paths: ['specs/**/*.feature'],",
+          '})',
+        ].join('\n'),
+      })
+
+      const result = await service.detectFeaturesDir(workspacePath)
+      expect(result).toBe('specs')
+    })
+
+    it('should detect features dir from cucumber.json default.paths', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({
+          default: { paths: ['tests/features/**/*.feature'] },
+        }),
+      })
+
+      const result = await service.detectFeaturesDir(workspacePath)
+      expect(result).toBe('tests/features')
+    })
+
+    it('should fall back to "features" when config has no feature paths', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      const result = await service.detectFeaturesDir(workspacePath)
+      expect(result).toBe('features')
+    })
+
+    it('should fall back to "features" when cucumber.json is malformed', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/cucumber.json`]: 'not valid json',
+      })
+
+      const result = await service.detectFeaturesDir(workspacePath)
+      expect(result).toBe('features')
+    })
+  })
+
+  describe('ensurePlaywrightConfig — update logic', () => {
+    it('should update SuiSui-managed config when content is outdated', async () => {
+      const workspacePath = '/test/workspace'
+      const outdatedConfig = [
+        '// This file is managed by SuiSui',
+        'import { defineConfig } from "@playwright/test"',
+        'export default defineConfig({})',
+      ].join('\n')
+
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.ts`]: outdatedConfig,
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const updatedContent = String(await vol.promises.readFile(configPath, 'utf-8'))
+      // Should have been replaced with the full template
+      expect(updatedContent).toContain('defineBddConfig')
+      expect(updatedContent).not.toBe(outdatedConfig)
+    })
+
+    it('should NOT overwrite custom (non-SuiSui) playwright.config.ts', async () => {
+      const workspacePath = '/test/workspace'
+      const customConfig = 'export default { projects: [] }'
+
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.ts`]: customConfig,
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const content = String(await vol.promises.readFile(configPath, 'utf-8'))
+      expect(content).toBe(customConfig)
+    })
+
+    it('should skip creation when playwright.config.mjs exists', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.mjs`]: 'export default {}',
+      })
+
+      await service.set(workspacePath)
+
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      await expect(vol.promises.readFile(configPath, 'utf-8')).rejects.toBeTruthy()
+    })
+  })
+
+  describe('set — workspace switching', () => {
+    it('should keep old workspace when setting invalid path after valid workspace', async () => {
+      const validPath = '/test/workspace1'
+      const invalidPath = '/invalid/workspace'
+      vol.fromJSON({
+        [`${validPath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${validPath}/features/.gitkeep`]: '',
+        [`${validPath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      await service.set(validPath)
+      expect(service.getPath()).toBe(validPath)
+
+      const result = await service.set(invalidPath)
+      expect(result.isValid).toBe(false)
+      // Old workspace should still be set
+      expect(service.getPath()).toBe(validPath)
     })
   })
 })

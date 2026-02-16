@@ -5,7 +5,6 @@ import FeatureTree from '../components/FeatureTree.vue'
 import { primeVueStubs, mockFeatureTree, createInitialStoreState } from './testUtils'
 import { useWorkspaceStore } from '../stores/workspace'
 import { useScenarioStore } from '../stores/scenario'
-import { useStepsStore } from '../stores/steps'
 import type { FeatureTreeNode } from '@suisui/shared'
 
 function createWrapper(storeOverrides: {
@@ -114,7 +113,7 @@ describe('FeatureTree', () => {
   })
 
   describe('node selection', () => {
-    it('calls loadFromFeature when file node selected', async () => {
+    it('calls selectFeature when file node selected', async () => {
       const fileNode: FeatureTreeNode = {
         type: 'file',
         name: 'login',
@@ -129,9 +128,8 @@ describe('FeatureTree', () => {
       // Click the node (our stub emits 'select' on click)
       await fireEvent.click(screen.getByText('login'))
 
-      const scenarioStore = useScenarioStore()
-      const stepsStore = useStepsStore()
-      expect(scenarioStore.loadFromFeature).toHaveBeenCalledWith('login.feature', stepsStore.steps)
+      const workspaceStore = useWorkspaceStore()
+      expect(workspaceStore.selectFeature).toHaveBeenCalledWith(fileNode.feature)
     })
 
     it('does not call loadFromFeature for folder nodes', async () => {

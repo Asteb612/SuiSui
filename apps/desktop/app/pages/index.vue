@@ -316,11 +316,11 @@ function cancelInit() {
             <div class="panel-header-left">
               <Button
                 v-if="!showFolderPanel"
-                icon="pi pi-folder"
+                icon="pi pi-angle-double-right"
                 text
                 rounded
                 size="small"
-                title="Show features"
+                title="Show folder panel"
                 @click="showFolderPanel = true"
               />
               <h3>{{ scenarioStore.featureName || 'Scenario' }}</h3>
@@ -381,13 +381,13 @@ function cancelInit() {
                 />
                 <!-- Edit mode buttons -->
                 <template v-else>
-                  <!-- Reset button (only if dirty) -->
+                  <!-- Cancel button (only if dirty) -->
                   <Button
                     v-if="scenarioStore.isDirty"
-                    icon="pi pi-refresh"
-                    text
+                    label="Cancel"
+                    outlined
                     size="small"
-                    severity="secondary"
+                    severity="danger"
                     title="Discard changes and reload from file"
                     @click="resetScenario"
                   />
@@ -990,6 +990,7 @@ function cancelInit() {
 
 .center-panel .panel-content {
   padding: 1rem;
+  overflow-x: auto;
 }
 
 .right-panel .panel-content {

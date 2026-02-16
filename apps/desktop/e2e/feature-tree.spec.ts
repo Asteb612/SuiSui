@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { launchApp, closeApp, type AppContext } from './helpers/app'
+import { launchApp, closeApp, ensureFolderPanelVisible, type AppContext } from './helpers/app'
 import { copyFixture, cleanupFixture } from './helpers/fixtures'
 import { SEL } from './helpers/selectors'
 
@@ -48,6 +48,9 @@ test.describe('Feature Tree Navigation', () => {
   test('should expand folder to show nested features', async () => {
     const { window } = ctx
 
+    // Reopen folder panel if auto-hidden after feature selection
+    await ensureFolderPanelVisible(window)
+
     // Click on the toggle chevron to expand the cart folder
     const cartFolder = window.locator(`${SEL.featureTreeFolder}[data-path="cart"]`)
     await cartFolder.locator('.node-toggle').click()
@@ -60,12 +63,18 @@ test.describe('Feature Tree Navigation', () => {
   test('should switch between feature files', async () => {
     const { window } = ctx
 
+    // Reopen folder panel if auto-hidden
+    await ensureFolderPanelVisible(window)
+
     // Click on checkout.feature inside cart/ (folder already expanded from previous test)
     const checkoutNode = window.locator(`${SEL.featureTreeFile}[data-path="cart/checkout.feature"]`)
     await checkoutNode.locator('.node-content').click()
 
     // Scenario builder should update with the new feature
     await expect(window.locator(SEL.scenarioBuilder)).toContainText('Given')
+
+    // Reopen folder panel after checkout selection auto-hid it
+    await ensureFolderPanelVisible(window)
 
     // Switch back to login.feature
     const loginNode = window.locator(`${SEL.featureTreeFile}[data-path="login.feature"]`)

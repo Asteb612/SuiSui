@@ -153,7 +153,7 @@ test.describe('Scenario Editing & Gherkin Validation', () => {
     const folderPanel = window.locator(SEL.featureTree)
     const isPanelVisible = await folderPanel.isVisible()
     if (!isPanelVisible) {
-      await window.locator('button[title="Show features"]').click()
+      await window.locator('button[title="Show folder panel"]').click()
       await expect(folderPanel).toBeVisible()
     }
 
@@ -169,7 +169,7 @@ test.describe('Scenario Editing & Gherkin Validation', () => {
     // Ensure folder panel is visible again before switching back
     const isPanelStillVisible = await folderPanel.isVisible()
     if (!isPanelStillVisible) {
-      await window.locator('button[title="Show features"]').click()
+      await window.locator('button[title="Show folder panel"]').click()
       await expect(folderPanel).toBeVisible()
     }
 

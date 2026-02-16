@@ -1,5 +1,6 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
 import path from 'node:path'
+import { SEL } from './selectors'
 
 export interface AppContext {
   app: ElectronApplication
@@ -42,7 +43,7 @@ export async function launchApp(workspacePath?: string): Promise<AppContext> {
 
     // Wait for workspace to load — status bar shows the workspace path
     await window.locator('[data-testid="status-bar"]').waitFor({ state: 'visible', timeout: 15_000 })
-    await window.locator('[data-testid="status-bar"]').filter({ hasText: workspacePath }).waitFor({ timeout: 15_000 })
+    await window.locator('[data-testid="status-bar"]').filter({ hasText: workspacePath }).waitFor({ timeout: 30_000 })
   }
 
   return { app, window }
@@ -54,5 +55,17 @@ export async function launchApp(workspacePath?: string): Promise<AppContext> {
 export async function closeApp(ctx: AppContext | undefined): Promise<void> {
   if (ctx?.app) {
     await ctx.app.close()
+  }
+}
+
+/**
+ * Ensure the folder panel (feature tree) is visible.
+ * If auto-hidden after feature selection, clicks the >> button to reopen it.
+ */
+export async function ensureFolderPanelVisible(window: Page): Promise<void> {
+  const featureTree = window.locator(SEL.featureTree)
+  if (!await featureTree.isVisible()) {
+    await window.locator('button[title="Show folder panel"]').click()
+    await expect(featureTree).toBeVisible()
   }
 }

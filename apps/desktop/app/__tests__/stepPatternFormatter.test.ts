@@ -152,8 +152,9 @@ describe('formatStepPattern', () => {
 
     it('does not format single item in parentheses (not a table)', () => {
       // Single item without comma should not be treated as table
+      // but it IS wrapped as pattern-optional in the html output
       const result = formatStepPattern('I see (item) :')
-      expect(result.html).toBe('I see (item) :')
+      expect(result.html).toBe('I see <span class="pattern-optional">(item)</span> :')
       expect(result.plainText).toBe('I see (item) :')
       expect(result.argDescriptions).toEqual([])
     })
@@ -286,8 +287,9 @@ describe('formatStepPattern', () => {
     })
 
     it('does not match parentheses without pipe as enum', () => {
+      // Parentheses without pipe are treated as optional text (not enum)
       const result = formatStepPattern('I see (something)')
-      expect(result.html).toBe('I see (something)')
+      expect(result.html).toBe('I see <span class="pattern-optional">(something)</span>')
       expect(result.plainText).toBe('I see (something)')
       expect(result.argDescriptions).toEqual([])
     })

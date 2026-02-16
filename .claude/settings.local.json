@@ -54,7 +54,11 @@
       "Bash(npx electron:*)",
       "Bash(ELECTRON_RUN_AS_NODE=1 npx electron:*)",
       "Bash(node:*)",
-      "Bash(pnpm test:e2e:*)"
+      "Bash(pnpm test:e2e:*)",
+      "Bash(npx eslint:*)",
+      "Bash(git stash:*)",
+      "Bash(git stash pop:*)",
+      "Bash(npx playwright test:*)"
     ]
   }
 }
