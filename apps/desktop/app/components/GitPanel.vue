@@ -1,15 +1,100 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useGitStore } from '~/stores/git'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useGithubStore } from '~/stores/github'
+import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
+import { useWorkspaceStore } from '~/stores/workspace'
+import type { GitCredentials } from '@suisui/shared'
 
-const gitStore = useGitStore()
 const githubStore = useGithubStore()
+const gitWorkspaceStore = useGitWorkspaceStore()
+const workspaceStore = useWorkspaceStore()
 const commitMessage = ref('')
+const lastMessage = ref<string | null>(null)
+const panelError = ref<string | null>(null)
 const showCommitDialog = ref(false)
+const showAuthDialog = ref(false)
+const authUsername = ref('')
+const authPassword = ref('')
+const pendingAction = ref<'pull' | 'commitAndPush' | null>(null)
+let statusPollTimer: ReturnType<typeof setInterval> | null = null
 
-async function pull() {
-  await gitStore.pull()
+const hasChanges = computed(() => {
+  return gitWorkspaceStore.hasChanges
+})
+
+const changeCount = computed(() => {
+  return gitWorkspaceStore.totalChanges
+})
+
+const hasRemote = computed(() => Boolean(gitWorkspaceStore.status?.hasRemote))
+const branchName = computed(() => gitWorkspaceStore.status?.branch ?? 'main')
+
+async function refreshWorkspaceGitStatus() {
+  const workspacePath = workspaceStore.workspace?.path
+  if (!workspacePath) return
+  await gitWorkspaceStore.refreshStatus(workspacePath)
+}
+
+onMounted(() => {
+  void githubStore.loadCredentials()
+  void refreshWorkspaceGitStatus()
+  statusPollTimer = setInterval(() => {
+    void refreshWorkspaceGitStatus()
+  }, 2000)
+})
+
+onUnmounted(() => {
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer)
+    statusPollTimer = null
+  }
+})
+
+function getCredentials(): GitCredentials | undefined {
+  return githubStore.credentials ?? undefined
+}
+
+function closeAuthDialog() {
+  showAuthDialog.value = false
+  authUsername.value = ''
+  authPassword.value = ''
+  pendingAction.value = null
+}
+
+function showAuthPrompt(action: 'pull' | 'commitAndPush') {
+  pendingAction.value = action
+  authUsername.value = ''
+  authPassword.value = ''
+  showAuthDialog.value = true
+}
+
+function isAuthError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return /authentication failed|check your credentials|requires credentials|401|403/i.test(message)
+}
+
+async function pull(credentialsOverride?: GitCredentials) {
+  const workspacePath = workspaceStore.workspace?.path
+  if (!workspacePath) return
+
+  const credentials = credentialsOverride ?? getCredentials()
+
+  try {
+    await gitWorkspaceStore.pull(workspacePath, credentials)
+    lastMessage.value = 'Pull completed'
+    panelError.value = null
+    await refreshWorkspaceGitStatus()
+  } catch (err) {
+    if (isAuthError(err)) {
+      if (credentialsOverride) {
+        panelError.value = 'Authentication failed. Check your credentials and retry.'
+        return
+      }
+      showAuthPrompt('pull')
+      return
+    }
+    panelError.value = err instanceof Error ? err.message : 'Pull failed'
+  }
 }
 
 function openCommitDialog() {
@@ -18,109 +103,160 @@ function openCommitDialog() {
 
 async function commitAndPush() {
   if (!commitMessage.value.trim()) return
-  await gitStore.commitPush(commitMessage.value)
-  if (!gitStore.error) {
+
+  const workspacePath = workspaceStore.workspace?.path
+  if (!workspacePath) return
+
+  const credentials = getCredentials()
+
+  try {
+    const result = await gitWorkspaceStore.commitAndPush(workspacePath, credentials, {
+      message: commitMessage.value,
+    })
+    lastMessage.value = result.pushed
+      ? 'Changes committed and pushed successfully'
+      : 'Changes committed successfully'
+    panelError.value = null
+    await refreshWorkspaceGitStatus()
     commitMessage.value = ''
     showCommitDialog.value = false
+  } catch (err) {
+    if (isAuthError(err)) {
+      showAuthPrompt('commitAndPush')
+      return
+    }
+    panelError.value = err instanceof Error ? err.message : 'Commit & Push failed'
   }
 }
 
-async function disconnectGithub() {
-  await githubStore.disconnect()
+async function submitAuthCredentials() {
+  if (!authUsername.value.trim() || !authPassword.value.trim() || !pendingAction.value) return
+  const creds: GitCredentials = {
+    username: authUsername.value.trim(),
+    password: authPassword.value.trim(),
+  }
+
+  if (pendingAction.value === 'pull') {
+    await pull(creds)
+  } else {
+    const workspacePath = workspaceStore.workspace?.path
+    if (!workspacePath) return
+
+    try {
+      const result = await gitWorkspaceStore.commitAndPush(workspacePath, creds, {
+        message: commitMessage.value,
+      })
+      lastMessage.value = result.pushed
+        ? 'Changes committed and pushed successfully'
+        : 'Changes committed successfully'
+      panelError.value = null
+      await refreshWorkspaceGitStatus()
+      commitMessage.value = ''
+      showCommitDialog.value = false
+    } catch (err) {
+      if (isAuthError(err)) {
+        panelError.value = 'Authentication failed. Check your credentials and retry.'
+        return
+      }
+      panelError.value = err instanceof Error ? err.message : 'Commit & Push failed'
+      return
+    }
+  }
+
+  if (!panelError.value) {
+    try {
+      await githubStore.saveCredentials(creds)
+    } catch {
+      // Keep credential in memory only
+      githubStore.credentials = creds
+      githubStore.hasCredentials = true
+    } finally {
+      closeAuthDialog()
+    }
+  }
+}
+
+async function clearCredentials() {
+  await githubStore.clearCredentials()
 }
 </script>
 
 <template>
   <div class="git-panel">
-    <!-- GitHub connected user -->
+    <!-- Credentials indicator -->
     <div
-      v-if="githubStore.isConnected && githubStore.user"
-      class="github-user"
+      v-if="githubStore.hasCredentials"
+      class="credentials-info"
     >
-      <img
-        :src="githubStore.user.avatarUrl"
-        :alt="githubStore.user.login"
-        class="github-avatar"
-      >
-      <span class="github-login">{{ githubStore.user.login }}</span>
+      <i class="pi pi-lock" />
+      <span class="credentials-label">Credentials saved</span>
       <Button
-        icon="pi pi-sign-out"
+        icon="pi pi-trash"
         text
         rounded
         size="small"
-        title="Disconnect from GitHub"
-        @click="disconnectGithub"
+        title="Clear saved credentials"
+        @click="clearCredentials"
       />
     </div>
 
     <div
-      v-if="gitStore.status"
+      v-if="gitWorkspaceStore.status"
       class="git-status"
     >
       <div class="branch">
         <i class="pi pi-code-branch" />
-        {{ gitStore.branchName }}
-      </div>
-      <div
-        v-if="gitStore.status.ahead > 0 || gitStore.status.behind > 0"
-        class="sync-status"
-      >
-        <span v-if="gitStore.status.ahead > 0">
-          <i class="pi pi-arrow-up" /> {{ gitStore.status.ahead }}
-        </span>
-        <span v-if="gitStore.status.behind > 0">
-          <i class="pi pi-arrow-down" /> {{ gitStore.status.behind }}
-        </span>
+        {{ branchName }}
       </div>
     </div>
 
     <div
-      v-if="gitStore.hasChanges"
+      v-if="hasChanges"
       class="changes-indicator"
     >
       <i class="pi pi-circle-fill" />
-      {{ (gitStore.status?.modified.length ?? 0) + (gitStore.status?.untracked.length ?? 0) }} changes
+      {{ changeCount }} changes
     </div>
 
     <div class="git-actions">
       <Button
-        v-if="gitStore.status?.hasRemote"
+        v-if="hasRemote"
         label="Pull"
         icon="pi pi-download"
         size="small"
         outlined
-        :loading="gitStore.isPulling"
-        @click="pull"
+        :loading="gitWorkspaceStore.isPulling"
+        @click="() => pull()"
       />
       <Button
-        :label="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
-        :icon="gitStore.status?.hasRemote ? 'pi pi-upload' : 'pi pi-check'"
+        :label="hasRemote ? 'Commit & Push' : 'Commit'"
+        :icon="hasRemote ? 'pi pi-upload' : 'pi pi-check'"
         size="small"
-        :disabled="!gitStore.hasChanges"
-        :loading="gitStore.isPushing"
+        :disabled="!hasChanges"
+        :loading="gitWorkspaceStore.isCommitting"
         @click="openCommitDialog"
       />
     </div>
 
     <div
-      v-if="gitStore.error"
+      v-if="panelError"
       class="git-error"
     >
       <i class="pi pi-exclamation-triangle" />
-      {{ gitStore.error }}
+      {{ panelError }}
     </div>
 
     <div
-      v-if="gitStore.lastMessage"
+      v-if="lastMessage"
       class="git-message"
     >
-      {{ gitStore.lastMessage }}
+      {{ lastMessage }}
     </div>
 
     <Dialog
       v-model:visible="showCommitDialog"
       modal
-      :header="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
+      :header="hasRemote ? 'Commit & Push' : 'Commit'"
       :style="{ width: '400px' }"
     >
       <div class="commit-dialog">
@@ -140,11 +276,53 @@ async function disconnectGithub() {
           @click="showCommitDialog = false"
         />
         <Button
-          :label="gitStore.status?.hasRemote ? 'Commit & Push' : 'Commit'"
-          :icon="gitStore.status?.hasRemote ? 'pi pi-upload' : 'pi pi-check'"
+          :label="hasRemote ? 'Commit & Push' : 'Commit'"
+          :icon="hasRemote ? 'pi pi-upload' : 'pi pi-check'"
           :disabled="!commitMessage.trim()"
-          :loading="gitStore.isPushing"
+          :loading="gitWorkspaceStore.isCommitting"
           @click="commitAndPush"
+        />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="showAuthDialog"
+      modal
+      header="Credentials Required"
+      :style="{ width: '420px' }"
+    >
+      <div class="auth-dialog">
+        <div class="auth-field">
+          <label for="auth-username">Username</label>
+          <InputText
+            id="auth-username"
+            v-model="authUsername"
+            autocomplete="off"
+            placeholder="Username"
+          />
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">Password / Token</label>
+          <InputText
+            id="auth-password"
+            v-model="authPassword"
+            type="password"
+            autocomplete="off"
+            placeholder="Password or personal access token"
+            @keyup.enter="submitAuthCredentials"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <Button
+          label="Cancel"
+          text
+          @click="closeAuthDialog"
+        />
+        <Button
+          label="Retry"
+          :disabled="!authUsername.trim() || !authPassword.trim()"
+          @click="submitAuthCredentials"
         />
       </template>
     </Dialog>
@@ -161,20 +339,18 @@ async function disconnectGithub() {
   background: var(--surface-ground);
 }
 
-.github-user {
+.credentials-info {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.8125rem;
 }
 
-.github-avatar {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+.credentials-info i {
+  color: #10b981;
 }
 
-.github-login {
+.credentials-label {
   flex: 1;
   font-weight: 500;
   color: var(--text-color);
@@ -192,13 +368,6 @@ async function disconnectGithub() {
   gap: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
-}
-
-.sync-status {
-  display: flex;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--text-color-secondary);
 }
 
 .changes-indicator {
@@ -250,5 +419,22 @@ async function disconnectGithub() {
 
 .commit-dialog :deep(textarea) {
   width: 100%;
+}
+
+.auth-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.auth-field label {
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 </style>

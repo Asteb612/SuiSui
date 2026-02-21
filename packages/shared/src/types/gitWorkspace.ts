@@ -1,11 +1,17 @@
+export interface GitCredentials {
+  username: string
+  password: string
+}
+
 export interface GitWorkspaceParams {
   owner: string
   repo: string
   repoUrl: string
   branch: string
   localPath: string
-  token: string
+  token?: string
   username?: string
+  password?: string
 }
 
 export interface WorkspaceMetadata {
@@ -30,6 +36,8 @@ export interface FileStatus {
 }
 
 export interface WorkspaceStatusResult {
+  branch: string
+  hasRemote: boolean
   fullStatus: FileStatus[]
   filteredStatus: FileStatus[]
   counts: {

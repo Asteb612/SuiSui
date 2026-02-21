@@ -84,10 +84,6 @@ vi.mock('../services/RunnerService', () => ({
   getRunnerService: () => ({}),
 }))
 
-vi.mock('../services/GitService', () => ({
-  getGitService: () => ({}),
-}))
-
 describe('Workspace IPC Handlers', () => {
   let mockIpcMain: IpcMain
   let mockDialog: Dialog

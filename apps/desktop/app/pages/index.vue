@@ -3,18 +3,15 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
-import { useGitStore } from '~/stores/git'
+import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
-//import { useGithubStore } from '~/stores/github'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
-const gitStore = useGitStore()
+const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
-//const githubStore = useGithubStore()
-
-const showGithubConnect = ref(false)
+const showGitClone = ref(false)
 const changeWorkspaceMenuRef = ref()
 
 const changeWorkspaceMenuItems = [
@@ -24,9 +21,9 @@ const changeWorkspaceMenuItems = [
     command: () => workspaceStore.selectWorkspace(),
   },
   {
-    label: 'Clone from GitHub',
-    icon: 'pi pi-github',
-    command: () => { showGithubConnect.value = true },
+    label: 'Clone from Git',
+    icon: 'pi pi-code-branch',
+    command: () => { showGitClone.value = true },
   },
 ]
 
@@ -34,7 +31,7 @@ function showChangeWorkspaceMenu(event: Event) {
   changeWorkspaceMenuRef.value?.toggle(event)
 }
 
-async function handleGithubCloned(localPath: string) {
+async function handleGitCloned(localPath: string) {
   // After clone, set the cloned directory as workspace and initialize it
   await workspaceStore.setWorkspacePath(localPath)
   if (!isMounted.value) return
@@ -74,7 +71,7 @@ function handleModeChange(mode: 'read' | 'edit' | 'run') {
 
 // Git availability - hide if workspace is not a git repo
 const isGitAvailable = computed(() => {
-  return gitStore.status !== null && gitStore.error === null
+  return workspaceStore.hasWorkspace
 })
 
 function toggleEditMode() {
@@ -103,7 +100,10 @@ watch(
 async function loadWorkspaceDependencies() {
   await stepsStore.loadCached()
   if (!isMounted.value) return
-  await gitStore.refreshStatus()
+  const workspacePath = workspaceStore.workspace?.path
+  if (workspacePath) {
+    await gitWorkspaceStore.refreshStatus(workspacePath)
+  }
   if (!isMounted.value) return
   await runnerStore.loadBaseUrl()
 }
@@ -156,7 +156,10 @@ async function initializeWorkspace() {
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
     if (!isMounted.value) return
-    await gitStore.refreshStatus()
+    const workspacePath = workspaceStore.workspace?.path
+    if (workspacePath) {
+      await gitWorkspaceStore.refreshStatus(workspacePath)
+    }
   }
 }
 
@@ -243,13 +246,13 @@ function cancelInit() {
               @click="workspaceStore.selectWorkspace"
             />
             <Button
-              label="Clone from GitHub"
-              icon="pi pi-github"
+              label="Clone from Git"
+              icon="pi pi-code-branch"
               severity="info"
               size="large"
               outlined
-              data-testid="github-connect-btn"
-              @click="showGithubConnect = true"
+              data-testid="git-clone-btn"
+              @click="showGitClone = true"
             />
           </div>
           <div class="workspace-requirements">
@@ -659,10 +662,10 @@ function cancelInit() {
       </template>
     </Dialog>
 
-    <!-- GitHub Connect Dialog -->
-    <GithubConnect
-      v-model:visible="showGithubConnect"
-      @cloned="handleGithubCloned"
+    <!-- Git Clone Dialog -->
+    <GitClone
+      v-model:visible="showGitClone"
+      @cloned="handleGitCloned"
     />
 
     <!-- Help Dialog -->

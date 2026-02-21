@@ -334,6 +334,24 @@ describe('WorkspaceService', () => {
       await service.set(workspacePath2)
       expect(service.getPath()).toBe(workspacePath2)
     })
+
+    it('should initialize git marker when setting a valid workspace', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      await service.set(workspacePath)
+
+      const gitStat = await vol.promises.stat(path.join(workspacePath, '.git'))
+      const headContent = String(
+        await vol.promises.readFile(path.join(workspacePath, '.git', 'HEAD'), 'utf-8')
+      )
+      expect(gitStat.isDirectory()).toBe(true)
+      expect(headContent).toContain('ref: refs/heads/main')
+    })
   })
 
   describe('get', () => {
@@ -438,6 +456,29 @@ describe('WorkspaceService', () => {
       expect(result1?.path).toBe(result2?.path)
       // Should only call get() once (on first call)
       expect(mockGet).toHaveBeenCalledTimes(1)
+    })
+
+    it('should initialize git marker when loading workspace from settings', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      mockGet.mockResolvedValue({
+        ...DEFAULT_SETTINGS,
+        workspacePath,
+      })
+
+      await service.get()
+
+      const gitStat = await vol.promises.stat(path.join(workspacePath, '.git'))
+      const headContent = String(
+        await vol.promises.readFile(path.join(workspacePath, '.git', 'HEAD'), 'utf-8')
+      )
+      expect(gitStat.isDirectory()).toBe(true)
+      expect(headContent).toContain('ref: refs/heads/main')
     })
   })
 

@@ -17,13 +17,13 @@ test('welcome-screen demo', async () => {
   // Welcome screen with action buttons
   await expect(window.locator(SEL.welcomeScreen)).toBeVisible()
   await expect(window.locator(SEL.selectWorkspaceBtn)).toBeVisible()
-  await expect(window.locator(SEL.githubConnectBtn)).toBeVisible()
+  await expect(window.locator(SEL.gitCloneBtn)).toBeVisible()
   await pause(window, 3000)
 
   // Hover over buttons to draw attention
   await window.locator(SEL.selectWorkspaceBtn).hover()
   await pause(window, 1500)
-  await window.locator(SEL.githubConnectBtn).hover()
+  await window.locator(SEL.gitCloneBtn).hover()
   await pause(window, 1500)
 
   await closeDemoApp(ctx, 'welcome-screen')

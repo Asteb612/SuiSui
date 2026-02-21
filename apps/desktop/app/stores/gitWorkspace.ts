@@ -4,6 +4,7 @@ import type {
   WorkspaceStatusResult,
   CommitPushOptions,
   GitWorkspaceParams,
+  GitCredentials,
 } from '@suisui/shared'
 
 export const useGitWorkspaceStore = defineStore('gitWorkspace', {
@@ -44,11 +45,11 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       }
     },
 
-    async pull(localPath: string, token: string) {
+    async pull(localPath: string, credentials?: GitCredentials) {
       this.isPulling = true
       this.error = null
       try {
-        const result = await window.api.gitWorkspace.pull(localPath, token)
+        const result = await window.api.gitWorkspace.pull(localPath, credentials)
         return result
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Pull failed'
@@ -67,11 +68,11 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       }
     },
 
-    async commitAndPush(localPath: string, token: string, options: CommitPushOptions) {
+    async commitAndPush(localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) {
       this.isCommitting = true
       this.error = null
       try {
-        const result = await window.api.gitWorkspace.commitAndPush(localPath, token, options)
+        const result = await window.api.gitWorkspace.commitAndPush(localPath, credentials, options)
         return result
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Commit & Push failed'

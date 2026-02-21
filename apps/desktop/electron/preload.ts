@@ -45,12 +45,6 @@ const api: ElectronAPI = {
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),
   },
 
-  git: {
-    status: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS),
-    pull: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL),
-    commitPush: (message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_PUSH, message),
-  },
-
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
     set: (settings) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, settings),
@@ -76,21 +70,16 @@ const api: ElectronAPI = {
 
   gitWorkspace: {
     cloneOrOpen: (params) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_CLONE_OR_OPEN, params),
-    pull: (localPath, token) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_PULL, localPath, token),
+    pull: (localPath, credentials) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_PULL, localPath, credentials),
     status: (localPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_STATUS, localPath),
-    commitAndPush: (localPath, token, options) =>
-      ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, localPath, token, options),
+    commitAndPush: (localPath, credentials, options) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, localPath, credentials, options),
   },
 
-  github: {
-    saveToken: (token) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_SAVE_TOKEN, token),
-    getToken: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_GET_TOKEN),
-    deleteToken: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_DELETE_TOKEN),
-    validateToken: (token) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_VALIDATE_TOKEN, token),
-    deviceFlowStart: () => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_DEVICE_FLOW_START),
-    deviceFlowPoll: (deviceCode) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_DEVICE_FLOW_POLL, deviceCode),
-    getUser: (token) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_GET_USER, token),
-    listRepos: (token) => ipcRenderer.invoke(IPC_CHANNELS.GITHUB_LIST_REPOS, token),
+  gitCredentials: {
+    save: (credentials) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_SAVE, credentials),
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_GET),
+    delete: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_DELETE),
   },
 }
 

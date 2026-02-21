@@ -52,6 +52,19 @@ function openNewFolderDialog(parentPath?: string) {
   showNewFolderDialog.value = true
 }
 
+function onRename(target?: FeatureTreeNode) {
+  if (!target) return
+  renameNode.value = target
+  renameName.value = target.name
+  showRenameDialog.value = true
+}
+
+function onDelete(target?: FeatureTreeNode) {
+  if (!target) return
+  deleteNode.value = target
+  showDeleteConfirm.value = true
+}
+
 async function createNewFolder() {
   if (!newFolderName.value.trim()) return
   await workspaceStore.createFolder(newFolderParent.value, newFolderName.value)
@@ -104,6 +117,8 @@ async function confirmDelete() {
   } else {
     await workspaceStore.deleteFeature(deleteNode.value.relativePath)
   }
+  workspaceStore.selectFeature(null)
+  scenarioStore.clear()
   await workspaceStore.loadFeatureTree()
   showDeleteConfirm.value = false
   selectedKey.value = ''
@@ -178,10 +193,10 @@ async function refreshTree() {
           :selected="selectedKey === node.relativePath"
           @toggle="toggleExpanded(node.relativePath)"
           @select="onNodeSelect"
-          @rename="() => {renameNode = node; renameName = node.name; showRenameDialog = true}"
-          @delete="() => {deleteNode = node; showDeleteConfirm = true}"
-          @new-feature="() => openNewFeatureDialog(node.relativePath)"
-          @new-folder="() => openNewFolderDialog(node.relativePath)"
+          @rename="(n) => onRename(n ?? node)"
+          @delete="(n) => onDelete(n ?? node)"
+          @new-feature="(n) => openNewFeatureDialog((n ?? node).relativePath)"
+          @new-folder="(n) => openNewFolderDialog((n ?? node).relativePath)"
         />
       </div>
     </div>
