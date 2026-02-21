@@ -2,7 +2,15 @@
  * Shared test utilities for Vue component testing
  */
 import { vi } from 'vitest'
-import type { ScenarioStep, StepDefinition, Scenario, ValidationResult, FeatureTreeNode, FeatureFile, GitStatusResult } from '@suisui/shared'
+import type {
+  ScenarioStep,
+  StepDefinition,
+  Scenario,
+  ValidationResult,
+  FeatureTreeNode,
+  FeatureFile,
+  WorkspaceStatusResult,
+} from '@suisui/shared'
 
 // ============================================================================
 // PrimeVue Component Stubs
@@ -170,16 +178,13 @@ export function createMockValidationResult(overrides: Partial<ValidationResult> 
   }
 }
 
-export function createMockGitStatus(overrides: Partial<GitStatusResult> = {}): GitStatusResult {
+export function createMockGitStatus(overrides: Partial<WorkspaceStatusResult> = {}): WorkspaceStatusResult {
   return {
-    status: 'clean',
     branch: 'main',
-    ahead: 0,
-    behind: 0,
-    modified: [],
-    staged: [],
-    untracked: [],
     hasRemote: false,
+    fullStatus: [],
+    filteredStatus: [],
+    counts: { modified: 0, added: 0, deleted: 0, untracked: 0 },
     ...overrides,
   }
 }
@@ -371,10 +376,10 @@ export function createMockApi() {
     validate: {
       scenario: vi.fn().mockResolvedValue({ isValid: true, issues: [] }),
     },
-    git: {
+    gitWorkspace: {
       status: vi.fn().mockResolvedValue(createMockGitStatus()),
       pull: vi.fn().mockResolvedValue(undefined),
-      commit: vi.fn().mockResolvedValue(undefined),
+      commitAndPush: vi.fn().mockResolvedValue({ commitOid: 'abc123', pushed: false }),
     },
     runner: {
       start: vi.fn().mockResolvedValue(undefined),
@@ -424,11 +429,11 @@ export function createInitialStoreState(overrides: Record<string, Record<string,
       error: null,
       ...(overrides.steps ?? {}),
     },
-    git: {
+    gitWorkspace: {
       status: createMockGitStatus(),
       isLoading: false,
       error: null,
-      ...(overrides.git ?? {}),
+      ...(overrides.gitWorkspace ?? {}),
     },
     runner: {
       status: 'idle',

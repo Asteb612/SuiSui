@@ -3,7 +3,6 @@ import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepExportResult, DecoratorDefinition } from '../types/step'
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions } from '../types/runner'
-import type { GitStatusResult, GitOperationResult } from '../types/git'
 import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
@@ -55,12 +54,6 @@ export interface ElectronAPI {
     stop: () => Promise<void>
   }
 
-  git: {
-    status: () => Promise<GitStatusResult>
-    pull: () => Promise<GitOperationResult>
-    commitPush: (message: string) => Promise<GitOperationResult>
-  }
-
   settings: {
     get: () => Promise<AppSettings>
     set: (settings: Partial<AppSettings>) => Promise<void>
@@ -86,9 +79,9 @@ export interface ElectronAPI {
 
   gitWorkspace: {
     cloneOrOpen: (params: GitWorkspaceParams) => Promise<WorkspaceMetadata>
-    pull: (localPath: string, token: string) => Promise<PullResult>
+    pull: (localPath: string, token?: string) => Promise<PullResult>
     status: (localPath: string) => Promise<WorkspaceStatusResult>
-    commitAndPush: (localPath: string, token: string, options: CommitPushOptions) => Promise<CommitPushResult>
+    commitAndPush: (localPath: string, token: string | undefined, options: CommitPushOptions) => Promise<CommitPushResult>
   }
 
   github: {

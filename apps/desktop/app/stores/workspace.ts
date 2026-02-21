@@ -140,6 +140,9 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.error = null
       try {
         await window.api.features.deleteFolder(path)
+        if (this.selectedFeature?.relativePath.startsWith(`${path}/`)) {
+          this.selectedFeature = null
+        }
         await this.loadFeatureTree()
         await this.loadFeatures()
       } catch (err) {
@@ -188,6 +191,9 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.error = null
       try {
         await window.api.features.delete(path)
+        if (this.selectedFeature?.relativePath === path) {
+          this.selectedFeature = null
+        }
         await this.loadFeatureTree()
         await this.loadFeatures()
       } catch (err) {

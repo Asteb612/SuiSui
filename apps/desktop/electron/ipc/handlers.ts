@@ -8,7 +8,6 @@ import {
   getStepService,
   getValidationService,
   getRunnerService,
-  getGitService,
   getSettingsService,
   getNodeService,
   getDependencyService,
@@ -71,28 +70,6 @@ interface HandlerOptions {
 function configureTestMode(): void {
   const fakeRunner = new FakeCommandRunner()
 
-  // Git commands — return clean status
-  fakeRunner.setResponse('git rev-parse --abbrev-ref', {
-    code: 0,
-    stdout: 'main\n',
-    stderr: '',
-  })
-  fakeRunner.setResponse('git status --porcelain', {
-    code: 0,
-    stdout: '',
-    stderr: '',
-  })
-  fakeRunner.setResponse('git rev-list', {
-    code: 0,
-    stdout: '0\t0\n',
-    stderr: '',
-  })
-  fakeRunner.setResponse('git remote get-url', {
-    code: 2,
-    stdout: '',
-    stderr: 'fatal: No such remote \'origin\'\n',
-  })
-
   // Default: all other commands succeed
   fakeRunner.setDefaultResponse({ code: 0, stdout: '', stderr: '' })
 
@@ -116,7 +93,6 @@ export function registerIpcHandlers(
   const stepService = getStepService()
   const validationService = getValidationService()
   const runnerService = getRunnerService()
-  const gitService = getGitService()
   const settingsService = getSettingsService()
   const nodeService = getNodeService()
   const dependencyService = getDependencyService()
@@ -303,19 +279,6 @@ export function registerIpcHandlers(
     await runnerService.stop()
   })
 
-  // Git handlers
-  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, async () => {
-    return gitService.status()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.GIT_PULL, async () => {
-    return gitService.pull()
-  })
-
-  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT_PUSH, async (_event, message: string) => {
-    return gitService.commitPush(message)
-  })
-
   // Settings handlers
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => {
     return settingsService.get()
@@ -373,6 +336,8 @@ export function registerIpcHandlers(
 
     ipcMain.handle(IPC_CHANNELS.GIT_WS_STATUS, async () => {
       return {
+        branch: 'main',
+        hasRemote: false,
         fullStatus: [],
         filteredStatus: [],
         counts: { modified: 0, added: 0, deleted: 0, untracked: 0 },
@@ -433,7 +398,7 @@ export function registerIpcHandlers(
       return gitWorkspaceService.cloneOrOpen(params)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_WS_PULL, async (_event, localPath: string, token: string) => {
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_PULL, async (_event, localPath: string, token?: string) => {
       return gitWorkspaceService.pull(localPath, token)
     })
 
@@ -441,7 +406,7 @@ export function registerIpcHandlers(
       return gitWorkspaceService.getStatus(localPath)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async (_event, localPath: string, token: string, options: CommitPushOptions) => {
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async (_event, localPath: string, token: string | undefined, options: CommitPushOptions) => {
       return gitWorkspaceService.commitAndPush(localPath, token, options)
     })
 

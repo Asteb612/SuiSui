@@ -3,14 +3,14 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
-import { useGitStore } from '~/stores/git'
+import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
 //import { useGithubStore } from '~/stores/github'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
-const gitStore = useGitStore()
+const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
 //const githubStore = useGithubStore()
 
@@ -74,7 +74,7 @@ function handleModeChange(mode: 'read' | 'edit' | 'run') {
 
 // Git availability - hide if workspace is not a git repo
 const isGitAvailable = computed(() => {
-  return gitStore.status !== null && gitStore.error === null
+  return workspaceStore.hasWorkspace
 })
 
 function toggleEditMode() {
@@ -103,7 +103,10 @@ watch(
 async function loadWorkspaceDependencies() {
   await stepsStore.loadCached()
   if (!isMounted.value) return
-  await gitStore.refreshStatus()
+  const workspacePath = workspaceStore.workspace?.path
+  if (workspacePath) {
+    await gitWorkspaceStore.refreshStatus(workspacePath)
+  }
   if (!isMounted.value) return
   await runnerStore.loadBaseUrl()
 }
@@ -156,7 +159,10 @@ async function initializeWorkspace() {
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
     if (!isMounted.value) return
-    await gitStore.refreshStatus()
+    const workspacePath = workspaceStore.workspace?.path
+    if (workspacePath) {
+      await gitWorkspaceStore.refreshStatus(workspacePath)
+    }
   }
 }
 

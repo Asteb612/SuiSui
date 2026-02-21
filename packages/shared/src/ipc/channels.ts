@@ -32,11 +32,6 @@ export const IPC_CHANNELS = {
   RUNNER_RUN_UI: 'runner:runUI',
   RUNNER_STOP: 'runner:stop',
 
-  // Git
-  GIT_STATUS: 'git:status',
-  GIT_PULL: 'git:pull',
-  GIT_COMMIT_PUSH: 'git:commitPush',
-
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',

@@ -30,6 +30,8 @@ export interface FileStatus {
 }
 
 export interface WorkspaceStatusResult {
+  branch: string
+  hasRemote: boolean
   fullStatus: FileStatus[]
   filteredStatus: FileStatus[]
   counts: {

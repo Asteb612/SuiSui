@@ -12,10 +12,10 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   toggle: []
   select: [node: FeatureTreeNode]
-  rename: []
-  delete: []
-  newFeature: []
-  newFolder: []
+  rename: [node: FeatureTreeNode]
+  delete: [node: FeatureTreeNode]
+  newFeature: [node: FeatureTreeNode]
+  newFolder: [node: FeatureTreeNode]
 }>()
 
 // Inject state management from parent FeatureTree
@@ -40,16 +40,14 @@ const menuItems = computed(() => {
         label: 'New Feature',
         icon: 'pi pi-file-plus',
         command: () => {
-          emit('select', props.node)
-          emit('newFeature')
+          emit('newFeature', props.node)
         },
       },
       {
         label: 'New Folder',
         icon: 'pi pi-folder-plus',
         command: () => {
-          emit('select', props.node)
-          emit('newFolder')
+          emit('newFolder', props.node)
         },
       }
     )
@@ -60,16 +58,14 @@ const menuItems = computed(() => {
       label: 'Rename',
       icon: 'pi pi-pencil',
       command: () => {
-        emit('select', props.node)
-        emit('rename')
+        emit('rename', props.node)
       },
     },
     {
       label: 'Delete',
       icon: 'pi pi-trash',
       command: () => {
-        emit('select', props.node)
-        emit('delete')
+        emit('delete', props.node)
       },
     }
   )
@@ -119,7 +115,7 @@ function showMenu(event: MouseEvent) {
           size="small"
           title="New Feature"
           class="action-button"
-          @click.stop="emit('newFeature')"
+          @click.stop="emit('newFeature', node)"
         />
         <div
           class="node-menu"
@@ -153,10 +149,10 @@ function showMenu(event: MouseEvent) {
         :selected="selectedKeyValue === child.relativePath"
         @toggle="() => toggleExpanded?.(child.relativePath)"
         @select="(n) => onNodeSelect?.(n)"
-        @rename="() => $emit('rename')"
-        @delete="() => $emit('delete')"
-        @new-feature="() => $emit('newFeature')"
-        @new-folder="() => $emit('newFolder')"
+        @rename="(n) => $emit('rename', n)"
+        @delete="(n) => $emit('delete', n)"
+        @new-feature="(n) => $emit('newFeature', n)"
+        @new-folder="(n) => $emit('newFolder', n)"
       />
     </div>
   </div>

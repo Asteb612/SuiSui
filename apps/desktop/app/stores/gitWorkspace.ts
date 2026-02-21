@@ -44,7 +44,7 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       }
     },
 
-    async pull(localPath: string, token: string) {
+    async pull(localPath: string, token?: string) {
       this.isPulling = true
       this.error = null
       try {
@@ -67,7 +67,7 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       }
     },
 
-    async commitAndPush(localPath: string, token: string, options: CommitPushOptions) {
+    async commitAndPush(localPath: string, token: string | undefined, options: CommitPushOptions) {
       this.isCommitting = true
       this.error = null
       try {

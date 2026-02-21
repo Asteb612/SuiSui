@@ -45,12 +45,6 @@ const api: ElectronAPI = {
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),
   },
 
-  git: {
-    status: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS),
-    pull: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_PULL),
-    commitPush: (message) => ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT_PUSH, message),
-  },
-
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
     set: (settings) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_SET, settings),
