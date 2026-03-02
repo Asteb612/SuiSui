@@ -357,21 +357,21 @@ export class WorkspaceService {
       const packageJson = JSON.parse(content)
       const expectedScripts = this.getExpectedScripts()
 
-      // Check if scripts need updating
+      // Only add scripts whose names don't already exist (FR-006: never overwrite user scripts)
+      if (!packageJson.scripts) {
+        packageJson.scripts = {}
+      }
+
       let needsUpdate = false
       for (const [name, script] of Object.entries(expectedScripts)) {
-        if (packageJson.scripts?.[name] !== script) {
+        if (!(name in packageJson.scripts)) {
+          packageJson.scripts[name] = script
           needsUpdate = true
-          break
         }
       }
 
       if (needsUpdate) {
-        logger.info('Updating package.json scripts', { packageJsonPath })
-        packageJson.scripts = {
-          ...packageJson.scripts,
-          ...expectedScripts,
-        }
+        logger.info('Adding missing scripts to package.json', { packageJsonPath })
         await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8')
         logger.info('package.json scripts updated', { packageJsonPath })
       } else {

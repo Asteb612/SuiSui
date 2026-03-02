@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { useGithubStore } from '~/stores/github'
+import { useGithubStore } from '~/stores/gitCredentials'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useWorkspaceStore } from '~/stores/workspace'
 import type { GitCredentials } from '@suisui/shared'

@@ -29,17 +29,17 @@ vi.mock('node:fs', () => ({
   },
 }))
 
-import { GithubAuthService } from '../services/GithubAuthService'
+import { GitCredentialsService } from '../services/GitCredentialsService'
 
-describe('GithubAuthService', () => {
-  let service: GithubAuthService
+describe('GitCredentialsService', () => {
+  let service: GitCredentialsService
 
   beforeEach(() => {
     vi.clearAllMocks()
     for (const key of Object.keys(fileStore)) {
       delete fileStore[key]
     }
-    service = new GithubAuthService()
+    service = new GitCredentialsService()
   })
 
   it('saves and retrieves credentials', async () => {

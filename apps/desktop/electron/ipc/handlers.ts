@@ -12,7 +12,7 @@ import {
   getNodeService,
   getDependencyService,
   getGitWorkspaceService,
-  getGithubAuthService,
+  getGitCredentialsService,
   FakeCommandRunner,
   setCommandRunner,
 } from '../services'
@@ -354,7 +354,7 @@ export function registerIpcHandlers(
     ipcMain.handle(IPC_CHANNELS.GIT_CRED_DELETE, async () => {})
   } else {
     const gitWorkspaceService = getGitWorkspaceService()
-    const githubAuthService = getGithubAuthService()
+    const githubAuthService = getGitCredentialsService()
 
     ipcMain.handle(IPC_CHANNELS.GIT_WS_CLONE_OR_OPEN, async (_event, params: GitWorkspaceParams) => {
       return gitWorkspaceService.cloneOrOpen(params)

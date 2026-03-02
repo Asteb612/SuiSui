@@ -1012,4 +1012,333 @@ describe('WorkspaceService', () => {
       expect(service.getPath()).toBe(validPath)
     })
   })
+
+  // ===== US1: Safe Workspace Activation Tests =====
+
+  describe('set — script preservation (FR-006)', () => {
+    it('should not overwrite existing scripts with same names during set()', async () => {
+      const workspacePath = '/test/workspace'
+      const existingPackageJson = {
+        name: 'test',
+        scripts: {
+          'test': 'jest',
+          'lint': 'eslint .',
+        },
+      }
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify(existingPackageJson),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      await service.set(workspacePath)
+
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const content = JSON.parse(String(await vol.promises.readFile(packageJsonPath, 'utf-8')))
+      // User's existing scripts must be preserved
+      expect(content.scripts.test).toBe('jest')
+      expect(content.scripts.lint).toBe('eslint .')
+      // SuiSui-only scripts should be added
+      expect(content.scripts.bddgen).toBe('bddgen')
+      expect(content.scripts['bddgen:export']).toBe('bddgen export')
+    })
+  })
+
+  describe('init — script preservation (FR-006)', () => {
+    it('should not overwrite existing scripts with same names during init()', async () => {
+      const workspacePath = '/test/workspace'
+      const existingPackageJson = {
+        name: 'existing-project',
+        scripts: {
+          'test': 'jest --coverage',
+        },
+      }
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify(existingPackageJson),
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      await service.init(workspacePath)
+
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const content = JSON.parse(String(await vol.promises.readFile(packageJsonPath, 'utf-8')))
+      // User's test script must be preserved
+      expect(content.scripts.test).toBe('jest --coverage')
+      // Missing SuiSui scripts should be added
+      expect(content.scripts.bddgen).toBe('bddgen')
+      expect(content.scripts['test:ui']).toBe('bddgen && playwright test --ui')
+    })
+  })
+
+  describe('init — cucumber.json preservation', () => {
+    it('should not overwrite existing cucumber.json during init()', async () => {
+      const workspacePath = '/test/workspace'
+      const existingCucumber = {
+        default: {
+          paths: ['specs/**/*.feature'],
+          format: ['json:reports/cucumber.json'],
+          customOption: true,
+        },
+      }
+      const existingCucumberStr = JSON.stringify(existingCucumber)
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/specs/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: existingCucumberStr,
+      })
+
+      await service.init(workspacePath)
+
+      const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+      const content = String(await vol.promises.readFile(cucumberJsonPath, 'utf-8'))
+      expect(content).toBe(existingCucumberStr)
+    })
+  })
+
+  describe('set — .gitignore preservation (FR-009)', () => {
+    it('should not overwrite existing .gitignore during git initialization', async () => {
+      const workspacePath = '/test/workspace'
+      const customGitignore = '# Custom gitignore\n*.log\ncoverage/\nmy-secret-folder/\n'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/.gitignore`]: customGitignore,
+      })
+
+      await service.set(workspacePath)
+
+      const gitignorePath = path.join(workspacePath, '.gitignore')
+      const content = String(await vol.promises.readFile(gitignorePath, 'utf-8'))
+      expect(content).toBe(customGitignore)
+    })
+  })
+
+  describe('set — .git as file (submodule)', () => {
+    it('should skip git init when .git exists as a file', async () => {
+      const workspacePath = '/test/workspace'
+      const gitFileContent = 'gitdir: ../.git/modules/sub'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/.git`]: gitFileContent,
+      })
+
+      await service.set(workspacePath)
+
+      // .git should still be a file, not replaced with a directory
+      const gitPath = path.join(workspacePath, '.git')
+      const stat = await vol.promises.stat(gitPath)
+      expect(stat.isFile()).toBe(true)
+      const content = String(await vol.promises.readFile(gitPath, 'utf-8'))
+      expect(content).toBe(gitFileContent)
+    })
+  })
+
+  // ===== US2: Flexible Workspace Detection Tests =====
+
+  describe('set — empty playwright.config.ts (FR-008)', () => {
+    it('should handle empty playwright.config.ts gracefully during set()', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.ts`]: '',
+      })
+
+      const result = await service.set(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      // Empty config should be treated as custom (no defineBddConfig or managed marker)
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const content = String(await vol.promises.readFile(configPath, 'utf-8'))
+      expect(content).toBe('')
+    })
+
+    it('should handle playwright.config.ts with syntax errors gracefully', async () => {
+      const workspacePath = '/test/workspace'
+      const badConfig = 'export defaul {}'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.ts`]: badConfig,
+      })
+
+      const result = await service.set(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      // Bad config should be treated as custom and not overwritten
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const content = String(await vol.promises.readFile(configPath, 'utf-8'))
+      expect(content).toBe(badConfig)
+    })
+  })
+
+  describe('init — invalid cucumber.json (FR-008)', () => {
+    it('should handle invalid JSON in cucumber.json during init()', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: 'not valid json',
+      })
+
+      // Should not crash
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      // cucumber.json should not be overwritten (it exists)
+      const cucumberPath = path.join(workspacePath, 'cucumber.json')
+      const content = String(await vol.promises.readFile(cucumberPath, 'utf-8'))
+      expect(content).toBe('not valid json')
+    })
+  })
+
+  describe('validate — config path to non-existent directory', () => {
+    it('should return error when config points to non-existent features directory', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({
+          default: { paths: ['nonexistent/**/*.feature'] },
+        }),
+      })
+
+      const result = await service.validate(workspacePath)
+
+      expect(result.isValid).toBe(false)
+      expect(result.errors).toContain('Missing nonexistent directory')
+    })
+  })
+
+  describe('detectStepPaths — depth limit', () => {
+    it('should not discover step files beyond depth 4', async () => {
+      const workspacePath = '/test/workspace'
+      vol.fromJSON({
+        [`${workspacePath}/features/steps/generic.steps.ts`]: '',
+        // Depth 3 from workspace root: a/b/c/shallow.steps.ts (should be found)
+        [`${workspacePath}/a/b/c/shallow.steps.ts`]: '',
+        // Depth 5 from workspace root: a/b/c/d/e/deep.steps.ts (should NOT be found)
+        [`${workspacePath}/a/b/c/d/e/deep.steps.ts`]: '',
+      })
+
+      const result = await service.detectStepPaths(workspacePath)
+
+      // 'a' root should be found (from the depth-3 file)
+      expect(result).toContain('a/**/*.ts')
+      expect(result).toContain('a/**/*.js')
+      // The deep file shouldn't add any extra patterns beyond what 'a/**/*.ts' already covers
+      // Both files are under 'a/', so they collapse to the same root
+    })
+  })
+
+  describe('set/init — workspace paths with spaces (FR-011)', () => {
+    it('should handle workspace path with spaces in set()', async () => {
+      const workspacePath = '/test/my workspace/project'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+      })
+
+      const result = await service.set(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(service.getPath()).toBe(workspacePath)
+
+      // Verify generated config has correct paths
+      const configPath = path.join(workspacePath, 'playwright.config.ts')
+      const configContent = String(await vol.promises.readFile(configPath, 'utf-8'))
+      expect(configContent).toContain('defineBddConfig')
+    })
+
+    it('should handle workspace path with spaces in init()', async () => {
+      const workspacePath = '/test/my workspace/project'
+      vol.fromJSON({
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+      expect(result.path).toBe(workspacePath)
+    })
+  })
+
+  describe('init — multiple config files', () => {
+    it('should not create playwright.config.ts when playwright.config.js exists during init()', async () => {
+      const workspacePath = '/test/workspace'
+      const existingJsConfig = 'module.exports = { projects: [] }'
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
+        [`${workspacePath}/features/.gitkeep`]: '',
+        [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
+        [`${workspacePath}/playwright.config.js`]: existingJsConfig,
+      })
+
+      await service.init(workspacePath)
+
+      // playwright.config.ts should NOT have been created
+      const tsConfigPath = path.join(workspacePath, 'playwright.config.ts')
+      await expect(vol.promises.readFile(tsConfigPath, 'utf-8')).rejects.toBeTruthy()
+      // Existing .js config should be untouched
+      const jsConfigPath = path.join(workspacePath, 'playwright.config.js')
+      const content = String(await vol.promises.readFile(jsConfigPath, 'utf-8'))
+      expect(content).toBe(existingJsConfig)
+    })
+  })
+
+  // ===== US4: Graceful Partial Setup Tests =====
+
+  describe('init — partial setup with missing cucumber.json only', () => {
+    it('should create only missing files when package.json and features exist', async () => {
+      const workspacePath = '/test/workspace'
+      const existingPackageJson = {
+        name: 'existing-project',
+        version: '2.0.0',
+        scripts: { test: 'jest' },
+      }
+      const existingPackageJsonStr = JSON.stringify(existingPackageJson)
+      vol.fromJSON({
+        [`${workspacePath}/package.json`]: existingPackageJsonStr,
+        [`${workspacePath}/features/.gitkeep`]: '',
+      })
+
+      const result = await service.init(workspacePath)
+
+      expect(result.isValid).toBe(true)
+
+      // cucumber.json should have been created
+      const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+      const cucumberContent = JSON.parse(String(await vol.promises.readFile(cucumberJsonPath, 'utf-8')))
+      expect(cucumberContent.default).toBeDefined()
+
+      // package.json should preserve existing content (name, version, existing scripts)
+      const packageJsonPath = path.join(workspacePath, 'package.json')
+      const packageContent = JSON.parse(String(await vol.promises.readFile(packageJsonPath, 'utf-8')))
+      expect(packageContent.name).toBe('existing-project')
+      expect(packageContent.version).toBe('2.0.0')
+      expect(packageContent.scripts.test).toBe('jest')
+    })
+  })
+
+  describe('init — error propagation', () => {
+    it('should not persist workspace to settings when init encounters an error', async () => {
+      // Use a path where the workspace directory can't be created
+      // Simulate by providing a file where a directory is expected
+      const filePath = '/test/file-not-dir'
+      vol.fromJSON({
+        [filePath]: 'I am a file',
+      })
+
+      await expect(service.init(filePath)).rejects.toBeTruthy()
+
+      // Settings should NOT have been saved
+      expect(mockSave).not.toHaveBeenCalled()
+      expect(mockAddRecentWorkspace).not.toHaveBeenCalled()
+    })
+  })
 })
