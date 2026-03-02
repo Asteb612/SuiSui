@@ -257,3 +257,12 @@ These are real playwright-bdd step definitions that users can customize or exten
 - Mutate Pinia state outside actions
 - Use untyped IPC channels
 - Skip shared package rebuild after type changes
+
+## Active Technologies
+
+- TypeScript 5.x (strict mode) + Electron 33.x, isomorphic-git, memfs (testing), Vitest 2.x (001-workspace-detection)
+- Local filesystem (Node.js fs/promises) (001-workspace-detection)
+
+## Recent Changes
+
+- 001-workspace-detection: Added TypeScript 5.x (strict mode) + Electron 33.x, isomorphic-git, memfs (testing), Vitest 2.x

@@ -59,7 +59,11 @@
       "Bash(git stash:*)",
       "Bash(git stash pop:*)",
       "Bash(npx playwright test:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(./.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(./.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(./.specify/scripts/bash/setup-plan.sh:*)",
+      "Bash(./.specify/scripts/bash/update-agent-context.sh claude:*)"
     ]
   }
 }
