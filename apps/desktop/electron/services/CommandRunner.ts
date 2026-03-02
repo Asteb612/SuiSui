@@ -40,11 +40,15 @@ export class CommandRunner implements ICommandRunner {
           : null
 
       child.stdout?.on('data', (data) => {
-        stdout += data.toString()
+        const chunk = data.toString()
+        stdout += chunk
+        options.onOutput?.('stdout', chunk)
       })
 
       child.stderr?.on('data', (data) => {
-        stderr += data.toString()
+        const chunk = data.toString()
+        stderr += chunk
+        options.onOutput?.('stderr', chunk)
       })
 
       child.on('close', (code) => {

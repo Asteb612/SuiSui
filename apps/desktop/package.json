@@ -31,7 +31,7 @@
     "dev": "pnpm build:shared && concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron\"",
     "dev:nuxt": "nuxt dev --port 3000",
     "dev:electron": "wait-on http://localhost:3000 && electron --no-sandbox .",
-    "dev:electron:watch": "node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
+    "dev:electron:watch": "node scripts/cleanup-dev.js && node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
     "build": "pnpm build:shared && nuxt build && pnpm build:electron",
     "build:shared": "pnpm -C ../../packages/shared build",
     "build:dist": "pnpm build:shared && cross-env NUXT_TYPECHECK=false nuxt build && pnpm build:electron",

@@ -63,7 +63,13 @@
       "Bash(./.specify/scripts/bash/create-new-feature.sh:*)",
       "Bash(./.specify/scripts/bash/check-prerequisites.sh:*)",
       "Bash(./.specify/scripts/bash/setup-plan.sh:*)",
-      "Bash(./.specify/scripts/bash/update-agent-context.sh claude:*)"
+      "Bash(./.specify/scripts/bash/update-agent-context.sh claude:*)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:vitalets.github.io)",
+      "Bash(.specify/scripts/bash/update-agent-context.sh claude:*)"
     ]
   }
 }
