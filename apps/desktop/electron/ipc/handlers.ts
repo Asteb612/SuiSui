@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseArgs } from '@suisui/shared'
-import type { Scenario, RunOptions, AppSettings, StepExportResult, StepDefinition } from '@suisui/shared'
+import type { Scenario, RunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -348,48 +348,10 @@ export function registerIpcHandlers(
       return { commitOid: 'mock-commit-oid', pushed: true }
     })
 
-    // GitHub Auth handlers (test mode mocks)
-    ipcMain.handle(IPC_CHANNELS.GITHUB_SAVE_TOKEN, async () => {})
-    ipcMain.handle(IPC_CHANNELS.GITHUB_GET_TOKEN, async () => null)
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DELETE_TOKEN, async () => {})
-    ipcMain.handle(IPC_CHANNELS.GITHUB_VALIDATE_TOKEN, async () => {
-      return { login: 'test-user', name: 'Test User', avatarUrl: 'https://avatars.githubusercontent.com/u/0' }
-    })
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DEVICE_FLOW_START, async () => {
-      return {
-        deviceCode: 'mock-device-code',
-        userCode: 'ABCD-1234',
-        verificationUri: 'https://github.com/login/device',
-        expiresIn: 900,
-        interval: 5,
-      }
-    })
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DEVICE_FLOW_POLL, async () => {
-      return { status: 'success' as const, accessToken: 'mock-access-token' }
-    })
-    ipcMain.handle(IPC_CHANNELS.GITHUB_GET_USER, async () => {
-      return { login: 'test-user', name: 'Test User', avatarUrl: 'https://avatars.githubusercontent.com/u/0' }
-    })
-    ipcMain.handle(IPC_CHANNELS.GITHUB_LIST_REPOS, async () => {
-      return [
-        {
-          owner: 'test-user',
-          name: 'test-repo',
-          fullName: 'test-user/test-repo',
-          cloneUrl: 'https://github.com/test-user/test-repo.git',
-          defaultBranch: 'main',
-          private: false,
-        },
-        {
-          owner: 'test-user',
-          name: 'another-repo',
-          fullName: 'test-user/another-repo',
-          cloneUrl: 'https://github.com/test-user/another-repo.git',
-          defaultBranch: 'main',
-          private: true,
-        },
-      ]
-    })
+    // Git Credentials handlers (test mode mocks)
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_SAVE, async () => {})
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_GET, async () => null)
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_DELETE, async () => {})
   } else {
     const gitWorkspaceService = getGitWorkspaceService()
     const githubAuthService = getGithubAuthService()
@@ -398,48 +360,28 @@ export function registerIpcHandlers(
       return gitWorkspaceService.cloneOrOpen(params)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_WS_PULL, async (_event, localPath: string, token?: string) => {
-      return gitWorkspaceService.pull(localPath, token)
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_PULL, async (_event, localPath: string, credentials?: GitCredentials) => {
+      return gitWorkspaceService.pull(localPath, credentials)
     })
 
     ipcMain.handle(IPC_CHANNELS.GIT_WS_STATUS, async (_event, localPath: string) => {
       return gitWorkspaceService.getStatus(localPath)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async (_event, localPath: string, token: string | undefined, options: CommitPushOptions) => {
-      return gitWorkspaceService.commitAndPush(localPath, token, options)
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async (_event, localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) => {
+      return gitWorkspaceService.commitAndPush(localPath, credentials, options)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GITHUB_SAVE_TOKEN, async (_event, token: string) => {
-      await githubAuthService.saveToken(token)
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_SAVE, async (_event, credentials: GitCredentials) => {
+      await githubAuthService.saveCredentials(credentials)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GITHUB_GET_TOKEN, async () => {
-      return githubAuthService.getToken()
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_GET, async () => {
+      return githubAuthService.getCredentials()
     })
 
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DELETE_TOKEN, async () => {
-      await githubAuthService.deleteToken()
-    })
-
-    ipcMain.handle(IPC_CHANNELS.GITHUB_VALIDATE_TOKEN, async (_event, token: string) => {
-      return githubAuthService.validateToken(token)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DEVICE_FLOW_START, async () => {
-      return githubAuthService.deviceFlowStart()
-    })
-
-    ipcMain.handle(IPC_CHANNELS.GITHUB_DEVICE_FLOW_POLL, async (_event, deviceCode: string) => {
-      return githubAuthService.deviceFlowPoll(deviceCode)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.GITHUB_GET_USER, async (_event, token: string) => {
-      return githubAuthService.getUser(token)
-    })
-
-    ipcMain.handle(IPC_CHANNELS.GITHUB_LIST_REPOS, async (_event, token: string) => {
-      return githubAuthService.listRepos(token)
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_DELETE, async () => {
+      await githubAuthService.deleteCredentials()
     })
   }
 

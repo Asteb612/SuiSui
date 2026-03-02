@@ -6,8 +6,7 @@ import type { RunResult, RunOptions } from '../types/runner'
 import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
-import type { GitWorkspaceParams, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
-import type { DeviceFlowResponse, DeviceFlowPollResult, GithubUser, GithubRepo } from '../types/github'
+import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -79,20 +78,15 @@ export interface ElectronAPI {
 
   gitWorkspace: {
     cloneOrOpen: (params: GitWorkspaceParams) => Promise<WorkspaceMetadata>
-    pull: (localPath: string, token?: string) => Promise<PullResult>
+    pull: (localPath: string, credentials?: GitCredentials) => Promise<PullResult>
     status: (localPath: string) => Promise<WorkspaceStatusResult>
-    commitAndPush: (localPath: string, token: string | undefined, options: CommitPushOptions) => Promise<CommitPushResult>
+    commitAndPush: (localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) => Promise<CommitPushResult>
   }
 
-  github: {
-    saveToken: (token: string) => Promise<void>
-    getToken: () => Promise<string | null>
-    deleteToken: () => Promise<void>
-    validateToken: (token: string) => Promise<GithubUser>
-    deviceFlowStart: () => Promise<DeviceFlowResponse>
-    deviceFlowPoll: (deviceCode: string) => Promise<DeviceFlowPollResult>
-    getUser: (token: string) => Promise<GithubUser>
-    listRepos: (token: string) => Promise<GithubRepo[]>
+  gitCredentials: {
+    save: (credentials: GitCredentials) => Promise<void>
+    get: () => Promise<GitCredentials | null>
+    delete: () => Promise<void>
   }
 }
 

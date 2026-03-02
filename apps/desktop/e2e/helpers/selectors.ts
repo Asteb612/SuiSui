@@ -72,14 +72,14 @@ export const SEL = {
   runUiBtn: '[data-testid="run-ui-btn"]',
   stopRunBtn: '[data-testid="stop-run-btn"]',
 
-  // GitHub Connect
-  githubConnectBtn: '[data-testid="github-connect-btn"]',
-  githubDialog: '[data-testid="github-dialog"]',
-  githubTokenInput: '[data-testid="github-token-input"]',
-  githubValidateBtn: '[data-testid="github-validate-btn"]',
-  githubUserInfo: '[data-testid="github-user-info"]',
-  githubRepoList: '[data-testid="github-repo-list"]',
-  githubRepoItem: '[data-testid="github-repo-item"]',
-  githubCloneBtn: '[data-testid="github-clone-btn"]',
-  githubCloneProgress: '[data-testid="github-clone-progress"]',
+  // Git Clone
+  gitCloneBtn: '[data-testid="git-clone-btn"]',
+  gitCloneDialog: '[data-testid="git-clone-dialog"]',
+  gitCloneUrlInput: '[data-testid="git-clone-url-input"]',
+  gitCloneBranchInput: '[data-testid="git-clone-branch-input"]',
+  gitCloneUsernameInput: '[data-testid="git-clone-username-input"]',
+  gitClonePasswordInput: '[data-testid="git-clone-password-input"]',
+  gitClonePathInput: '[data-testid="git-clone-path-input"]',
+  gitCloneSubmitBtn: '[data-testid="git-clone-btn"]',
+  gitCloneProgress: '[data-testid="git-clone-progress"]',
 } as const

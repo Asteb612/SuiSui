@@ -5,16 +5,13 @@ import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
-//import { useGithubStore } from '~/stores/github'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
 const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
-//const githubStore = useGithubStore()
-
-const showGithubConnect = ref(false)
+const showGitClone = ref(false)
 const changeWorkspaceMenuRef = ref()
 
 const changeWorkspaceMenuItems = [
@@ -24,9 +21,9 @@ const changeWorkspaceMenuItems = [
     command: () => workspaceStore.selectWorkspace(),
   },
   {
-    label: 'Clone from GitHub',
-    icon: 'pi pi-github',
-    command: () => { showGithubConnect.value = true },
+    label: 'Clone from Git',
+    icon: 'pi pi-code-branch',
+    command: () => { showGitClone.value = true },
   },
 ]
 
@@ -34,7 +31,7 @@ function showChangeWorkspaceMenu(event: Event) {
   changeWorkspaceMenuRef.value?.toggle(event)
 }
 
-async function handleGithubCloned(localPath: string) {
+async function handleGitCloned(localPath: string) {
   // After clone, set the cloned directory as workspace and initialize it
   await workspaceStore.setWorkspacePath(localPath)
   if (!isMounted.value) return
@@ -249,13 +246,13 @@ function cancelInit() {
               @click="workspaceStore.selectWorkspace"
             />
             <Button
-              label="Clone from GitHub"
-              icon="pi pi-github"
+              label="Clone from Git"
+              icon="pi pi-code-branch"
               severity="info"
               size="large"
               outlined
-              data-testid="github-connect-btn"
-              @click="showGithubConnect = true"
+              data-testid="git-clone-btn"
+              @click="showGitClone = true"
             />
           </div>
           <div class="workspace-requirements">
@@ -665,10 +662,10 @@ function cancelInit() {
       </template>
     </Dialog>
 
-    <!-- GitHub Connect Dialog -->
-    <GithubConnect
-      v-model:visible="showGithubConnect"
-      @cloned="handleGithubCloned"
+    <!-- Git Clone Dialog -->
+    <GitClone
+      v-model:visible="showGitClone"
+      @cloned="handleGitCloned"
     />
 
     <!-- Help Dialog -->

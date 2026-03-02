@@ -5,6 +5,7 @@ import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import type {
   GitWorkspaceParams,
+  GitCredentials,
   WorkspaceMetadata,
   PullResult,
   WorkspaceStatusResult,
@@ -30,8 +31,15 @@ const DEFAULT_FILTER_GLOBS = [
   'playwright/**',
 ]
 
-function onAuth(token: string) {
-  return { username: 'x-access-token', password: token }
+function buildAuth(params: GitWorkspaceParams | GitCredentials | undefined): (() => { username: string; password: string }) | undefined {
+  if (!params) return undefined
+  if ('username' in params && 'password' in params && params.username && params.password) {
+    return () => ({ username: params.username!, password: params.password! })
+  }
+  if ('token' in params && params.token) {
+    return () => ({ username: 'x-access-token', password: params.token! })
+  }
+  return undefined
 }
 
 function mapHttpError(err: unknown): never {
@@ -40,7 +48,7 @@ function mapHttpError(err: unknown): never {
     throw new GitAuthError('SSH remotes are not supported in this mode. Use an HTTPS remote.')
   }
   if (message.includes('401') || message.includes('403')) {
-    throw new GitAuthError('Authentication failed. Check your GitHub token.')
+    throw new GitAuthError('Authentication failed. Check your credentials.')
   }
   if (message.includes('404')) {
     throw new WorkspaceNotFoundError('Repository not found.')
@@ -157,6 +165,7 @@ export class GitWorkspaceService {
         logger.info('Cloning repo', { url: params.repoUrl, dir })
         await fsPromises.mkdir(dir, { recursive: true })
         try {
+          const authFn = buildAuth(params)
           await git.clone({
             fs,
             http,
@@ -165,7 +174,7 @@ export class GitWorkspaceService {
             ref: params.branch,
             singleBranch: true,
             depth: 50,
-            onAuth: () => onAuth(params.token),
+            ...(authFn ? { onAuth: authFn } : {}),
           })
         } catch (err) {
           mapHttpError(err)
@@ -185,7 +194,7 @@ export class GitWorkspaceService {
     })
   }
 
-  async pull(localPath: string, token?: string): Promise<PullResult> {
+  async pull(localPath: string, credentials?: GitCredentials): Promise<PullResult> {
     return withWorkspaceLock(localPath, async () => {
       const dir = localPath
       const { branch, remoteUrl, beforeOid } = await this.getRepoContext(localPath)
@@ -194,24 +203,15 @@ export class GitWorkspaceService {
       }
 
       try {
-        if (token) {
-          await git.fetch({
-            fs,
-            http,
-            dir,
-            ref: branch,
-            singleBranch: true,
-            onAuth: () => onAuth(token),
-          })
-        } else {
-          await git.fetch({
-            fs,
-            http,
-            dir,
-            ref: branch,
-            singleBranch: true,
-          })
-        }
+        const authFn = buildAuth(credentials)
+        await git.fetch({
+          fs,
+          http,
+          dir,
+          ref: branch,
+          singleBranch: true,
+          ...(authFn ? { onAuth: authFn } : {}),
+        })
       } catch (err) {
         mapHttpError(err)
       }
@@ -322,7 +322,7 @@ export class GitWorkspaceService {
 
   async commitAndPush(
     localPath: string,
-    token: string | undefined,
+    credentials: GitCredentials | undefined,
     options: CommitPushOptions
   ): Promise<CommitPushResult> {
     return withWorkspaceLock(localPath, async () => {
@@ -377,24 +377,15 @@ export class GitWorkspaceService {
       let pushed = false
       if (remoteUrl) {
         try {
-          if (token) {
-            await git.push({
-              fs,
-              http,
-              dir,
-              remote: 'origin',
-              ref: branch,
-              onAuth: () => onAuth(token),
-            })
-          } else {
-            await git.push({
-              fs,
-              http,
-              dir,
-              remote: 'origin',
-              ref: branch,
-            })
-          }
+          const authFn = buildAuth(credentials)
+          await git.push({
+            fs,
+            http,
+            dir,
+            remote: 'origin',
+            ref: branch,
+            ...(authFn ? { onAuth: authFn } : {}),
+          })
           pushed = true
         } catch (err) {
           mapHttpError(err)

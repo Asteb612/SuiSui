@@ -57,15 +57,10 @@ export const IPC_CHANNELS = {
   GIT_WS_STATUS: 'gitws:status',
   GIT_WS_COMMIT_PUSH: 'gitws:commitPush',
 
-  // GitHub Auth
-  GITHUB_SAVE_TOKEN: 'github:saveToken',
-  GITHUB_GET_TOKEN: 'github:getToken',
-  GITHUB_DELETE_TOKEN: 'github:deleteToken',
-  GITHUB_VALIDATE_TOKEN: 'github:validateToken',
-  GITHUB_DEVICE_FLOW_START: 'github:deviceFlowStart',
-  GITHUB_DEVICE_FLOW_POLL: 'github:deviceFlowPoll',
-  GITHUB_GET_USER: 'github:getUser',
-  GITHUB_LIST_REPOS: 'github:listRepos',
+  // Git Credentials
+  GIT_CRED_SAVE: 'git:credSave',
+  GIT_CRED_GET: 'git:credGet',
+  GIT_CRED_DELETE: 'git:credDelete',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
