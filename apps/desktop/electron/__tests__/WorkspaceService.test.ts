@@ -139,7 +139,7 @@ describe('WorkspaceService', () => {
         [`${workspacePath}/cucumber.json`]: JSON.stringify({ default: {} }),
         [`${workspacePath}/playwright.config.ts`]: [
           "import { defineBddConfig } from 'playwright-bdd'",
-          "const testDir = defineBddConfig({",
+          'const testDir = defineBddConfig({',
           "  paths: ['tests/features/**/*.feature'],",
           '})',
         ].join('\n'),
@@ -242,7 +242,9 @@ describe('WorkspaceService', () => {
 
       const configPath = path.join(workspacePath, 'playwright.config.ts')
       const configContent = await vol.promises.readFile(configPath, 'utf-8')
-      expect(String(configContent)).toContain("paths: featureFile ? [featureFile] : ['specs/**/*.feature']")
+      expect(String(configContent)).toContain(
+        "paths: featureFile ? [featureFile] : ['specs/**/*.feature']"
+      )
     })
 
     it('should not create playwright.config.ts when playwright.config.js exists', async () => {
@@ -528,10 +530,7 @@ describe('WorkspaceService', () => {
 
       const result = await service.detectStepPaths(workspacePath)
 
-      expect(result).toEqual([
-        'features/steps/**/*.ts',
-        'features/steps/**/*.js',
-      ])
+      expect(result).toEqual(['features/steps/**/*.ts', 'features/steps/**/*.js'])
     })
 
     it('should return default paths when no step files exist', async () => {
@@ -542,10 +541,7 @@ describe('WorkspaceService', () => {
 
       const result = await service.detectStepPaths(workspacePath)
 
-      expect(result).toEqual([
-        'features/steps/**/*.ts',
-        'features/steps/**/*.js',
-      ])
+      expect(result).toEqual(['features/steps/**/*.ts', 'features/steps/**/*.js'])
     })
 
     it('should detect additional steps/ directory', async () => {
@@ -610,10 +606,7 @@ describe('WorkspaceService', () => {
 
       const result = await service.detectStepPaths(workspacePath)
 
-      expect(result).toEqual([
-        'features/steps/**/*.ts',
-        'features/steps/**/*.js',
-      ])
+      expect(result).toEqual(['features/steps/**/*.ts', 'features/steps/**/*.js'])
     })
 
     it('should detect .steps.js files', async () => {
@@ -685,12 +678,12 @@ describe('WorkspaceService', () => {
 
       expect(result.isValid).toBe(true)
       expect(result.path).toBe(workspacePath)
-      
+
       // Check that package.json was created
       const packageJsonPath = path.join(workspacePath, 'package.json')
       const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
       const packageJson = JSON.parse(packageJsonContent as string)
-      
+
       expect(packageJson.name).toBe('workspace')
       expect(packageJson.version).toBe('1.0.0')
       expect(packageJson.description).toBe('BDD Test Project')
@@ -707,7 +700,7 @@ describe('WorkspaceService', () => {
       const result = await service.init(workspacePath)
 
       expect(result.isValid).toBe(true)
-      
+
       // Check that features directory was created
       const featuresPath = path.join(workspacePath, 'features')
       const stat = await vol.promises.stat(featuresPath)
@@ -741,7 +734,7 @@ describe('WorkspaceService', () => {
       const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
       const cucumberJsonContent = await vol.promises.readFile(cucumberJsonPath, 'utf-8')
       const cucumberJson = JSON.parse(cucumberJsonContent as string)
-      
+
       expect(cucumberJson.default).toBeDefined()
       expect(cucumberJson.default.paths).toContain('features/**/*.feature')
     })
@@ -775,7 +768,7 @@ describe('WorkspaceService', () => {
 
     it('should not overwrite existing playwright.config.ts', async () => {
       const workspacePath = '/test/workspace'
-      const existingConfig = "export default {}"
+      const existingConfig = 'export default {}'
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/features/.gitkeep`]: '',
@@ -807,7 +800,7 @@ describe('WorkspaceService', () => {
       const packageJsonPath = path.join(workspacePath, 'package.json')
       const packageJsonContent = await vol.promises.readFile(packageJsonPath, 'utf-8')
       const packageJson = JSON.parse(packageJsonContent as string)
-      
+
       expect(packageJson.name).toBe('existing-project')
       expect(packageJson.version).toBe('2.0.0')
       expect(packageJson.customField).toBe('custom')
@@ -888,7 +881,7 @@ describe('WorkspaceService', () => {
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/playwright.config.ts`]: [
           "import { defineBddConfig } from 'playwright-bdd'",
-          "const testDir = defineBddConfig({",
+          'const testDir = defineBddConfig({',
           "  paths: ['specs/**/*.feature'],",
           '})',
         ].join('\n'),
@@ -935,7 +928,7 @@ describe('WorkspaceService', () => {
   })
 
   describe('ensurePlaywrightConfig — update logic', () => {
-    it('should update SuiSui-managed config when content is outdated', async () => {
+    it('should NOT overwrite config without defineBddConfig even if marked as SuiSui-managed', async () => {
       const workspacePath = '/test/workspace'
       const outdatedConfig = [
         '// This file is managed by SuiSui',
@@ -954,9 +947,8 @@ describe('WorkspaceService', () => {
 
       const configPath = path.join(workspacePath, 'playwright.config.ts')
       const updatedContent = String(await vol.promises.readFile(configPath, 'utf-8'))
-      // Should have been replaced with the full template
-      expect(updatedContent).toContain('defineBddConfig')
-      expect(updatedContent).not.toBe(outdatedConfig)
+      // Config without defineBddConfig should NOT be modified
+      expect(updatedContent).toBe(outdatedConfig)
     })
 
     it('should NOT overwrite custom (non-SuiSui) playwright.config.ts', async () => {
@@ -1021,8 +1013,8 @@ describe('WorkspaceService', () => {
       const existingPackageJson = {
         name: 'test',
         scripts: {
-          'test': 'jest',
-          'lint': 'eslint .',
+          test: 'jest',
+          lint: 'eslint .',
         },
       }
       vol.fromJSON({
@@ -1050,7 +1042,7 @@ describe('WorkspaceService', () => {
       const existingPackageJson = {
         name: 'existing-project',
         scripts: {
-          'test': 'jest --coverage',
+          test: 'jest --coverage',
         },
       }
       vol.fromJSON({
@@ -1071,7 +1063,7 @@ describe('WorkspaceService', () => {
   })
 
   describe('init — cucumber.json preservation', () => {
-    it('should not overwrite existing cucumber.json during init()', async () => {
+    it('should preserve existing cucumber.json fields and only add require paths during init()', async () => {
       const workspacePath = '/test/workspace'
       const existingCucumber = {
         default: {
@@ -1080,18 +1072,24 @@ describe('WorkspaceService', () => {
           customOption: true,
         },
       }
-      const existingCucumberStr = JSON.stringify(existingCucumber)
       vol.fromJSON({
         [`${workspacePath}/package.json`]: JSON.stringify({ name: 'test' }),
         [`${workspacePath}/specs/.gitkeep`]: '',
-        [`${workspacePath}/cucumber.json`]: existingCucumberStr,
+        [`${workspacePath}/cucumber.json`]: JSON.stringify(existingCucumber),
       })
 
       await service.init(workspacePath)
 
       const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
       const content = String(await vol.promises.readFile(cucumberJsonPath, 'utf-8'))
-      expect(content).toBe(existingCucumberStr)
+      const parsed = JSON.parse(content)
+      // Custom fields preserved
+      expect(parsed.default.paths).toEqual(['specs/**/*.feature'])
+      expect(parsed.default.format).toEqual(['json:reports/cucumber.json'])
+      expect(parsed.default.customOption).toBe(true)
+      // require paths added via additive merge
+      expect(parsed.default.require).toBeDefined()
+      expect(Array.isArray(parsed.default.require)).toBe(true)
     })
   })
 
@@ -1313,12 +1311,16 @@ describe('WorkspaceService', () => {
 
       // cucumber.json should have been created
       const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
-      const cucumberContent = JSON.parse(String(await vol.promises.readFile(cucumberJsonPath, 'utf-8')))
+      const cucumberContent = JSON.parse(
+        String(await vol.promises.readFile(cucumberJsonPath, 'utf-8'))
+      )
       expect(cucumberContent.default).toBeDefined()
 
       // package.json should preserve existing content (name, version, existing scripts)
       const packageJsonPath = path.join(workspacePath, 'package.json')
-      const packageContent = JSON.parse(String(await vol.promises.readFile(packageJsonPath, 'utf-8')))
+      const packageContent = JSON.parse(
+        String(await vol.promises.readFile(packageJsonPath, 'utf-8'))
+      )
       expect(packageContent.name).toBe('existing-project')
       expect(packageContent.version).toBe('2.0.0')
       expect(packageContent.scripts.test).toBe('jest')
