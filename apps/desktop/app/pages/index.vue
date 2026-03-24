@@ -574,7 +574,7 @@ function cancelInit() {
             </p>
             <p class="init-hint">
               <i class="pi pi-lightbulb" />
-              This will automatically create the missing <code>package.json</code>, <code>cucumber.json</code>, and <code>features/</code> directory, and run <code>npm install</code> to set up dependencies for you.
+              This will automatically create the missing <code>package.json</code> and <code>features/</code> directory, generate <code>cucumber.json</code> from your existing config, and run <code>npm install</code> to set up dependencies for you.
             </p>
           </div>
         </template>

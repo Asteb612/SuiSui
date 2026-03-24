@@ -21,17 +21,85 @@ function getDefaultStepsAssetPath(): string {
   return path.join(__dirname, '..', 'assets', 'generic.steps.ts')
 }
 
-const SKIP_DIRS = new Set(['node_modules', '.features-gen', 'dist', 'build', '.git', 'dist-electron'])
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.features-gen',
+  'dist',
+  'build',
+  '.git',
+  'dist-electron',
+])
+
+/** All Playwright config file candidates (root + tests/ subdirectory). */
+export const PLAYWRIGHT_CONFIG_CANDIDATES = [
+  'playwright.config.ts',
+  'playwright.config.js',
+  'playwright.config.mjs',
+  'playwright.config.cjs',
+  path.join('tests', 'playwright.config.ts'),
+  path.join('tests', 'playwright.config.js'),
+  path.join('tests', 'playwright.config.mjs'),
+  path.join('tests', 'playwright.config.cjs'),
+]
+
+/** Find the first existing Playwright config in a workspace, or null. */
+export function findExistingPlaywrightConfig(workspacePath: string): string | null {
+  for (const candidate of PLAYWRIGHT_CONFIG_CANDIDATES) {
+    const fullPath = path.join(workspacePath, candidate)
+    if (fsSync.existsSync(fullPath)) return fullPath
+  }
+  return null
+}
+
+/**
+ * Extract string array values from a JS/TS array literal.
+ * Handles single-line and multi-line arrays with single or double quotes.
+ */
+function extractStringArrayValues(arrayStr: string): string[] {
+  const values: string[] = []
+  const regex = /['"]([^'"]*)['"]/g
+  let m
+  while ((m = regex.exec(arrayStr)) !== null) {
+    if (m[1]) values.push(m[1])
+  }
+  return values
+}
+
+/**
+ * Find the defineBddConfig({...}) block in a file and return its start/end indices
+ * (of the inner object literal, excluding the outer `defineBddConfig(` and `)` ).
+ */
+function findBddConfigBlock(content: string): { start: number; end: number } | null {
+  const marker = 'defineBddConfig('
+  const idx = content.indexOf(marker)
+  if (idx === -1) return null
+
+  const openParen = idx + marker.length
+  // Find the opening `{`
+  const braceStart = content.indexOf('{', openParen)
+  if (braceStart === -1) return null
+
+  // Brace-match to find the closing `}`
+  let depth = 1
+  let pos = braceStart + 1
+  while (depth > 0 && pos < content.length) {
+    if (content[pos] === '{') depth++
+    else if (content[pos] === '}') depth--
+    pos++
+  }
+  if (depth !== 0) return null
+
+  return { start: braceStart, end: pos } // end is right after the closing `}`
+}
 
 export class WorkspaceService {
   private currentWorkspace: WorkspaceInfo | null = null
 
   /**
-   * Scan the workspace for *.steps.ts / *.steps.js files and return
-   * glob patterns covering all discovered step directories.
-   * Always includes the default features/steps/ location.
+   * Filesystem-only scan for step files. Returns glob patterns
+   * covering all discovered step directories. Does NOT read cucumber.json.
    */
-  async detectStepPaths(workspacePath: string): Promise<string[]> {
+  async scanFilesystemForStepPaths(workspacePath: string): Promise<string[]> {
     const stepDirs = new Set<string>()
     const featuresDir = await this.detectFeaturesDir(workspacePath)
 
@@ -63,16 +131,12 @@ export class WorkspaceService {
 
     await scan(workspacePath, 0)
 
-    // Collapse directories to their top-level ancestor.
-    // For each directory, take the first path segment as the root.
-    // e.g. steps/broker, steps/common, steps/crm → all collapse to "steps"
     const roots = new Set<string>()
     for (const dir of stepDirs) {
       const firstSegment = dir.split('/')[0]
       roots.add(firstSegment)
     }
 
-    // Build glob patterns. Always include <featuresDir>/steps/ as the default.
     const normalizedFeaturesDir = featuresDir.replace(/\\/g, '/')
     const defaultPatterns = [
       `${normalizedFeaturesDir}/steps/**/*.ts`,
@@ -80,7 +144,6 @@ export class WorkspaceService {
     ]
     const extraPatterns: string[] = []
     for (const root of [...roots].sort()) {
-      // Skip if already covered by the default features/steps/ glob
       if (root === 'features') continue
       extraPatterns.push(`${root}/**/*.ts`, `${root}/**/*.js`)
     }
@@ -88,10 +151,37 @@ export class WorkspaceService {
     return [...defaultPatterns, ...extraPatterns]
   }
 
+  /**
+   * Detect step paths by merging filesystem scan with cucumber.json require paths.
+   * cucumber.json paths are included first (additive merge, no duplicates).
+   */
+  async detectStepPaths(workspacePath: string): Promise<string[]> {
+    const fsPaths = await this.scanFilesystemForStepPaths(workspacePath)
+
+    // Read cucumber.json require paths and merge
+    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+    try {
+      const content = await fs.readFile(cucumberJsonPath, 'utf-8')
+      const parsed = JSON.parse(content)
+      const requireValue = parsed?.default?.require ?? parsed?.require
+      if (Array.isArray(requireValue)) {
+        const cucumberPaths = requireValue.filter(
+          (p: unknown): p is string => typeof p === 'string'
+        )
+        const merged = new Set([...cucumberPaths, ...fsPaths])
+        return [...merged]
+      }
+    } catch {
+      // cucumber.json missing or unparseable — use filesystem only
+    }
+
+    return fsPaths
+  }
+
   private getPlaywrightConfigContent(stepPaths: string[], featureGlob: string): string {
-    const stepsLine = `  steps: [${stepPaths.map(p => `'${p}'`).join(', ')}],`
+    const stepsLine = `  steps: [${stepPaths.map((p) => `'${p}'`).join(', ')}],`
     return [
-      '// This file is managed by SuiSui - changes may be overwritten',
+      '// This file was generated by SuiSui',
       "import { defineConfig } from '@playwright/test'",
       "import { defineBddConfig } from 'playwright-bdd'",
       '',
@@ -108,94 +198,223 @@ export class WorkspaceService {
       '// Normalize base URL (add https:// if missing protocol)',
       'const rawBaseUrl = process.env.BASE_URL',
       'const baseURL = rawBaseUrl && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\\/\\//.test(rawBaseUrl)',
-      "  ? `https://${rawBaseUrl}`",
+      '  ? `https://${rawBaseUrl}`',
       '  : rawBaseUrl',
       '',
       'export default defineConfig({',
       '  testDir,',
-      '  reporter: [[\'html\', { open: \'never\' }]],',
+      "  reporter: [['html', { open: 'never' }]],",
       '  use: {',
       '    baseURL,',
-      '    trace: \'on-first-retry\',',
+      "    trace: 'on-first-retry',",
       '  },',
       '})',
       '',
     ].join('\n')
   }
 
+  /**
+   * Extract paths and steps arrays from the defineBddConfig({...}) block
+   * in a Playwright config file.
+   */
+  extractBddConfigArrays(content: string): { paths: string[]; steps: string[] } | null {
+    const block = findBddConfigBlock(content)
+    if (!block) return null
+
+    const blockContent = content.substring(block.start, block.end)
+
+    // Extract paths: [...]
+    const pathsMatch = blockContent.match(/paths:\s*(\[[\s\S]*?\])/)
+    const paths = pathsMatch ? extractStringArrayValues(pathsMatch[1]) : []
+
+    // Extract steps: [...]
+    const stepsMatch = blockContent.match(/steps:\s*(\[[\s\S]*?\])/)
+    const steps = stepsMatch ? extractStringArrayValues(stepsMatch[1]) : []
+
+    return { paths, steps }
+  }
+
+  /**
+   * Surgically update ONLY the paths and steps arrays inside defineBddConfig({...}).
+   * Returns the updated file content, or null if defineBddConfig is not found.
+   */
+  private updateBddConfigArrays(
+    content: string,
+    newPaths: string[],
+    newSteps: string[]
+  ): string | null {
+    const block = findBddConfigBlock(content)
+    if (!block) return null
+
+    let blockContent = content.substring(block.start, block.end)
+
+    // Replace paths: [...] (handles multi-line)
+    const pathsStr = `paths: [${newPaths.map((p) => `'${p}'`).join(', ')}]`
+    if (/paths:\s*\[[\s\S]*?\]/.test(blockContent)) {
+      blockContent = blockContent.replace(/paths:\s*\[[\s\S]*?\]/, pathsStr)
+    }
+
+    // Replace steps: [...] (handles multi-line)
+    const stepsStr = `steps: [${newSteps.map((s) => `'${s}'`).join(', ')}]`
+    if (/steps:\s*\[[\s\S]*?\]/.test(blockContent)) {
+      blockContent = blockContent.replace(/steps:\s*\[[\s\S]*?\]/, stepsStr)
+    }
+
+    return content.substring(0, block.start) + blockContent + content.substring(block.end)
+  }
+
   private async ensurePlaywrightConfig(workspacePath: string): Promise<void> {
+    const existingConfigPath = findExistingPlaywrightConfig(workspacePath)
+
+    if (existingConfigPath) {
+      // Config exists — try surgical sync of paths/steps inside defineBddConfig
+      try {
+        const content = await fs.readFile(existingConfigPath, 'utf-8')
+        if (!content.includes('defineBddConfig')) {
+          logger.debug('Playwright config exists without defineBddConfig, skipping sync', {
+            existingConfigPath,
+          })
+          return
+        }
+
+        // Read target paths/steps from cucumber.json (primary) or filesystem
+        const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+        let targetPaths: string[] | null = null
+        let targetSteps: string[] | null = null
+
+        try {
+          const cucumberContent = await fs.readFile(cucumberJsonPath, 'utf-8')
+          const parsed = JSON.parse(cucumberContent)
+          const defaultConfig = parsed?.default ?? parsed
+          if (Array.isArray(defaultConfig?.paths)) targetPaths = defaultConfig.paths
+          if (Array.isArray(defaultConfig?.require)) targetSteps = defaultConfig.require
+        } catch {
+          // cucumber.json missing or unparseable — use filesystem detection
+        }
+
+        if (!targetSteps) {
+          targetSteps = await this.scanFilesystemForStepPaths(workspacePath)
+        }
+        if (!targetPaths) {
+          const featuresDir = await this.detectFeaturesDir(workspacePath)
+          targetPaths = [path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')]
+        }
+
+        const updated = this.updateBddConfigArrays(content, targetPaths, targetSteps)
+        if (updated && updated !== content) {
+          await fs.writeFile(existingConfigPath, updated, 'utf-8')
+          logger.info('Synced paths/steps in playwright config', { existingConfigPath })
+        } else {
+          logger.debug('Playwright config paths/steps are up to date', { existingConfigPath })
+        }
+      } catch (error) {
+        logger.warn('Failed to sync playwright config, skipping', {
+          error: error instanceof Error ? error.message : String(error),
+          existingConfigPath,
+        })
+      }
+      return
+    }
+
+    // No config exists — create default template
     const playwrightConfigPath = path.join(workspacePath, 'playwright.config.ts')
-    const stepPaths = await this.detectStepPaths(workspacePath)
+    const stepPaths = await this.scanFilesystemForStepPaths(workspacePath)
     const featuresDir = await this.detectFeaturesDir(workspacePath)
     const featureGlob = path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')
-    const expectedContent = this.getPlaywrightConfigContent(stepPaths, featureGlob)
-    const configCandidates = [
-      'playwright.config.ts',
-      'playwright.config.js',
-      'playwright.config.mjs',
-      'playwright.config.cjs',
-      path.join('tests', 'playwright.config.ts'),
-      path.join('tests', 'playwright.config.js'),
-      path.join('tests', 'playwright.config.mjs'),
-      path.join('tests', 'playwright.config.cjs'),
-    ]
-    const existingConfigPath = configCandidates
-      .map(candidate => path.join(workspacePath, candidate))
-      .find(candidate => fsSync.existsSync(candidate))
-
-    try {
-      const existingContent = await fs.readFile(playwrightConfigPath, 'utf-8')
-
-      // Check if it's a SuiSui-managed config that needs updating
-      if (existingContent.includes('managed by SuiSui') || existingContent.includes('defineBddConfig')) {
-        if (existingContent !== expectedContent) {
-          logger.info('Updating playwright.config.ts with latest template', { playwrightConfigPath })
-          await fs.writeFile(playwrightConfigPath, expectedContent, 'utf-8')
-          logger.info('playwright.config.ts updated', { playwrightConfigPath })
-        } else {
-          logger.debug('playwright.config.ts is up to date', { playwrightConfigPath })
-        }
-      } else {
-        logger.debug('playwright.config.ts exists but is custom, skipping update', { playwrightConfigPath })
-      }
-    } catch {
-      if (existingConfigPath && existingConfigPath !== playwrightConfigPath) {
-        logger.debug('Playwright config already exists, skipping creation', { existingConfigPath })
-        return
-      }
-      logger.info('Creating playwright.config.ts', { playwrightConfigPath })
-      await fs.writeFile(playwrightConfigPath, expectedContent, 'utf-8')
-      logger.info('playwright.config.ts created', { playwrightConfigPath })
-    }
+    const content = this.getPlaywrightConfigContent(stepPaths, featureGlob)
+    logger.info('Creating playwright.config.ts', { playwrightConfigPath })
+    await fs.writeFile(playwrightConfigPath, content, 'utf-8')
+    logger.info('playwright.config.ts created', { playwrightConfigPath })
   }
 
   private async ensureCucumberJson(workspacePath: string): Promise<void> {
     const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
-    const stepPaths = await this.detectStepPaths(workspacePath)
+    const fsStepPaths = await this.scanFilesystemForStepPaths(workspacePath)
+
+    let existingContent: string | null = null
     try {
-      await fs.access(cucumberJsonPath)
-      logger.debug('cucumber.json already exists', { cucumberJsonPath })
+      existingContent = await fs.readFile(cucumberJsonPath, 'utf-8')
     } catch {
-      const featuresDir = await this.detectFeaturesDir(workspacePath)
-      const featuresGlob = path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')
-      logger.info('Creating cucumber.json', { cucumberJsonPath })
-      const cucumberConfig = {
-        default: {
-          formatOptions: {
-            snippetInterface: 'async-await',
-          },
-          paths: [featuresGlob],
-          require: stepPaths,
-          format: [
-            'progress-bar',
-            'html:reports/cucumber-report.html',
-          ],
-          publishQuiet: true,
-        },
-      }
-      await fs.writeFile(cucumberJsonPath, JSON.stringify(cucumberConfig, null, 2))
-      logger.info('cucumber.json created', { cucumberJsonPath })
+      // File doesn't exist — will create below
     }
+
+    if (existingContent !== null) {
+      // cucumber.json exists — additive sync of require paths
+      try {
+        const parsed = JSON.parse(existingContent)
+        const defaultConfig = parsed?.default ?? parsed
+        const existingRequire: string[] = Array.isArray(defaultConfig?.require)
+          ? defaultConfig.require
+          : []
+
+        // Additive merge: add filesystem-detected paths not already present
+        const merged = new Set([...existingRequire, ...fsStepPaths])
+        const mergedArray = [...merged]
+
+        if (
+          mergedArray.length !== existingRequire.length ||
+          !mergedArray.every((p, i) => p === existingRequire[i])
+        ) {
+          // Update only the require field, preserve everything else
+          if (parsed.default) {
+            parsed.default = { ...parsed.default, require: mergedArray }
+          } else {
+            parsed.require = mergedArray
+          }
+          await fs.writeFile(cucumberJsonPath, JSON.stringify(parsed, null, 2))
+          logger.info('Updated cucumber.json require paths', {
+            added: mergedArray.length - existingRequire.length,
+          })
+        } else {
+          logger.debug('cucumber.json require paths are up to date')
+        }
+      } catch {
+        logger.warn('Failed to parse cucumber.json for require sync, skipping')
+      }
+      return
+    }
+
+    // cucumber.json missing — create it
+    const featuresDir = await this.detectFeaturesDir(workspacePath)
+    const featuresGlob = path.join(featuresDir, '**', '*.feature').replace(/\\/g, '/')
+
+    // Try to import paths/steps from existing playwright config
+    const existingConfigPath = findExistingPlaywrightConfig(workspacePath)
+    let initialPaths = [featuresGlob]
+    let initialRequire = fsStepPaths
+
+    if (existingConfigPath) {
+      try {
+        const configContent = await fs.readFile(existingConfigPath, 'utf-8')
+        const extracted = this.extractBddConfigArrays(configContent)
+        if (extracted) {
+          if (extracted.paths.length > 0) initialPaths = extracted.paths
+          if (extracted.steps.length > 0) {
+            // Merge: playwright config steps + filesystem detected
+            const merged = new Set([...extracted.steps, ...fsStepPaths])
+            initialRequire = [...merged]
+          }
+          logger.info('Imported paths/steps from playwright config into cucumber.json')
+        }
+      } catch {
+        // Couldn't read config — use defaults
+      }
+    }
+
+    logger.info('Creating cucumber.json', { cucumberJsonPath })
+    const cucumberConfig = {
+      default: {
+        formatOptions: {
+          snippetInterface: 'async-await',
+        },
+        paths: initialPaths,
+        require: initialRequire,
+        format: ['progress-bar', 'html:reports/cucumber-report.html'],
+        publishQuiet: true,
+      },
+    }
+    await fs.writeFile(cucumberJsonPath, JSON.stringify(cucumberConfig, null, 2))
+    logger.info('cucumber.json created', { cucumberJsonPath })
   }
 
   private async ensureDefaultSteps(workspacePath: string): Promise<void> {
@@ -233,23 +452,7 @@ export class WorkspaceService {
   }
 
   private async shouldCreateDefaultSteps(workspacePath: string): Promise<boolean> {
-    const configCandidates = [
-      'playwright.config.ts',
-      'playwright.config.js',
-      'playwright.config.mjs',
-      'playwright.config.cjs',
-      path.join('tests', 'playwright.config.ts'),
-      path.join('tests', 'playwright.config.js'),
-      path.join('tests', 'playwright.config.mjs'),
-      path.join('tests', 'playwright.config.cjs'),
-    ]
-
-    for (const candidate of configCandidates) {
-      const fullPath = path.join(workspacePath, candidate)
-      if (fsSync.existsSync(fullPath)) {
-        return false
-      }
-    }
+    if (findExistingPlaywrightConfig(workspacePath)) return false
 
     try {
       await fs.access(path.join(workspacePath, 'cucumber.json'))
@@ -304,18 +507,17 @@ export class WorkspaceService {
   }
 
   private async detectFeaturesDir(workspacePath: string): Promise<string> {
-    const configCandidates = [
-      'playwright.config.ts',
-      'playwright.config.js',
-      'playwright.config.mjs',
-      'playwright.config.cjs',
-      path.join('tests', 'playwright.config.ts'),
-      path.join('tests', 'playwright.config.js'),
-      path.join('tests', 'playwright.config.mjs'),
-      path.join('tests', 'playwright.config.cjs'),
-    ]
+    // Priority: cucumber.json → playwright config → default 'features'
+    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
+    try {
+      const content = await fs.readFile(cucumberJsonPath, 'utf-8')
+      const detected = this.extractFeatureDirFromCucumberJson(content)
+      if (detected) return detected
+    } catch {
+      // Ignore missing/unreadable cucumber.json
+    }
 
-    for (const candidate of configCandidates) {
+    for (const candidate of PLAYWRIGHT_CONFIG_CANDIDATES) {
       const configPath = path.join(workspacePath, candidate)
       try {
         const content = await fs.readFile(configPath, 'utf-8')
@@ -326,25 +528,16 @@ export class WorkspaceService {
       }
     }
 
-    const cucumberJsonPath = path.join(workspacePath, 'cucumber.json')
-    try {
-      const content = await fs.readFile(cucumberJsonPath, 'utf-8')
-      const detected = this.extractFeatureDirFromCucumberJson(content)
-      if (detected) return detected
-    } catch {
-      // Ignore missing/unreadable cucumber.json
-    }
-
     return 'features'
   }
 
   private getExpectedScripts(): Record<string, string> {
     return {
-      'test': 'bddgen && playwright test',
+      test: 'bddgen && playwright test',
       'test:ui': 'bddgen && playwright test --ui',
       'test:headed': 'bddgen && playwright test --headed',
       'test:debug': 'bddgen && playwright test --debug',
-      'bddgen': 'bddgen',
+      bddgen: 'bddgen',
       'bddgen:export': 'bddgen export',
     }
   }
@@ -380,7 +573,7 @@ export class WorkspaceService {
     } catch (error) {
       logger.warn('Failed to update package.json scripts', {
         error: error instanceof Error ? error.message : String(error),
-        packageJsonPath
+        packageJsonPath,
       })
     }
   }
@@ -393,7 +586,9 @@ export class WorkspaceService {
       logger.info('Steps exported successfully', { stepCount: result.steps.length })
     } catch (error) {
       // Don't fail workspace setup if step export fails
-      logger.warn('Failed to export steps', { error: error instanceof Error ? error.message : String(error) })
+      logger.warn('Failed to export steps', {
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -410,7 +605,11 @@ export class WorkspaceService {
       }
     } catch (error) {
       errors.push('Directory does not exist')
-      logger.error('Directory does not exist', error instanceof Error ? error : new Error(String(error)), { workspacePath })
+      logger.error(
+        'Directory does not exist',
+        error instanceof Error ? error : new Error(String(error)),
+        { workspacePath }
+      )
       return { isValid: false, errors }
     }
 
@@ -446,15 +645,36 @@ export class WorkspaceService {
       await fs.access(cucumberJsonPath)
       hasCucumberJson = true
     } catch {
-      errors.push('Missing cucumber.json')
-      logger.debug('Missing cucumber.json', { cucumberJsonPath })
+      // cucumber.json is optional when a playwright config with defineBddConfig exists
+      // (ensureCucumberJson will auto-create it during set/get)
+      const existingConfig = findExistingPlaywrightConfig(workspacePath)
+      if (existingConfig) {
+        try {
+          const content = await fs.readFile(existingConfig, 'utf-8')
+          if (content.includes('defineBddConfig')) {
+            hasCucumberJson = true // will be auto-created
+            logger.debug(
+              'cucumber.json missing but playwright config has defineBddConfig, will auto-create'
+            )
+          }
+        } catch {
+          // Can't read config — treat as missing
+        }
+      }
+      if (!hasCucumberJson) {
+        errors.push('Missing cucumber.json')
+        logger.debug('Missing cucumber.json', { cucumberJsonPath })
+      }
     }
 
     const result = {
       isValid: hasPackageJson && hasFeaturesDir && hasCucumberJson,
       errors,
     }
-    logger.info('Workspace validation completed', { isValid: result.isValid, errors: result.errors.length })
+    logger.info('Workspace validation completed', {
+      isValid: result.isValid,
+      errors: result.errors.length,
+    })
     return result
   }
 
@@ -473,6 +693,7 @@ export class WorkspaceService {
       }
 
       await this.ensureGitRepo(workspacePath)
+      await this.ensureCucumberJson(workspacePath)
       await this.ensurePlaywrightConfig(workspacePath)
       await this.ensurePackageJsonScripts(workspacePath)
       await this.ensureDefaultSteps(workspacePath)
@@ -529,6 +750,7 @@ export class WorkspaceService {
           hasCucumberJson: true,
         }
         await this.ensureGitRepo(settings.workspacePath)
+        await this.ensureCucumberJson(settings.workspacePath)
         await this.ensurePlaywrightConfig(settings.workspacePath)
         await this.ensurePackageJsonScripts(settings.workspacePath)
         await this.ensureDefaultSteps(settings.workspacePath)
@@ -540,7 +762,9 @@ export class WorkspaceService {
           logger.info('Installing workspace dependencies', { reason: depStatus.reason })
           const installResult = await depService.install(settings.workspacePath)
           if (!installResult.success) {
-            logger.error('Failed to install dependencies', undefined, { error: installResult.error })
+            logger.error('Failed to install dependencies', undefined, {
+              error: installResult.error,
+            })
           } else {
             logger.info('Dependencies installed', { duration: installResult.duration })
           }
@@ -552,7 +776,10 @@ export class WorkspaceService {
         logger.info('Workspace loaded from settings', { path: this.currentWorkspace.path })
         return this.currentWorkspace
       } else {
-        logger.warn('Workspace from settings is invalid', { path: settings.workspacePath, errors: validation.errors })
+        logger.warn('Workspace from settings is invalid', {
+          path: settings.workspacePath,
+          errors: validation.errors,
+        })
       }
     }
 
@@ -646,7 +873,7 @@ export class WorkspaceService {
 
     // Ensure target directory exists for initialization flow.
     await fs.mkdir(workspacePath, { recursive: true })
-    
+
     // Create package.json if missing
     const packageJsonPath = path.join(workspacePath, 'package.json')
     try {
@@ -682,8 +909,8 @@ export class WorkspaceService {
       }
     }
 
-    await this.ensurePlaywrightConfig(workspacePath)
     await this.ensureCucumberJson(workspacePath)
+    await this.ensurePlaywrightConfig(workspacePath)
     await this.ensureDefaultSteps(workspacePath)
     await this.ensureGitRepo(workspacePath)
 

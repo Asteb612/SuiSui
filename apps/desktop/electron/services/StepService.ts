@@ -2,13 +2,9 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { app } from 'electron'
 import { spawn } from 'node:child_process'
-import type {
-  StepDefinition,
-  StepExportResult,
-  DecoratorDefinition,
-} from '@suisui/shared'
+import type { StepDefinition, StepExportResult, DecoratorDefinition } from '@suisui/shared'
 import { parseArgs } from '@suisui/shared'
-import { getWorkspaceService } from './WorkspaceService'
+import { getWorkspaceService, findExistingPlaywrightConfig } from './WorkspaceService'
 import { getNodeService } from './NodeService'
 import { createLogger } from '../utils/logger'
 
@@ -58,14 +54,14 @@ export class StepService {
     if (!fs.existsSync(scriptPath)) {
       throw new Error(
         `Export script not found at: ${scriptPath}\n` +
-        `This is an installation error. Please reinstall the application.`
+          `This is an installation error. Please reinstall the application.`
       )
     }
 
     if (!fs.existsSync(workspaceNodeModules)) {
       throw new Error(
         `Workspace node_modules not found at: ${workspaceNodeModules}\n` +
-        `Please ensure dependencies are installed in your workspace.`
+          `Please ensure dependencies are installed in your workspace.`
       )
     }
 
@@ -74,10 +70,7 @@ export class StepService {
     const nodeExecPath = await nodeService.getNodePath()
 
     if (!nodeExecPath) {
-      throw new Error(
-        'Node.js runtime not available.\n' +
-        'Please restart the application.'
-      )
+      throw new Error('Node.js runtime not available.\n' + 'Please restart the application.')
     }
 
     return new Promise((resolve, reject) => {
@@ -103,7 +96,12 @@ export class StepService {
       // Pass the workspace's node_modules path so the script can find playwright-bdd
       const args = [scriptPath, configPath, workspaceNodeModules]
 
-      logger.debug('Spawning process', { execPath: nodeExecPath, args, cwd: workspacePath, NODE_PATH: combinedNodePath })
+      logger.debug('Spawning process', {
+        execPath: nodeExecPath,
+        args,
+        cwd: workspacePath,
+        NODE_PATH: combinedNodePath,
+      })
 
       const child = spawn(nodeExecPath, args, {
         cwd: workspacePath,
@@ -135,19 +133,23 @@ export class StepService {
 
           // Check for common error patterns and provide helpful messages
           if (stderr.includes('importTestFrom')) {
-            reject(new Error(
-              `playwright-bdd configuration error.\n\n` +
-              `The "importTestFrom" option in your playwright.config.ts should point to a fixtures file ` +
-              `that does NOT contain step definitions (no Given, When, Then calls).\n\n` +
-              `Step definitions should be in separate files under your steps directory.\n\n` +
-              `Details:\n${stderr}`
-            ))
+            reject(
+              new Error(
+                `playwright-bdd configuration error.\n\n` +
+                  `The "importTestFrom" option in your playwright.config.ts should point to a fixtures file ` +
+                  `that does NOT contain step definitions (no Given, When, Then calls).\n\n` +
+                  `Step definitions should be in separate files under your steps directory.\n\n` +
+                  `Details:\n${stderr}`
+              )
+            )
           } else if (stderr.includes('Cannot find module')) {
-            reject(new Error(
-              `Module resolution error during step export.\n\n` +
-              `Please ensure your workspace has the required dependencies installed.\n\n` +
-              `Details:\n${stderr}`
-            ))
+            reject(
+              new Error(
+                `Module resolution error during step export.\n\n` +
+                  `Please ensure your workspace has the required dependencies installed.\n\n` +
+                  `Details:\n${stderr}`
+              )
+            )
           } else {
             reject(new Error(`Step export failed (exit code ${code}):\n${stderr || stdout}`))
           }
@@ -172,7 +174,7 @@ export class StepService {
     // * Then visible todos count is {int}
 
     const steps: BddgenStep[] = []
-    const lines = output.split('\n').filter(line => line.trim())
+    const lines = output.split('\n').filter((line) => line.trim())
 
     for (const line of lines) {
       // Match patterns like: * Given <pattern> or * When <pattern>
@@ -182,7 +184,8 @@ export class StepService {
         const pattern = match[2].trim()
 
         // Capitalize first letter of keyword
-        const normalizedKeyword = (keyword.charAt(0).toUpperCase() + keyword.slice(1).toLowerCase()) as 'Given' | 'When' | 'Then'
+        const normalizedKeyword = (keyword.charAt(0).toUpperCase() +
+          keyword.slice(1).toLowerCase()) as 'Given' | 'When' | 'Then'
 
         steps.push({
           keyword: normalizedKeyword,
@@ -208,20 +211,7 @@ export class StepService {
     logger.debug('Workspace path', { workspacePath })
 
     // Find Playwright config
-    const configCandidates = [
-      'playwright.config.ts',
-      'playwright.config.js',
-      'playwright.config.mjs',
-      'playwright.config.cjs',
-      path.join('tests', 'playwright.config.ts'),
-      path.join('tests', 'playwright.config.js'),
-      path.join('tests', 'playwright.config.mjs'),
-      path.join('tests', 'playwright.config.cjs'),
-    ]
-
-    const resolvedConfig = configCandidates
-      .map((candidate) => path.resolve(workspacePath, candidate))
-      .find((candidate) => fs.existsSync(candidate))
+    const resolvedConfig = findExistingPlaywrightConfig(workspacePath)
 
     if (!resolvedConfig) {
       throw new Error(
