@@ -8,4 +8,5 @@ export interface CommandOptions {
   cwd?: string
   env?: Record<string, string>
   timeout?: number
+  onOutput?: (stream: 'stdout' | 'stderr', data: string) => void
 }

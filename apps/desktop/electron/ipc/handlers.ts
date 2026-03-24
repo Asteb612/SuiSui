@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseArgs } from '@suisui/shared'
-import type { Scenario, RunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -273,6 +273,22 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_UI, async (_event, options?: Partial<RunOptions>) => {
     return runnerService.runUI(options)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
+    const onOutput = (_stream: 'stdout' | 'stderr', data: string) => {
+      const lines = data.split('\n')
+      for (const line of lines) {
+        if (line.length > 0) {
+          event.sender.send(IPC_CHANNELS.RUNNER_LOG, line)
+        }
+      }
+    }
+    return runnerService.runBatch(options, onOutput)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS, async () => {
+    return runnerService.getWorkspaceTests()
   })
 
   ipcMain.handle(IPC_CHANNELS.RUNNER_STOP, async () => {
