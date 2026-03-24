@@ -2,7 +2,7 @@ import type { WorkspaceInfo, WorkspaceValidation } from '../types/workspace'
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepExportResult, DecoratorDefinition } from '../types/step'
 import type { ValidationResult } from '../types/validation'
-import type { RunResult, RunOptions } from '../types/runner'
+import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
@@ -50,7 +50,11 @@ export interface ElectronAPI {
   runner: {
     runHeadless: (options?: Partial<RunOptions>) => Promise<RunResult>
     runUI: (options?: Partial<RunOptions>) => Promise<RunResult>
+    runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
+    getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>
+    onRunnerLog: (callback: (line: string) => void) => void
+    offRunnerLog: () => void
   }
 
   settings: {

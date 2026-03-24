@@ -57,16 +57,38 @@ const showFolderPanel = ref(true)
 const showStepPanel = ref(false) // Hidden by default, shown in edit mode
 
 // Current view mode from ScenarioBuilder
-const currentViewMode = ref<'read' | 'edit' | 'run'>('read')
+const currentViewMode = ref<'read' | 'edit'>('read')
 
-function handleModeChange(mode: 'read' | 'edit' | 'run') {
+// Top-level view: editor (read/edit) vs runner (dedicated run view)
+const activeView = ref<'editor' | 'runner'>('editor')
+
+async function handleModeChange(mode: 'read' | 'edit') {
   currentViewMode.value = mode
   // Show step panel only in edit mode
   showStepPanel.value = mode === 'edit'
-  // Hide folder panel in edit/run modes to maximize workspace
-  if (mode !== 'read') {
+  // Hide folder panel in edit mode to maximize workspace
+  if (mode === 'edit') {
     showFolderPanel.value = false
   }
+}
+
+async function enterRunView() {
+  activeView.value = 'runner'
+
+  // First-entry auto-select: if a feature is currently being viewed, select it
+  if (!runnerStore.hasEnteredRunView) {
+    runnerStore.hasEnteredRunView = true
+    if (scenarioStore.currentFeaturePath) {
+      runnerStore.config.selectedFeatures = [scenarioStore.currentFeaturePath]
+      runnerStore.config.activeFilterTab = 'features'
+    }
+  }
+
+  await runnerStore.loadWorkspaceTests()
+}
+
+function exitRunView() {
+  activeView.value = 'editor'
 }
 
 // Git availability - hide if workspace is not a git repo
@@ -126,13 +148,6 @@ async function saveScenario() {
   if (!scenarioStore.currentFeaturePath) return
   await scenarioStore.save(scenarioStore.currentFeaturePath)
   await workspaceStore.loadFeatures()
-}
-
-function getRunButtonTitle(): string {
-  if (currentViewMode.value === 'edit') return 'Exit edit mode first'
-  if (scenarioStore.isDirty) return 'Save changes first'
-  if (!scenarioStore.isValid) return 'Fix validation errors first'
-  return 'Run scenario'
 }
 
 async function resetScenario() {
@@ -287,13 +302,13 @@ function cancelInit() {
         v-else
         class="workspace-layout"
         :class="{
-          'with-folder-panel': showFolderPanel,
-          'with-step-panel': showStepPanel && currentViewMode === 'edit',
+          'with-folder-panel': activeView === 'editor' && showFolderPanel,
+          'with-step-panel': activeView === 'editor' && showStepPanel && currentViewMode === 'edit',
         }"
       >
         <!-- Left Panel: Features Tree -->
         <aside
-          v-if="showFolderPanel"
+          v-if="activeView === 'editor' && showFolderPanel"
           class="panel left-panel"
         >
           <div class="panel-header">
@@ -311,6 +326,17 @@ function cancelInit() {
             <FeatureTree />
           </div>
           <GitPanel v-if="isGitAvailable" />
+          <div class="sidebar-run-button">
+            <Button
+              icon="pi pi-play"
+              label="Run Tests"
+              severity="success"
+              size="small"
+              class="w-full"
+              data-testid="sidebar-run-btn"
+              @click="enterRunView"
+            />
+          </div>
         </aside>
 
         <!-- Center: Scenario Builder -->
@@ -318,7 +344,17 @@ function cancelInit() {
           <div class="panel-header">
             <div class="panel-header-left">
               <Button
-                v-if="!showFolderPanel"
+                v-if="activeView === 'runner'"
+                icon="pi pi-arrow-left"
+                text
+                rounded
+                size="small"
+                title="Back to editor"
+                data-testid="back-to-editor-btn"
+                @click="exitRunView"
+              />
+              <Button
+                v-else-if="!showFolderPanel"
                 icon="pi pi-angle-double-right"
                 text
                 rounded
@@ -326,12 +362,12 @@ function cancelInit() {
                 title="Show folder panel"
                 @click="showFolderPanel = true"
               />
-              <h3>{{ scenarioStore.featureName || 'Scenario' }}</h3>
+              <h3>{{ activeView === 'runner' ? 'Test Runner' : (scenarioStore.featureName || 'Scenario') }}</h3>
             </div>
             <div class="header-actions">
               <!-- Mode Controls -->
               <div
-                v-if="scenarioStore.currentFeaturePath || scenarioStore.scenario.name"
+                v-if="activeView === 'editor' && (scenarioStore.currentFeaturePath || scenarioStore.scenario.name)"
                 class="mode-controls"
               >
                 <!-- Validation indicator (edit mode only) -->
@@ -379,7 +415,6 @@ function cancelInit() {
                   text
                   size="small"
                   data-testid="edit-mode-btn"
-                  :disabled="currentViewMode === 'run'"
                   @click="handleModeChange('edit')"
                 />
                 <!-- Edit mode buttons -->
@@ -417,32 +452,11 @@ function cancelInit() {
                     @click="handleModeChange('read')"
                   />
                 </template>
-
-                <!-- Run button -->
-                <Button
-                  v-if="currentViewMode !== 'run'"
-                  icon="pi pi-play"
-                  label="Run"
-                  text
-                  size="small"
-                  data-testid="run-mode-btn"
-                  :disabled="currentViewMode === 'edit' || !scenarioStore.isValid || scenarioStore.isDirty"
-                  :title="getRunButtonTitle()"
-                  @click="handleModeChange('run')"
-                />
-                <Button
-                  v-else
-                  icon="pi pi-times"
-                  label="Close"
-                  text
-                  size="small"
-                  @click="handleModeChange('read')"
-                />
               </div>
 
               <!-- Steps catalog button (edit mode, when panel hidden) -->
               <Button
-                v-if="!showStepPanel && currentViewMode === 'edit'"
+                v-if="activeView === 'editor' && !showStepPanel && currentViewMode === 'edit'"
                 icon="pi pi-list"
                 label="Steps"
                 text
@@ -452,8 +466,15 @@ function cancelInit() {
               />
             </div>
           </div>
-          <div class="panel-content">
+          <div
+            class="panel-content"
+            :class="{ 'runner-content': activeView === 'runner' }"
+          >
+            <!-- Runner view: config panel handles toolbar + filters/results toggle -->
+            <RunConfigPanel v-if="activeView === 'runner'" />
+            <!-- Editor view: show scenario builder -->
             <ScenarioBuilder
+              v-else
               :edit-mode="editMode"
               :view-mode="currentViewMode"
               @toggle-edit-mode="toggleEditMode"
@@ -463,7 +484,7 @@ function cancelInit() {
 
         <!-- Right Panel: Steps (edit mode only) -->
         <aside
-          v-if="showStepPanel && currentViewMode === 'edit'"
+          v-if="activeView === 'editor' && showStepPanel && currentViewMode === 'edit'"
           class="panel right-panel"
         >
           <div class="panel-header">
@@ -994,6 +1015,22 @@ function cancelInit() {
 .center-panel .panel-content {
   padding: 1rem;
   overflow-x: auto;
+}
+
+.center-panel .panel-content.runner-content {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-run-button {
+  padding: 0.75rem;
+  border-top: 1px solid var(--surface-border);
+  flex-shrink: 0;
+}
+
+.sidebar-run-button :deep(.p-button) {
+  justify-content: center;
 }
 
 .right-panel .panel-content {
