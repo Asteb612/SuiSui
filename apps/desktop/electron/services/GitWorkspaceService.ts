@@ -33,9 +33,6 @@ const DEFAULT_FILTER_GLOBS = [
 
 function buildAuth(params: GitWorkspaceParams | GitCredentials | undefined): (() => { username: string; password: string }) | undefined {
   if (!params) return undefined
-  if ('username' in params && 'password' in params && params.username && params.password) {
-    return () => ({ username: params.username!, password: params.password! })
-  }
   if ('token' in params && params.token) {
     return () => ({ username: 'x-access-token', password: params.token! })
   }
@@ -44,6 +41,7 @@ function buildAuth(params: GitWorkspaceParams | GitCredentials | undefined): (()
 
 function mapHttpError(err: unknown): never {
   const message = err instanceof Error ? err.message : String(err)
+  logger.error('Git HTTP error', err instanceof Error ? err : new Error(message))
   if (message.includes('transport protocol') && message.includes('"ssh"')) {
     throw new GitAuthError('SSH remotes are not supported in this mode. Use an HTTPS remote.')
   }
@@ -148,9 +146,18 @@ export class GitWorkspaceService {
     return withWorkspaceLock(params.localPath, async () => {
       const dir = params.localPath
 
+      let hasValidRepo = false
       try {
         await fsPromises.access(path.join(dir, '.git'))
-        // Existing repo — verify remote
+        // Verify it's a valid repo with at least one commit
+        await git.resolveRef({ fs, dir, ref: 'HEAD' })
+        hasValidRepo = true
+      } catch {
+        // Not a valid git repo
+      }
+
+      if (hasValidRepo) {
+        // Existing repo — verify remote and checkout
         logger.info('Opening existing repo', { dir })
         const remotes = await git.listRemotes({ fs, dir })
         const origin = remotes.find((r) => r.remote === 'origin')
@@ -158,14 +165,14 @@ export class GitWorkspaceService {
           await git.deleteRemote({ fs, dir, remote: 'origin' })
           await git.addRemote({ fs, dir, remote: 'origin', url: params.repoUrl })
         }
-        // Checkout correct branch
         await git.checkout({ fs, dir, ref: params.branch })
-      } catch {
-        // Clone
+      } else {
+        // Clone into directory (must not already contain files)
         logger.info('Cloning repo', { url: params.repoUrl, dir })
         await fsPromises.mkdir(dir, { recursive: true })
         try {
           const authFn = buildAuth(params)
+          logger.info('Clone auth', { hasAuth: !!authFn, hasToken: !!params.token })
           await git.clone({
             fs,
             http,

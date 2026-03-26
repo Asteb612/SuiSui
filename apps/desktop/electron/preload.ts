@@ -86,9 +86,9 @@ const api: ElectronAPI = {
   },
 
   gitCredentials: {
-    save: (credentials) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_SAVE, credentials),
-    get: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_GET),
-    delete: () => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_DELETE),
+    save: (workspacePath, credentials) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_SAVE, workspacePath, credentials),
+    get: (workspacePath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_GET, workspacePath),
+    delete: (workspacePath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_DELETE, workspacePath),
   },
 }
 

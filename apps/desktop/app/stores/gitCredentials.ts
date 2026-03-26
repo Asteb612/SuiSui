@@ -10,11 +10,11 @@ export const useGithubStore = defineStore('github', {
   }),
 
   actions: {
-    async saveCredentials(credentials: GitCredentials) {
+    async saveCredentials(workspacePath: string, credentials: GitCredentials) {
       this.isLoading = true
       this.error = null
       try {
-        await window.api.gitCredentials.save(credentials)
+        await window.api.gitCredentials.save(workspacePath, credentials)
         this.credentials = credentials
         this.hasCredentials = true
       } catch (err) {
@@ -25,21 +25,24 @@ export const useGithubStore = defineStore('github', {
       }
     },
 
-    async loadCredentials() {
+    async loadCredentials(workspacePath: string) {
       try {
-        const creds = await window.api.gitCredentials.get()
+        const creds = await window.api.gitCredentials.get(workspacePath)
         if (creds) {
           this.credentials = creds
           this.hasCredentials = true
+        } else {
+          this.credentials = null
+          this.hasCredentials = false
         }
       } catch {
         // silently ignore
       }
     },
 
-    async clearCredentials() {
+    async clearCredentials(workspacePath: string) {
       try {
-        await window.api.gitCredentials.delete()
+        await window.api.gitCredentials.delete(workspacePath)
       } catch {
         // ignore
       }
