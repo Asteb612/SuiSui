@@ -2,6 +2,7 @@ import type { RunConfiguration } from './runner'
 
 export interface AppSettings {
   workspacePath: string | null
+  gitRoot: string | null
   recentWorkspaces: string[]
   theme: 'light' | 'dark' | 'system'
   editorFontSize: number
@@ -23,6 +24,7 @@ export const DEFAULT_RUN_CONFIGURATION: RunConfiguration = {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   workspacePath: null,
+  gitRoot: null,
   recentWorkspaces: [],
   theme: 'system',
   editorFontSize: 14,

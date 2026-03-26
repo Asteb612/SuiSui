@@ -1,4 +1,4 @@
-import type { WorkspaceInfo, WorkspaceValidation } from '../types/workspace'
+import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../types/workspace'
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepExportResult, DecoratorDefinition } from '../types/step'
 import type { ValidationResult } from '../types/validation'
@@ -17,10 +17,11 @@ export interface WorkspaceSelectResult {
 export interface ElectronAPI {
   workspace: {
     get: () => Promise<WorkspaceInfo | null>
-    set: (path: string) => Promise<WorkspaceValidation>
+    set: (path: string, gitRoot?: string) => Promise<WorkspaceValidation>
     select: () => Promise<WorkspaceSelectResult>
     validate: (path: string) => Promise<WorkspaceValidation>
     init: (path: string) => Promise<WorkspaceInfo>
+    detectBdd: (clonePath: string) => Promise<BddDetectionResult>
   }
 
   features: {

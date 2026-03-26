@@ -5,6 +5,11 @@ export interface WorkspaceInfo {
   hasPackageJson: boolean
   hasFeaturesDir: boolean
   hasCucumberJson: boolean
+  gitRoot?: string
+}
+
+export interface BddDetectionResult {
+  candidates: string[]
 }
 
 export interface WorkspaceValidation {

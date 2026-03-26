@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import fsSync from 'node:fs'
 import git from 'isomorphic-git'
-import type { WorkspaceInfo, WorkspaceValidation } from '@suisui/shared'
+import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '@suisui/shared'
 import { getSettingsService } from './SettingsService'
 import { getDependencyService } from './DependencyService'
 import { getStepService } from './StepService'
@@ -592,6 +592,58 @@ export class WorkspaceService {
     }
   }
 
+  private static readonly SKIP_DIRS = new Set([
+    'node_modules', '.git', 'dist', 'build', '.app', 'coverage', 'out', 'tmp', 'temp',
+  ])
+
+  async detectBddWorkspace(clonePath: string): Promise<BddDetectionResult> {
+    logger.info('Detecting BDD workspace', { clonePath })
+    const candidates: string[] = []
+
+    // Check if root already has BDD structure
+    const rootHasBdd = await this.hasBddIndicators(clonePath)
+    if (rootHasBdd) {
+      logger.info('BDD structure found at root, skipping subfolder scan')
+      return { candidates: [] }
+    }
+
+    // Scan first-level subdirectories
+    try {
+      const entries = await fs.readdir(clonePath, { withFileTypes: true })
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue
+        if (entry.name.startsWith('.')) continue
+        if (WorkspaceService.SKIP_DIRS.has(entry.name)) continue
+
+        const subPath = path.join(clonePath, entry.name)
+        if (await this.hasBddIndicators(subPath)) {
+          candidates.push(subPath)
+        }
+      }
+    } catch (err) {
+      logger.error('Failed to scan for BDD workspace', err instanceof Error ? err : new Error(String(err)))
+    }
+
+    logger.info('BDD detection complete', { clonePath, candidateCount: candidates.length })
+    return { candidates }
+  }
+
+  private async hasBddIndicators(dirPath: string): Promise<boolean> {
+    try {
+      const stat = await fs.stat(path.join(dirPath, 'features'))
+      if (stat.isDirectory()) return true
+    } catch {
+      // no features/ dir
+    }
+    try {
+      await fs.access(path.join(dirPath, 'cucumber.json'))
+      return true
+    } catch {
+      // no cucumber.json
+    }
+    return false
+  }
+
   async validate(workspacePath: string): Promise<WorkspaceValidation> {
     logger.debug('Validating workspace', { workspacePath })
     const errors: string[] = []
@@ -678,8 +730,8 @@ export class WorkspaceService {
     return result
   }
 
-  async set(workspacePath: string): Promise<WorkspaceValidation> {
-    logger.info('Setting workspace', { workspacePath })
+  async set(workspacePath: string, gitRoot?: string): Promise<WorkspaceValidation> {
+    logger.info('Setting workspace', { workspacePath, gitRoot })
     const validation = await this.validate(workspacePath)
 
     if (validation.isValid) {
@@ -690,6 +742,7 @@ export class WorkspaceService {
         hasPackageJson: true,
         hasFeaturesDir: true,
         hasCucumberJson: true,
+        ...(gitRoot && gitRoot !== workspacePath ? { gitRoot } : {}),
       }
 
       await this.ensureGitRepo(workspacePath)
@@ -718,7 +771,7 @@ export class WorkspaceService {
       }
 
       const settingsService = getSettingsService()
-      await settingsService.save({ workspacePath })
+      await settingsService.save({ workspacePath, gitRoot: gitRoot ?? null })
       await settingsService.addRecentWorkspace(workspacePath)
       logger.info('Workspace set successfully', { workspacePath, name: this.currentWorkspace.name })
     } else {
@@ -748,6 +801,7 @@ export class WorkspaceService {
           hasPackageJson: true,
           hasFeaturesDir: true,
           hasCucumberJson: true,
+          ...(settings.gitRoot && settings.gitRoot !== settings.workspacePath ? { gitRoot: settings.gitRoot } : {}),
         }
         await this.ensureGitRepo(settings.workspacePath)
         await this.ensureCucumberJson(settings.workspacePath)

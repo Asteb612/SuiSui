@@ -217,11 +217,11 @@ export const useWorkspaceStore = defineStore('workspace', {
       return result.selectedPath
     },
 
-    async setWorkspacePath(path: string) {
+    async setWorkspacePath(path: string, gitRoot?: string) {
       this.isLoading = true
       this.error = null
       try {
-        const validation = await window.api.workspace.set(path)
+        const validation = await window.api.workspace.set(path, gitRoot)
         if (validation.isValid) {
           this.workspace = await window.api.workspace.get()
           await this.loadFeatures()
@@ -232,6 +232,11 @@ export const useWorkspaceStore = defineStore('workspace', {
       } finally {
         this.isLoading = false
       }
+    },
+
+    /** Returns the git repository root, falling back to workspace path */
+    get gitRootPath(): string | undefined {
+      return this.workspace?.gitRoot ?? this.workspace?.path
     },
 
     clearWorkspace() {

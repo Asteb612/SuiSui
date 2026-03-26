@@ -69,7 +69,11 @@
       "Bash(.specify/scripts/bash/setup-plan.sh:*)",
       "WebFetch(domain:playwright.dev)",
       "WebFetch(domain:vitalets.github.io)",
-      "Bash(.specify/scripts/bash/update-agent-context.sh claude:*)"
+      "Bash(.specify/scripts/bash/update-agent-context.sh claude:*)",
+      "Bash(bash .specify/scripts/bash/setup-plan.sh --json 2>&1)",
+      "Bash(bash .specify/scripts/bash/update-agent-context.sh claude 2>&1)",
+      "Bash(bash .specify/scripts/bash/check-prerequisites.sh --json 2>&1)",
+      "Bash(bash .specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks 2>&1)"
     ]
   }
 }

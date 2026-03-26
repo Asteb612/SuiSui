@@ -30,9 +30,9 @@ const hasRemote = computed(() => Boolean(gitWorkspaceStore.status?.hasRemote))
 const branchName = computed(() => gitWorkspaceStore.status?.branch ?? 'main')
 
 async function refreshWorkspaceGitStatus() {
-  const workspacePath = workspaceStore.workspace?.path
-  if (!workspacePath) return
-  await gitWorkspaceStore.refreshStatus(workspacePath)
+  const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+  if (!gitRoot) return
+  await gitWorkspaceStore.refreshStatus(gitRoot)
 }
 
 onMounted(() => {
@@ -74,13 +74,13 @@ function isAuthError(err: unknown): boolean {
 }
 
 async function pull(credentialsOverride?: GitCredentials) {
-  const workspacePath = workspaceStore.workspace?.path
-  if (!workspacePath) return
+  const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+  if (!gitRoot) return
 
   const credentials = credentialsOverride ?? getCredentials()
 
   try {
-    await gitWorkspaceStore.pull(workspacePath, credentials)
+    await gitWorkspaceStore.pull(gitRoot, credentials)
     lastMessage.value = 'Pull completed'
     panelError.value = null
     await refreshWorkspaceGitStatus()
@@ -104,13 +104,13 @@ function openCommitDialog() {
 async function commitAndPush() {
   if (!commitMessage.value.trim()) return
 
-  const workspacePath = workspaceStore.workspace?.path
-  if (!workspacePath) return
+  const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+  if (!gitRoot) return
 
   const credentials = getCredentials()
 
   try {
-    const result = await gitWorkspaceStore.commitAndPush(workspacePath, credentials, {
+    const result = await gitWorkspaceStore.commitAndPush(gitRoot, credentials, {
       message: commitMessage.value,
     })
     lastMessage.value = result.pushed
@@ -139,11 +139,11 @@ async function submitAuthCredentials() {
   if (pendingAction.value === 'pull') {
     await pull(creds)
   } else {
-    const workspacePath = workspaceStore.workspace?.path
-    if (!workspacePath) return
+    const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+    if (!gitRoot) return
 
     try {
-      const result = await gitWorkspaceStore.commitAndPush(workspacePath, creds, {
+      const result = await gitWorkspaceStore.commitAndPush(gitRoot, creds, {
         message: commitMessage.value,
       })
       lastMessage.value = result.pushed

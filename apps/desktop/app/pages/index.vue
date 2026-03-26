@@ -12,6 +12,9 @@ const scenarioStore = useScenarioStore()
 const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
 const showGitClone = ref(false)
+const showBddFolderSelect = ref(false)
+const bddCandidates = ref<string[]>([])
+const pendingGitRoot = ref<string | null>(null)
 const changeWorkspaceMenuRef = ref()
 
 const changeWorkspaceMenuItems = [
@@ -32,8 +35,33 @@ function showChangeWorkspaceMenu(event: Event) {
 }
 
 async function handleGitCloned(localPath: string) {
-  // After clone, set the cloned directory as workspace and initialize it
-  await workspaceStore.setWorkspacePath(localPath)
+  // Detect BDD workspace in subfolders
+  const detection = await window.api.workspace.detectBdd(localPath)
+
+  if (detection.candidates.length === 1) {
+    // Single subfolder found — auto-select
+    await workspaceStore.setWorkspacePath(detection.candidates[0]!, localPath)
+  } else if (detection.candidates.length > 1) {
+    // Multiple candidates — show selection dialog
+    bddCandidates.value = detection.candidates
+    pendingGitRoot.value = localPath
+    showBddFolderSelect.value = true
+    return
+  } else {
+    // No subfolder BDD found — use clone root (current behavior)
+    await workspaceStore.setWorkspacePath(localPath)
+  }
+
+  if (!isMounted.value) return
+  if (workspaceStore.hasWorkspace) {
+    await loadWorkspaceDependencies()
+  }
+}
+
+async function handleBddFolderSelected(selectedPath: string) {
+  showBddFolderSelect.value = false
+  await workspaceStore.setWorkspacePath(selectedPath, pendingGitRoot.value ?? undefined)
+  pendingGitRoot.value = null
   if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
     await loadWorkspaceDependencies()
@@ -122,9 +150,9 @@ watch(
 async function loadWorkspaceDependencies() {
   await stepsStore.loadCached()
   if (!isMounted.value) return
-  const workspacePath = workspaceStore.workspace?.path
-  if (workspacePath) {
-    await gitWorkspaceStore.refreshStatus(workspacePath)
+  const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+  if (gitRoot) {
+    await gitWorkspaceStore.refreshStatus(gitRoot)
   }
   if (!isMounted.value) return
   await runnerStore.loadBaseUrl()
@@ -171,9 +199,9 @@ async function initializeWorkspace() {
   if (workspaceStore.hasWorkspace) {
     await stepsStore.loadCached()
     if (!isMounted.value) return
-    const workspacePath = workspaceStore.workspace?.path
-    if (workspacePath) {
-      await gitWorkspaceStore.refreshStatus(workspacePath)
+    const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
+    if (gitRoot) {
+      await gitWorkspaceStore.refreshStatus(gitRoot)
     }
   }
 }
@@ -687,6 +715,14 @@ function cancelInit() {
     <GitClone
       v-model:visible="showGitClone"
       @cloned="handleGitCloned"
+    />
+
+    <!-- BDD Folder Selection Dialog -->
+    <BddFolderSelect
+      v-model:visible="showBddFolderSelect"
+      :candidates="bddCandidates"
+      :git-root="pendingGitRoot ?? ''"
+      @selected="handleBddFolderSelected"
     />
 
     <!-- Help Dialog -->
