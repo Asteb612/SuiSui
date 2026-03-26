@@ -2,7 +2,27 @@
   "name": "suisui",
   "version": "0.1.0",
   "private": true,
-  "description": "BDD Test Builder - Electron + Nuxt + PrimeVue",
+  "description": "Visual BDD Test Builder for Playwright - Create Gherkin scenarios with drag-and-drop",
+  "keywords": [
+    "bdd",
+    "gherkin",
+    "playwright",
+    "playwright-bdd",
+    "cucumber",
+    "testing",
+    "e2e",
+    "electron",
+    "visual-testing",
+    "test-builder",
+    "behavior-driven-development",
+    "desktop-app"
+  ],
+  "homepage": "https://asteb612.github.io/SuiSui/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Asteb612/SuiSui.git"
+  },
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @suisui/desktop dev",

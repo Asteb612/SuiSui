@@ -3,7 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SuiSui - Visual BDD Test Builder</title>
+  <title>SuiSui - Visual BDD Test Builder for Playwright</title>
+  <meta name="description" content="Build Gherkin BDD tests visually with drag-and-drop. SuiSui is a free, open-source desktop app that integrates with Playwright and playwright-bdd for automated browser testing.">
+  <meta name="keywords" content="BDD, Gherkin, Playwright, test builder, behavior driven development, cucumber, e2e testing, visual testing, desktop app, playwright-bdd">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="SuiSui - Visual BDD Test Builder">
+  <meta property="og:description" content="Build Gherkin BDD tests visually with drag-and-drop. Free, open-source desktop app for Playwright.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://asteb612.github.io/SuiSui/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SuiSui - Visual BDD Test Builder">
+  <meta name="twitter:description" content="Build Gherkin BDD tests visually with drag-and-drop. Free, open-source desktop app for Playwright.">
+
+  <link rel="canonical" href="https://asteb612.github.io/SuiSui/">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,8 +27,43 @@
   <section class="hero">
     <div class="container">
       <h1>SuiSui</h1>
-      <p class="tagline">A visual desktop app for building BDD tests. Create Gherkin scenarios with drag-and-drop, then run them with Playwright.</p>
-      <a href="https://github.com/Asteb612/SuiSui" class="cta">View on GitHub</a>
+      <p class="subtitle">Visual BDD Test Builder</p>
+      <p class="tagline">Create Gherkin scenarios with drag-and-drop, run them with Playwright. No code required to write tests &mdash; SuiSui turns your clicks into executable BDD specs.</p>
+      <div class="hero-actions">
+        <a href="https://github.com/Asteb612/SuiSui/releases" class="cta">Download</a>
+        <a href="https://github.com/Asteb612/SuiSui" class="cta cta-secondary">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Why SuiSui -->
+  <section class="why">
+    <div class="container">
+      <h2>Why SuiSui?</h2>
+      <p class="section-intro">Writing BDD tests usually means juggling Gherkin files, step definition code, and CLI tools. SuiSui puts everything in one window &mdash; pick steps, fill in parameters, and hit run.</p>
+      <div class="highlights">
+        <div class="highlight">
+          <span class="highlight-icon">1</span>
+          <div>
+            <strong>Select steps</strong>
+            <p>Browse your project's step definitions in a searchable catalog. Cucumber expressions, DataTables, and Scenario Outlines are all supported.</p>
+          </div>
+        </div>
+        <div class="highlight">
+          <span class="highlight-icon">2</span>
+          <div>
+            <strong>Build scenarios</strong>
+            <p>Drag steps into Given / When / Then order. Fill parameters inline. The Gherkin is generated for you.</p>
+          </div>
+        </div>
+        <div class="highlight">
+          <span class="highlight-icon">3</span>
+          <div>
+            <strong>Run tests</strong>
+            <p>Execute tests headless or with Playwright UI &mdash; right from the app. Results show inline, no terminal needed.</p>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -24,35 +74,35 @@
       <div class="features-grid">
         <div class="feature-card">
           <h3>Visual Scenario Builder</h3>
-          <p>Create Given/When/Then steps with an intuitive drag-and-drop interface.</p>
+          <p>Create Given/When/Then steps with an intuitive drag-and-drop interface. Edit arguments inline.</p>
         </div>
         <div class="feature-card">
           <h3>Automatic Step Discovery</h3>
-          <p>Imports step definitions from your playwright-bdd project automatically.</p>
+          <p>Imports step definitions from your playwright-bdd project automatically. Stays in sync as your code changes.</p>
         </div>
         <div class="feature-card">
           <h3>Smart Step Matching</h3>
-          <p>Recognizes Cucumber expressions, enum alternations, optional text, and more.</p>
+          <p>Recognizes Cucumber expressions, enum alternations, optional text, DataTables, and anonymous parameters.</p>
         </div>
         <div class="feature-card">
           <h3>Real-time Validation</h3>
-          <p>Validates scenarios against available step definitions before execution.</p>
+          <p>Validates scenarios against available step definitions before execution. Catch errors before they reach CI.</p>
         </div>
         <div class="feature-card">
           <h3>Integrated Test Runner</h3>
-          <p>Run tests headless or with Playwright UI directly from the app.</p>
+          <p>Run tests headless or with Playwright UI directly from the app. See results without leaving the window.</p>
         </div>
         <div class="feature-card">
           <h3>Feature File Management</h3>
-          <p>Create, edit, and organize feature files in a tree view.</p>
+          <p>Create, edit, and organize .feature files in a tree view. Full Gherkin syntax support.</p>
         </div>
         <div class="feature-card">
           <h3>Git Integration</h3>
-          <p>Built-in version control for your test files.</p>
+          <p>Built-in version control powered by isomorphic-git. Commit, push, and pull test changes.</p>
         </div>
         <div class="feature-card">
-          <h3>Embedded Node.js</h3>
-          <p>Self-contained runtime &mdash; no external Node.js installation required.</p>
+          <h3>Self-Contained Runtime</h3>
+          <p>Ships with an embedded Node.js runtime. No external installation required &mdash; download and go.</p>
         </div>
       </div>
     </div>
@@ -61,31 +111,69 @@
   <!-- Demos -->
   <section class="demos">
     <div class="container">
-      <h2>Demos</h2>
+      <h2>See It in Action</h2>
+      <p class="section-intro">Every video below is auto-generated from an end-to-end Playwright test &mdash; what you see is exactly what you get.</p>
 
       <div class="demo-featured">
         <div class="demo-card">
-          <video src="videos/scenario-builder.webm" controls muted loop playsinline></video>
-          <div class="demo-label">Scenario Builder</div>
+          <video src="videos/scenario-builder.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Scenario Builder &mdash; open a feature, edit steps, save</div>
         </div>
       </div>
 
       <div class="demo-grid">
         <div class="demo-card">
-          <video src="videos/welcome-screen.webm" controls muted loop playsinline></video>
-          <div class="demo-label">Welcome Screen</div>
+          <video src="videos/welcome-screen.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Welcome Screen &mdash; open or clone a project</div>
         </div>
         <div class="demo-card">
-          <video src="videos/feature-tree.webm" controls muted loop playsinline></video>
-          <div class="demo-label">Feature Tree</div>
+          <video src="videos/feature-tree.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Feature Tree &mdash; navigate folders and files</div>
         </div>
         <div class="demo-card">
-          <video src="videos/edit-mode.webm" controls muted loop playsinline></video>
-          <div class="demo-label">Edit Mode</div>
+          <video src="videos/edit-mode.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Edit Mode &mdash; add, reorder, and remove steps</div>
         </div>
         <div class="demo-card">
-          <video src="videos/data-table.webm" controls muted loop playsinline></video>
-          <div class="demo-label">Data Tables</div>
+          <video src="videos/run-mode.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Test Runner &mdash; configure and execute tests</div>
+        </div>
+        <div class="demo-card">
+          <video src="videos/data-table.webm" autoplay muted loop playsinline></video>
+          <div class="demo-label">Data Tables &mdash; edit tabular step arguments</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section class="stack">
+    <div class="container">
+      <h2>Built With</h2>
+      <div class="stack-grid">
+        <div class="stack-item">
+          <strong>Electron 35</strong>
+          <span>Cross-platform desktop</span>
+        </div>
+        <div class="stack-item">
+          <strong>Nuxt 4 + Vue 3</strong>
+          <span>Reactive frontend</span>
+        </div>
+        <div class="stack-item">
+          <strong>PrimeVue 4</strong>
+          <span>UI component library</span>
+        </div>
+        <div class="stack-item">
+          <strong>Playwright</strong>
+          <span>Test execution engine</span>
+        </div>
+        <div class="stack-item">
+          <strong>playwright-bdd</strong>
+          <span>Gherkin step definitions</span>
+        </div>
+        <div class="stack-item">
+          <strong>isomorphic-git</strong>
+          <span>Built-in version control</span>
         </div>
       </div>
     </div>
@@ -96,6 +184,10 @@
     <div class="container">
       <h2>Documentation</h2>
       <div class="docs-grid">
+        <a href="USER_GUIDE.md" class="doc-link">
+          <h3>User Guide</h3>
+          <p>Get started with SuiSui</p>
+        </a>
         <a href="ARCHITECTURE.md" class="doc-link">
           <h3>Architecture</h3>
           <p>Overall design and data flow</p>
@@ -114,15 +206,11 @@
         </a>
         <a href="DEVELOPMENT.md" class="doc-link">
           <h3>Development</h3>
-          <p>Development workflow and scripts</p>
+          <p>Contribute to SuiSui</p>
         </a>
         <a href="TESTING.md" class="doc-link">
           <h3>Testing</h3>
           <p>Unit and E2E testing strategies</p>
-        </a>
-        <a href="USER_GUIDE.md" class="doc-link">
-          <h3>User Guide</h3>
-          <p>End-user documentation</p>
         </a>
       </div>
     </div>
@@ -131,8 +219,14 @@
   <!-- Footer -->
   <footer>
     <div class="container">
-      <p>SuiSui &mdash; Built with Electron, Nuxt, and playwright-bdd</p>
-      <p><a href="https://github.com/Asteb612/SuiSui">GitHub</a></p>
+      <p>SuiSui is free and open-source under the MIT License.</p>
+      <p>
+        <a href="https://github.com/Asteb612/SuiSui">GitHub</a>
+        &middot;
+        <a href="https://github.com/Asteb612/SuiSui/releases">Releases</a>
+        &middot;
+        <a href="https://github.com/Asteb612/SuiSui/issues">Report a Bug</a>
+      </p>
     </div>
   </footer>
 
