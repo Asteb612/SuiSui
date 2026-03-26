@@ -5,10 +5,11 @@ import type { ElectronAPI } from '@suisui/shared'
 const api: ElectronAPI = {
   workspace: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET),
-    set: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SET, path),
+    set: (path, gitRoot) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SET, path, gitRoot),
     select: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_SELECT),
     validate: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_VALIDATE, path),
     init: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_INIT, path),
+    detectBdd: (clonePath) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_DETECT_BDD, clonePath),
   },
 
   features: {

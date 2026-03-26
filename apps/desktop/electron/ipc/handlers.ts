@@ -114,10 +114,17 @@ export function registerIpcHandlers(
     return result
   })
 
-  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET, async (_event, path: string) => {
-    logger.info('WORKSPACE_SET called', { path })
-    const result = await workspaceService.set(path)
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET, async (_event, path: string, gitRoot?: string) => {
+    logger.info('WORKSPACE_SET called', { path, gitRoot })
+    const result = await workspaceService.set(path, gitRoot)
     logger.info('WORKSPACE_SET completed', { path, isValid: result.isValid })
+    return result
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_DETECT_BDD, async (_event, clonePath: string) => {
+    logger.info('WORKSPACE_DETECT_BDD called', { clonePath })
+    const result = await workspaceService.detectBddWorkspace(clonePath)
+    logger.info('WORKSPACE_DETECT_BDD completed', { clonePath, candidateCount: result.candidates.length })
     return result
   })
 

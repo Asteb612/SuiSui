@@ -178,7 +178,7 @@ describe('Workspace IPC Handlers', () => {
       const result = await setHandler(IPC_CHANNELS.WORKSPACE_SET, workspacePath)
 
       expect(result.isValid).toBe(true)
-      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath, gitRoot: null })
       expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
     })
 
@@ -228,7 +228,7 @@ describe('Workspace IPC Handlers', () => {
       expect(result.workspace?.path).toBe(workspacePath)
       expect(result.validation?.isValid).toBe(true)
       expect(result.selectedPath).toBe(workspacePath)
-      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath, gitRoot: null })
     })
 
     it('should return validation errors when dialog returns invalid path', async () => {
@@ -380,7 +380,7 @@ describe('Workspace IPC Handlers', () => {
       const initHandler = (mockIpcMain as MockIpcMainWithInvoke).invoke
       await initHandler(IPC_CHANNELS.WORKSPACE_INIT, workspacePath)
 
-      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath, gitRoot: null })
       expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
     })
   })

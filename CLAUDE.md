@@ -260,8 +260,13 @@ These are real playwright-bdd step definitions that users can customize or exten
 
 ## Active Technologies
 
+<<<<<<< 004-bdd-subfolder-detection
+- TypeScript 5.x (strict mode) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x, Node.js fs/promises (004-bdd-subfolder-detection)
+- In-memory workspace state + SettingsService (persisted) (004-bdd-subfolder-detection)
+=======
 - TypeScript 5.x (strict mode) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x, isomorphic-git (003-github-token-auth)
 - Encrypted files via Electron `safeStorage` at `<workspace>/.app/credentials.enc` (003-github-token-auth)
+>>>>>>> main
 
 - TypeScript 5.x (strict mode) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x, Playwright, playwright-bdd (bddgen) (002-flexible-test-runner)
 - JSON file via SettingsService (`~/.config/SuiSui/settings.json`), in-memory Pinia state (002-flexible-test-runner)

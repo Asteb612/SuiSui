@@ -208,7 +208,7 @@ describe('WorkspaceService', () => {
       const result = await service.set(workspacePath)
 
       expect(result.isValid).toBe(true)
-      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath, gitRoot: null })
       expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
       expect(service.getPath()).toBe(workspacePath)
     })
@@ -830,7 +830,7 @@ describe('WorkspaceService', () => {
       await service.init(workspacePath)
 
       expect(service.getPath()).toBe(workspacePath)
-      expect(mockSave).toHaveBeenCalledWith({ workspacePath })
+      expect(mockSave).toHaveBeenCalledWith({ workspacePath, gitRoot: null })
       expect(mockAddRecentWorkspace).toHaveBeenCalledWith(workspacePath)
     })
 
@@ -1341,6 +1341,92 @@ describe('WorkspaceService', () => {
       // Settings should NOT have been saved
       expect(mockSave).not.toHaveBeenCalled()
       expect(mockAddRecentWorkspace).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('detectBddWorkspace', () => {
+    it('returns empty candidates when BDD structure is at root', async () => {
+      vol.fromJSON({
+        '/repo/features/login.feature': 'Feature: Login',
+        '/repo/cucumber.json': '{}',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual([])
+    })
+
+    it('detects BDD in a single subfolder', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/e2e/features/login.feature': 'Feature: Login',
+        '/repo/e2e/cucumber.json': '{}',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual(['/repo/e2e'])
+    })
+
+    it('detects BDD in multiple subfolders', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/e2e/features/login.feature': 'Feature: Login',
+        '/repo/tests/cucumber.json': '{}',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toHaveLength(2)
+      expect(result.candidates).toContain('/repo/e2e')
+      expect(result.candidates).toContain('/repo/tests')
+    })
+
+    it('returns empty candidates when no BDD structure found', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/src/index.ts': 'console.log("hello")',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual([])
+    })
+
+    it('skips node_modules directory', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/node_modules/some-pkg/features/thing.feature': 'Feature: Thing',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual([])
+    })
+
+    it('skips hidden directories', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/.hidden/features/thing.feature': 'Feature: Thing',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual([])
+    })
+
+    it('detects subfolder with only cucumber.json', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/e2e/cucumber.json': '{}',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual(['/repo/e2e'])
+    })
+
+    it('detects subfolder with only features directory', async () => {
+      vol.fromJSON({
+        '/repo/package.json': '{}',
+        '/repo/e2e/features/login.feature': 'Feature: Login',
+      })
+
+      const result = await service.detectBddWorkspace('/repo')
+      expect(result.candidates).toEqual(['/repo/e2e'])
     })
   })
 })

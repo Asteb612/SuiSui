@@ -354,7 +354,7 @@ describe('workspace store — setWorkspacePath', () => {
     const store = useWorkspaceStore()
     await store.setWorkspacePath('/test/workspace')
 
-    expect(mockApi.workspace.set).toHaveBeenCalledWith('/test/workspace')
+    expect(mockApi.workspace.set).toHaveBeenCalledWith('/test/workspace', undefined)
     expect(mockApi.workspace.get).toHaveBeenCalled()
     expect(store.workspace).toEqual(mockWorkspace)
     expect(store.features).toEqual(mockFeatures)
