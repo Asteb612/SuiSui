@@ -89,9 +89,9 @@ export interface ElectronAPI {
   }
 
   gitCredentials: {
-    save: (credentials: GitCredentials) => Promise<void>
-    get: () => Promise<GitCredentials | null>
-    delete: () => Promise<void>
+    save: (workspacePath: string, credentials: GitCredentials) => Promise<void>
+    get: (workspacePath: string) => Promise<GitCredentials | null>
+    delete: (workspacePath: string) => Promise<void>
   }
 }
 

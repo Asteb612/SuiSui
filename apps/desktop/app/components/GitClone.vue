@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { validateGitHubToken } from '@suisui/shared'
 import { useGithubStore } from '~/stores/gitCredentials'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -20,8 +21,7 @@ const workspaceStore = useWorkspaceStore()
 // Form fields
 const repoUrl = ref('')
 const branch = ref('main')
-const username = ref('')
-const password = ref('')
+const token = ref('')
 const localPath = ref('')
 const cloneError = ref<string | null>(null)
 
@@ -42,8 +42,18 @@ const repoName = computed(() => {
   }
 })
 
+// Token validation
+const tokenValidation = computed(() => validateGitHubToken(token.value))
+const tokenError = computed(() => {
+  if (token.value.trim() === '') return null
+  return tokenValidation.value.valid ? null : tokenValidation.value.error
+})
+
 const canClone = computed(() => {
-  return repoUrl.value.trim() && localPath.value && !gitWorkspaceStore.isCloning
+  return repoUrl.value.trim()
+    && localPath.value
+    && !gitWorkspaceStore.isCloning
+    && (token.value.trim() === '' || tokenValidation.value.valid)
 })
 
 // Reset on close
@@ -70,6 +80,7 @@ async function startClone() {
   const url = repoUrl.value.trim()
   const name = repoName.value || 'repo'
   const fullPath = `${localPath.value}/${name}`
+  const trimmedToken = token.value.trim()
 
   // Extract owner/repo from URL for metadata
   const urlParts = url.replace(/\.git$/, '').split('/')
@@ -83,16 +94,12 @@ async function startClone() {
       repoUrl: url,
       branch: branch.value || 'main',
       localPath: fullPath,
-      username: username.value || undefined,
-      password: password.value || undefined,
+      token: trimmedToken || undefined,
     })
 
-    // Save credentials if provided
-    if (username.value && password.value) {
-      await githubStore.saveCredentials({
-        username: username.value,
-        password: password.value,
-      })
+    // Save credentials if token provided
+    if (trimmedToken) {
+      await githubStore.saveCredentials(fullPath, { token: trimmedToken })
     }
 
     emit('cloned', fullPath)
@@ -136,28 +143,25 @@ async function startClone() {
 
       <div class="credentials-section">
         <p class="credentials-hint">
-          Optional: provide credentials for private repositories.
+          Optional: provide a GitHub Personal Access Token for private repositories.
         </p>
         <div class="form-field">
-          <label for="git-clone-username">Username</label>
+          <label for="git-clone-token">GitHub Token</label>
           <InputText
-            id="git-clone-username"
-            v-model="username"
-            placeholder="Username"
-            class="full-width"
-            data-testid="git-clone-username-input"
-          />
-        </div>
-        <div class="form-field">
-          <label for="git-clone-password">Password / Token</label>
-          <InputText
-            id="git-clone-password"
-            v-model="password"
+            id="git-clone-token"
+            v-model="token"
             type="password"
-            placeholder="Password or personal access token"
+            placeholder="ghp_... or github_pat_..."
             class="full-width"
-            data-testid="git-clone-password-input"
+            :invalid="!!tokenError"
+            data-testid="git-clone-token-input"
           />
+          <small
+            v-if="tokenError"
+            class="token-error"
+          >
+            {{ tokenError }}
+          </small>
         </div>
       </div>
 
@@ -263,6 +267,11 @@ async function startClone() {
   margin: 0;
   font-size: 0.8125rem;
   color: var(--text-color-secondary);
+}
+
+.token-error {
+  color: var(--red-500);
+  font-size: 0.75rem;
 }
 
 .path-input-group {

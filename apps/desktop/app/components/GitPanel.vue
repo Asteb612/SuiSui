@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
+import { validateGitHubToken } from '@suisui/shared'
 import { useGithubStore } from '~/stores/gitCredentials'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -13,8 +14,7 @@ const lastMessage = ref<string | null>(null)
 const panelError = ref<string | null>(null)
 const showCommitDialog = ref(false)
 const showAuthDialog = ref(false)
-const authUsername = ref('')
-const authPassword = ref('')
+const authToken = ref('')
 const pendingAction = ref<'pull' | 'commitAndPush' | null>(null)
 let statusPollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -29,14 +29,38 @@ const changeCount = computed(() => {
 const hasRemote = computed(() => Boolean(gitWorkspaceStore.status?.hasRemote))
 const branchName = computed(() => gitWorkspaceStore.status?.branch ?? 'main')
 
+// Auth token validation
+const authTokenValidation = computed(() => validateGitHubToken(authToken.value))
+const authTokenError = computed(() => {
+  if (authToken.value.trim() === '') return null
+  return authTokenValidation.value.valid ? null : authTokenValidation.value.error
+})
+const canSubmitAuth = computed(() => {
+  const trimmed = authToken.value.trim()
+  return trimmed !== '' && authTokenValidation.value.valid
+})
+
 async function refreshWorkspaceGitStatus() {
   const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
   if (!gitRoot) return
   await gitWorkspaceStore.refreshStatus(gitRoot)
 }
 
+// Reload credentials when workspace changes
+watch(
+  () => workspaceStore.workspace?.path,
+  (newPath) => {
+    if (newPath) {
+      void githubStore.loadCredentials(newPath)
+    }
+  }
+)
+
 onMounted(() => {
-  void githubStore.loadCredentials()
+  const workspacePath = workspaceStore.workspace?.path
+  if (workspacePath) {
+    void githubStore.loadCredentials(workspacePath)
+  }
   void refreshWorkspaceGitStatus()
   statusPollTimer = setInterval(() => {
     void refreshWorkspaceGitStatus()
@@ -56,15 +80,13 @@ function getCredentials(): GitCredentials | undefined {
 
 function closeAuthDialog() {
   showAuthDialog.value = false
-  authUsername.value = ''
-  authPassword.value = ''
+  authToken.value = ''
   pendingAction.value = null
 }
 
 function showAuthPrompt(action: 'pull' | 'commitAndPush') {
   pendingAction.value = action
-  authUsername.value = ''
-  authPassword.value = ''
+  authToken.value = ''
   showAuthDialog.value = true
 }
 
@@ -87,7 +109,7 @@ async function pull(credentialsOverride?: GitCredentials) {
   } catch (err) {
     if (isAuthError(err)) {
       if (credentialsOverride) {
-        panelError.value = 'Authentication failed. Check your credentials and retry.'
+        panelError.value = 'Authentication failed. Check your token and retry.'
         return
       }
       showAuthPrompt('pull')
@@ -130,11 +152,12 @@ async function commitAndPush() {
 }
 
 async function submitAuthCredentials() {
-  if (!authUsername.value.trim() || !authPassword.value.trim() || !pendingAction.value) return
-  const creds: GitCredentials = {
-    username: authUsername.value.trim(),
-    password: authPassword.value.trim(),
-  }
+  if (!canSubmitAuth.value || !pendingAction.value) return
+  const trimmedToken = authToken.value.trim()
+  const creds: GitCredentials = { token: trimmedToken }
+
+  const workspacePath = workspaceStore.workspace?.path
+  if (!workspacePath) return
 
   if (pendingAction.value === 'pull') {
     await pull(creds)
@@ -155,7 +178,7 @@ async function submitAuthCredentials() {
       showCommitDialog.value = false
     } catch (err) {
       if (isAuthError(err)) {
-        panelError.value = 'Authentication failed. Check your credentials and retry.'
+        panelError.value = 'Authentication failed. Check your token and retry.'
         return
       }
       panelError.value = err instanceof Error ? err.message : 'Commit & Push failed'
@@ -165,7 +188,7 @@ async function submitAuthCredentials() {
 
   if (!panelError.value) {
     try {
-      await githubStore.saveCredentials(creds)
+      await githubStore.saveCredentials(workspacePath, creds)
     } catch {
       // Keep credential in memory only
       githubStore.credentials = creds
@@ -177,7 +200,10 @@ async function submitAuthCredentials() {
 }
 
 async function clearCredentials() {
-  await githubStore.clearCredentials()
+  const workspacePath = workspaceStore.workspace?.path
+  if (workspacePath) {
+    await githubStore.clearCredentials(workspacePath)
+  }
 }
 </script>
 
@@ -189,13 +215,13 @@ async function clearCredentials() {
       class="credentials-info"
     >
       <i class="pi pi-lock" />
-      <span class="credentials-label">Credentials saved</span>
+      <span class="credentials-label">Token saved</span>
       <Button
         icon="pi pi-trash"
         text
         rounded
         size="small"
-        title="Clear saved credentials"
+        title="Clear saved token"
         @click="clearCredentials"
       />
     </div>
@@ -288,29 +314,30 @@ async function clearCredentials() {
     <Dialog
       v-model:visible="showAuthDialog"
       modal
-      header="Credentials Required"
+      header="GitHub Token Required"
       :style="{ width: '420px' }"
     >
       <div class="auth-dialog">
+        <p class="auth-hint">
+          Enter a GitHub Personal Access Token to authenticate.
+        </p>
         <div class="auth-field">
-          <label for="auth-username">Username</label>
+          <label for="auth-token">GitHub Token</label>
           <InputText
-            id="auth-username"
-            v-model="authUsername"
-            autocomplete="off"
-            placeholder="Username"
-          />
-        </div>
-        <div class="auth-field">
-          <label for="auth-password">Password / Token</label>
-          <InputText
-            id="auth-password"
-            v-model="authPassword"
+            id="auth-token"
+            v-model="authToken"
             type="password"
             autocomplete="off"
-            placeholder="Password or personal access token"
+            placeholder="ghp_... or github_pat_..."
+            :invalid="!!authTokenError"
             @keyup.enter="submitAuthCredentials"
           />
+          <small
+            v-if="authTokenError"
+            class="token-error"
+          >
+            {{ authTokenError }}
+          </small>
         </div>
       </div>
       <template #footer>
@@ -321,7 +348,7 @@ async function clearCredentials() {
         />
         <Button
           label="Retry"
-          :disabled="!authUsername.trim() || !authPassword.trim()"
+          :disabled="!canSubmitAuth"
           @click="submitAuthCredentials"
         />
       </template>
@@ -427,6 +454,12 @@ async function clearCredentials() {
   gap: 0.75rem;
 }
 
+.auth-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-color-secondary);
+}
+
 .auth-field {
   display: flex;
   flex-direction: column;
@@ -436,5 +469,10 @@ async function clearCredentials() {
 .auth-field label {
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+.token-error {
+  color: var(--red-500);
+  font-size: 0.75rem;
 }
 </style>
