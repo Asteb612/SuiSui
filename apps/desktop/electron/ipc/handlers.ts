@@ -388,16 +388,16 @@ export function registerIpcHandlers(
       return gitWorkspaceService.commitAndPush(localPath, credentials, options)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_CRED_SAVE, async (_event, credentials: GitCredentials) => {
-      await githubAuthService.saveCredentials(credentials)
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_SAVE, async (_event, workspacePath: string, credentials: GitCredentials) => {
+      await githubAuthService.saveCredentials(workspacePath, credentials)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_CRED_GET, async () => {
-      return githubAuthService.getCredentials()
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_GET, async (_event, workspacePath: string) => {
+      return githubAuthService.getCredentials(workspacePath)
     })
 
-    ipcMain.handle(IPC_CHANNELS.GIT_CRED_DELETE, async () => {
-      await githubAuthService.deleteCredentials()
+    ipcMain.handle(IPC_CHANNELS.GIT_CRED_DELETE, async (_event, workspacePath: string) => {
+      await githubAuthService.deleteCredentials(workspacePath)
     })
   }
 

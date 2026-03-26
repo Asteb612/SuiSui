@@ -1,6 +1,5 @@
 export interface GitCredentials {
-  username: string
-  password: string
+  token: string
 }
 
 export interface GitWorkspaceParams {
@@ -10,8 +9,6 @@ export interface GitWorkspaceParams {
   branch: string
   localPath: string
   token?: string
-  username?: string
-  password?: string
 }
 
 export interface WorkspaceMetadata {

@@ -33,9 +33,6 @@ const DEFAULT_FILTER_GLOBS = [
 
 function buildAuth(params: GitWorkspaceParams | GitCredentials | undefined): (() => { username: string; password: string }) | undefined {
   if (!params) return undefined
-  if ('username' in params && 'password' in params && params.username && params.password) {
-    return () => ({ username: params.username!, password: params.password! })
-  }
   if ('token' in params && params.token) {
     return () => ({ username: 'x-access-token', password: params.token! })
   }
@@ -44,6 +41,7 @@ function buildAuth(params: GitWorkspaceParams | GitCredentials | undefined): (()
 
 function mapHttpError(err: unknown): never {
   const message = err instanceof Error ? err.message : String(err)
+  logger.error('Git HTTP error', err instanceof Error ? err : new Error(message))
   if (message.includes('transport protocol') && message.includes('"ssh"')) {
     throw new GitAuthError('SSH remotes are not supported in this mode. Use an HTTPS remote.')
   }
@@ -148,8 +146,11 @@ export class GitWorkspaceService {
     return withWorkspaceLock(params.localPath, async () => {
       const dir = params.localPath
 
+      let needsClone = false
       try {
         await fsPromises.access(path.join(dir, '.git'))
+        // Verify it's a valid repo with at least one commit
+        await git.resolveRef({ fs, dir, ref: 'HEAD' })
         // Existing repo — verify remote
         logger.info('Opening existing repo', { dir })
         const remotes = await git.listRemotes({ fs, dir })
@@ -161,11 +162,17 @@ export class GitWorkspaceService {
         // Checkout correct branch
         await git.checkout({ fs, dir, ref: params.branch })
       } catch {
-        // Clone
+        needsClone = true
+      }
+
+      if (needsClone) {
+        // Remove any leftover from a previous failed clone
         logger.info('Cloning repo', { url: params.repoUrl, dir })
+        await fsPromises.rm(dir, { recursive: true, force: true })
         await fsPromises.mkdir(dir, { recursive: true })
         try {
           const authFn = buildAuth(params)
+          logger.info('Clone auth', { hasAuth: !!authFn, hasToken: !!params.token })
           await git.clone({
             fs,
             http,
@@ -177,6 +184,8 @@ export class GitWorkspaceService {
             ...(authFn ? { onAuth: authFn } : {}),
           })
         } catch (err) {
+          // Clean up the directory on clone failure
+          await fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})
           mapHttpError(err)
         }
       }

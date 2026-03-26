@@ -14,6 +14,9 @@ export * from './types/dependency'
 export * from './patterns/processor'
 export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } from './patterns/types'
 
+// Validation
+export * from './validation/gitToken'
+
 // IPC
 export * from './ipc/channels'
 export * from './ipc/api'

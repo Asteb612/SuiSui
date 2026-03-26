@@ -1,4 +1,4 @@
-import { safeStorage, app } from 'electron'
+import { safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { GitCredentials } from '@suisui/shared'
@@ -6,37 +6,44 @@ import { createLogger } from '../utils/logger'
 
 const logger = createLogger('GitCredentials')
 
-const CREDENTIALS_FILE_NAME = 'git-credentials.enc'
+const CREDENTIALS_FILE_NAME = 'credentials.enc'
 
-function getCredentialsFilePath(): string {
-  return path.join(app.getPath('userData'), CREDENTIALS_FILE_NAME)
+function getCredentialsFilePath(workspacePath: string): string {
+  return path.join(workspacePath, '.app', CREDENTIALS_FILE_NAME)
 }
 
 export class GitCredentialsService {
-  async saveCredentials(credentials: GitCredentials): Promise<void> {
+  async saveCredentials(workspacePath: string, credentials: GitCredentials): Promise<void> {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('Encryption not available on this system')
     }
     const json = JSON.stringify(credentials)
     const encrypted = safeStorage.encryptString(json)
-    fs.writeFileSync(getCredentialsFilePath(), encrypted)
-    logger.info('Git credentials saved')
+    const filePath = getCredentialsFilePath(workspacePath)
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(filePath, encrypted)
+    logger.info('Git credentials saved', { workspacePath })
   }
 
-  async getCredentials(): Promise<GitCredentials | null> {
-    const filePath = getCredentialsFilePath()
+  async getCredentials(workspacePath: string): Promise<GitCredentials | null> {
+    const filePath = getCredentialsFilePath(workspacePath)
     try {
       if (!fs.existsSync(filePath)) return null
       const encrypted = fs.readFileSync(filePath)
       const json = safeStorage.decryptString(encrypted)
-      return JSON.parse(json) as GitCredentials
+      const parsed = JSON.parse(json)
+      if (!parsed.token) return null
+      return parsed as GitCredentials
     } catch {
       return null
     }
   }
 
-  async deleteCredentials(): Promise<void> {
-    const filePath = getCredentialsFilePath()
+  async deleteCredentials(workspacePath: string): Promise<void> {
+    const filePath = getCredentialsFilePath(workspacePath)
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath)
@@ -44,7 +51,7 @@ export class GitCredentialsService {
     } catch {
       // ignore
     }
-    logger.info('Git credentials deleted')
+    logger.info('Git credentials deleted', { workspacePath })
   }
 }
 
