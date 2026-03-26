@@ -146,12 +146,18 @@ export class GitWorkspaceService {
     return withWorkspaceLock(params.localPath, async () => {
       const dir = params.localPath
 
-      let needsClone = false
+      let hasValidRepo = false
       try {
         await fsPromises.access(path.join(dir, '.git'))
         // Verify it's a valid repo with at least one commit
         await git.resolveRef({ fs, dir, ref: 'HEAD' })
-        // Existing repo — verify remote
+        hasValidRepo = true
+      } catch {
+        // Not a valid git repo
+      }
+
+      if (hasValidRepo) {
+        // Existing repo — verify remote and checkout
         logger.info('Opening existing repo', { dir })
         const remotes = await git.listRemotes({ fs, dir })
         const origin = remotes.find((r) => r.remote === 'origin')
@@ -159,16 +165,10 @@ export class GitWorkspaceService {
           await git.deleteRemote({ fs, dir, remote: 'origin' })
           await git.addRemote({ fs, dir, remote: 'origin', url: params.repoUrl })
         }
-        // Checkout correct branch
         await git.checkout({ fs, dir, ref: params.branch })
-      } catch {
-        needsClone = true
-      }
-
-      if (needsClone) {
-        // Remove any leftover from a previous failed clone
+      } else {
+        // Clone into directory (must not already contain files)
         logger.info('Cloning repo', { url: params.repoUrl, dir })
-        await fsPromises.rm(dir, { recursive: true, force: true })
         await fsPromises.mkdir(dir, { recursive: true })
         try {
           const authFn = buildAuth(params)
@@ -184,8 +184,6 @@ export class GitWorkspaceService {
             ...(authFn ? { onAuth: authFn } : {}),
           })
         } catch (err) {
-          // Clean up the directory on clone failure
-          await fsPromises.rm(dir, { recursive: true, force: true }).catch(() => {})
           mapHttpError(err)
         }
       }

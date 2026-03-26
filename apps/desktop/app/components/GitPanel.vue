@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { validateGitHubToken } from '@suisui/shared'
 import { useGithubStore } from '~/stores/gitCredentials'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
@@ -45,6 +45,16 @@ async function refreshWorkspaceGitStatus() {
   if (!workspacePath) return
   await gitWorkspaceStore.refreshStatus(workspacePath)
 }
+
+// Reload credentials when workspace changes
+watch(
+  () => workspaceStore.workspace?.path,
+  (newPath) => {
+    if (newPath) {
+      void githubStore.loadCredentials(newPath)
+    }
+  }
+)
 
 onMounted(() => {
   const workspacePath = workspaceStore.workspace?.path
