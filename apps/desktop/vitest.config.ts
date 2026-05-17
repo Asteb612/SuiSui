@@ -16,7 +16,9 @@ export default defineConfig({
     ],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'text-summary', 'html', 'json-summary', 'lcov'],
+      reportsDirectory: './coverage',
+      reportOnFailure: true,
       include: ['electron/services/**/*.ts', 'app/utils/**/*.ts'],
     },
     alias: {

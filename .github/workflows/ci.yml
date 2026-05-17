@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @suisui/shared build
+
+      - name: Run shared unit tests
+        run: pnpm --filter @suisui/shared test
+
+      - name: Run desktop unit tests with coverage
+        run: pnpm --filter @suisui/desktop test:coverage
+
+      - name: Write coverage to job summary
+        if: always()
+        run: |
+          SUMMARY=apps/desktop/coverage/coverage-summary.json
+          if [ -f "$SUMMARY" ]; then
+            {
+              echo "## Desktop unit test coverage"
+              echo ""
+              echo "| Metric | % | Covered / Total |"
+              echo "| --- | --- | --- |"
+              jq -r '.total | to_entries[]
+                | select(.key != "branchesTrue")
+                | "| \(.key) | \(.value.pct)% | \(.value.covered) / \(.value.total) |"' "$SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No coverage summary found at $SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: apps/desktop/coverage
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./apps/desktop/coverage/lcov.info
+          flags: desktop
+          fail_ci_if_error: false
+          # Optional: set a CODECOV_TOKEN repo secret for reliable uploads.
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Non-blocking for now: there are pre-existing lint/type errors in helper
+  # scripts. Once those are fixed, remove `continue-on-error` to enforce.
+  lint:
+    name: Lint (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @suisui/shared build
+
+      - name: Lint
+        run: pnpm lint
+
+  typecheck:
+    name: Typecheck (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @suisui/shared build
+
+      - name: Typecheck
+        run: pnpm typecheck
