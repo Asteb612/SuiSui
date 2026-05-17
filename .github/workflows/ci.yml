@@ -78,12 +78,9 @@ jobs:
           # Optional: set a CODECOV_TOKEN repo secret for reliable uploads.
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  # Non-blocking for now: there are pre-existing lint/type errors in helper
-  # scripts. Once those are fixed, remove `continue-on-error` to enforce.
   lint:
-    name: Lint (non-blocking)
+    name: Lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -107,9 +104,8 @@ jobs:
         run: pnpm lint
 
   typecheck:
-    name: Typecheck (non-blocking)
+    name: Typecheck
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,3 +127,30 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+  build:
+    name: Build smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Compile-only smoke test: catches build breakage on PRs, since
+      # desktop-release.yml only runs on tags. Typecheck has its own job,
+      # so skip Nuxt's typecheck here to keep this fast.
+      - name: Build desktop
+        env:
+          NUXT_TYPECHECK: false
+        run: pnpm --filter @suisui/desktop build

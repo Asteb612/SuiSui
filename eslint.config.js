@@ -9,7 +9,14 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   prettier,
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/.nuxt/**', '**/.output/**', '**/dist-electron/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.nuxt/**',
+      '**/.output/**',
+      '**/dist-electron/**',
+      '**/coverage/**',
+    ],
   },
   {
     rules: {
@@ -48,26 +55,12 @@ export default tseslint.config(
       'vue/multi-word-component-names': ['warn', { ignores: ['index', 'default'] }],
     },
   },
-  // Node.js CommonJS scripts - allow require() and Node globals
+  // Node.js scripts (.js/.cjs/.mjs) - allow require() and Node globals
   {
-    files: ['**/scripts/**/*.js', '**/electron/scripts/**/*.js'],
+    files: ['**/scripts/**/*.{js,cjs,mjs}', '**/electron/scripts/**/*.{js,cjs,mjs}'],
     languageOptions: {
       globals: {
-        // Node.js globals
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        exports: 'writable',
-        module: 'readonly',
-        require: 'readonly',
-        process: 'readonly',
-        console: 'readonly',
-        Buffer: 'readonly',
-        setTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearTimeout: 'readonly',
-        clearInterval: 'readonly',
-        setImmediate: 'readonly',
-        clearImmediate: 'readonly',
+        ...globals.node,
       },
     },
     rules: {
