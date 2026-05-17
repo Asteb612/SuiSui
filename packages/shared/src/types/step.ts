@@ -1,12 +1,8 @@
-export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
+import type { StepArgDefinition } from '@suisui/step-regex'
 
-export interface StepArgDefinition {
-  name: string
-  type: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table'
-  required: boolean
-  enumValues?: string[]
-  tableColumns?: string[]
-}
+export type { StepArgDefinition } from '@suisui/step-regex'
+
+export type StepKeyword = 'Given' | 'When' | 'Then' | 'And' | 'But'
 
 export interface StepDefinition {
   id: string

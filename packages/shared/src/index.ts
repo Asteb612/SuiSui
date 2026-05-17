@@ -12,7 +12,7 @@ export * from './types/dependency'
 
 // Patterns
 export * from './patterns/processor'
-export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } from './patterns/types'
+export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } from '@suisui/step-regex'
 
 // Validation
 export * from './validation/gitToken'

@@ -1,0 +1,61 @@
+{
+  "name": "@suisui/step-regex",
+  "version": "0.1.0",
+  "description": "Type-safe, structured authoring of BDD step patterns and the matching regex (cucumber expressions, enums, DataTables, optionals, alternatives) for playwright-bdd / Gherkin.",
+  "license": "MIT",
+  "homepage": "https://github.com/Asteb612/SuiSui/tree/main/packages/step-regex",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Asteb612/SuiSui.git",
+    "directory": "packages/step-regex"
+  },
+  "bugs": {
+    "url": "https://github.com/Asteb612/SuiSui/issues"
+  },
+  "keywords": [
+    "bdd",
+    "gherkin",
+    "cucumber",
+    "cucumber-expressions",
+    "playwright-bdd",
+    "regex",
+    "step-definitions"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "sideEffects": false,
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "require": "./dist/cjs/index.js",
+      "import": "./dist/esm/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/create-package-json.js module dist/esm",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/create-package-json.js commonjs dist/cjs",
+    "dev": "tsc -p tsconfig.esm.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:types": "vitest --typecheck.only run",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vitest": "^2.0.0"
+  }
+}

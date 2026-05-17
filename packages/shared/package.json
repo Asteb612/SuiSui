@@ -13,13 +13,16 @@
     }
   },
   "scripts": {
-    "build": "npm run build:esm && npm run build:cjs",
+    "build": "pnpm --filter @suisui/step-regex build && npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.esm.json && node scripts/create-package-json.js module dist/esm",
     "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/create-package-json.js commonjs dist/cjs",
     "dev": "tsc -p tsconfig.esm.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@suisui/step-regex": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
