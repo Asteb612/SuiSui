@@ -24,6 +24,44 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow: BrowserWindow | null = null
 let reloadTimeout: NodeJS.Timeout | null = null
 
+const ALLOWED_ORIGINS = ['app://.', 'http://localhost:3000']
+
+function isAllowedAppUrl(url: string): boolean {
+  return ALLOWED_ORIGINS.some((origin) => url.startsWith(origin))
+}
+
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Lock the renderer down: deny in-app navigation to foreign origins and
+ * route any window.open / target=_blank to the OS browser (only for
+ * http/https/mailto), instead of opening an Electron window with Node access.
+ */
+function applyNavigationGuards(win: BrowserWindow): void {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedAppUrl(url)) {
+      event.preventDefault()
+      if (isSafeExternalUrl(url)) {
+        void shell.openExternal(url)
+      }
+    }
+  })
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -34,7 +72,8 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
+      webSecurity: true,
     },
     title: 'SuiSui - BDD Test Builder',
     show: false,
@@ -43,6 +82,8 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
   })
+
+  applyNavigationGuards(mainWindow)
 
   if (isDev && !isTestMode) {
     mainWindow.loadURL('http://localhost:3000')
@@ -87,7 +128,18 @@ function setupAutoReload() {
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
-  protocol.handle('app', (request) => {
+  const CSP =
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; " +
+    "font-src 'self' data:; " +
+    "connect-src 'self'; " +
+    "object-src 'none'; " +
+    "base-uri 'self'; " +
+    "frame-ancestors 'none'"
+
+  protocol.handle('app', async (request) => {
     const url = new URL(request.url)
     let filePath = path.join(publicPath, url.pathname)
 
@@ -96,7 +148,14 @@ function registerAppProtocol() {
       filePath = path.join(publicPath, 'index.html')
     }
 
-    return net.fetch(pathToFileURL(filePath).toString())
+    const response = await net.fetch(pathToFileURL(filePath).toString())
+    const headers = new Headers(response.headers)
+    headers.set('Content-Security-Policy', CSP)
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
   })
 }
 

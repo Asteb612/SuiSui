@@ -103,6 +103,15 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.APP_OPEN_EXTERNAL, async (_event, url: string) => {
+    let protocol: string
+    try {
+      protocol = new URL(url).protocol
+    } catch {
+      throw new Error('Invalid URL')
+    }
+    if (protocol !== 'http:' && protocol !== 'https:' && protocol !== 'mailto:') {
+      throw new Error(`Refusing to open URL with unsupported scheme: ${protocol}`)
+    }
     await shell.openExternal(url)
   })
 

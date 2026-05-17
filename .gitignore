@@ -59,3 +59,4 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+node-compile-cache/
