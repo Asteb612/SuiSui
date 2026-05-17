@@ -57,7 +57,7 @@
   "dependencies": {
     "@primevue/themes": "^4.5.4",
     "@suisui/shared": "workspace:*",
-    "isomorphic-git": "^1.37.1",
+    "isomorphic-git": "^1.38.0",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
