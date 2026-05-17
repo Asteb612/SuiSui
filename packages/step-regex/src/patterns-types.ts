@@ -1,4 +1,4 @@
-import type { StepArgDefinition } from '../types/step'
+import type { StepArgDefinition } from './step-types'
 
 /**
  * Description of a pattern argument for display purposes

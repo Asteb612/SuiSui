@@ -1,4 +1,4 @@
-import type { PatternType } from '../types'
+import type { PatternType } from '../patterns-types'
 
 function escapeHtml(str: string): string {
   const map: Record<string, string> = {

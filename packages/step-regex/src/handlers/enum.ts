@@ -1,4 +1,4 @@
-import type { PatternType } from '../types'
+import type { PatternType } from '../patterns-types'
 
 export const enumHandler: PatternType = {
   name: 'enum',

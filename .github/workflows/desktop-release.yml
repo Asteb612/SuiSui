@@ -46,6 +46,7 @@ jobs:
         shell: bash
         run: |
           cd apps/desktop
+          pnpm -C ../../packages/step-regex build
           pnpm -C ../../packages/shared build
           pnpm prebuild:nodejs
           pnpm build
