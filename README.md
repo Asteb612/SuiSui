@@ -7,6 +7,7 @@
 Create Gherkin scenarios with drag-and-drop, run them with Playwright.
 No code required to write tests.
 
+[![CI](https://github.com/Asteb612/SuiSui/actions/workflows/ci.yml/badge.svg)](https://github.com/Asteb612/SuiSui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Electron](https://img.shields.io/badge/Electron-35-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
