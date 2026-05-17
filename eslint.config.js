@@ -50,7 +50,7 @@ export default tseslint.config(
   },
   // Node.js CommonJS scripts - allow require() and Node globals
   {
-    files: ['**/scripts/**/*.js', '**/electron/scripts/**/*.js'],
+    files: ['**/scripts/**/*.{js,mjs,cjs}', '**/electron/scripts/**/*.{js,mjs,cjs}'],
     languageOptions: {
       globals: {
         // Node.js globals

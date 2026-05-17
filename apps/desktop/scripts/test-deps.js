@@ -48,7 +48,6 @@ function getAppRoot() {
 }
 
 function getNodeModulesPaths() {
-  const appRoot = getAppRoot()
   const paths = []
 
   if (isPackaged) {
