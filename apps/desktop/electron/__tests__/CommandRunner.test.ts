@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { FakeCommandRunner } from '../services/CommandRunner'
+import { CommandRunner, FakeCommandRunner } from '../services/CommandRunner'
 
 describe('FakeCommandRunner', () => {
   let runner: FakeCommandRunner
@@ -61,5 +61,47 @@ describe('FakeCommandRunner', () => {
     expect(runner.callHistory).toHaveLength(0)
     const result = await runner.exec('test', [])
     expect(result.code).toBe(0) // Should use default
+  })
+})
+
+describe('CommandRunner (real spawn)', () => {
+  const runner = new CommandRunner()
+  const printArgv = 'process.stdout.write(JSON.stringify(process.argv.slice(1)))'
+
+  it('does not let shell metacharacters in arguments be interpreted', async () => {
+    const hostile = ['a b', '$(echo INJECTED)', '; echo HACKED', '`whoami`', '&& echo X']
+    const result = await runner.exec(process.execPath, ['-e', printArgv, ...hostile])
+
+    expect(result.code).toBe(0)
+    // Arguments must arrive verbatim — no substitution, no word splitting.
+    // (The literal tokens contain "INJECTED"/"HACKED"; a shell would instead
+    // have produced the command *output*, i.e. those words on their own line.)
+    expect(JSON.parse(result.stdout)).toEqual(hostile)
+    expect(result.stdout).not.toContain('INJECTED\n')
+    expect(result.stdout).not.toContain('HACKED\n')
+  })
+
+  it('preserves spaces in arguments as a single argv entry', async () => {
+    const result = await runner.exec(process.execPath, [
+      '-e',
+      printArgv,
+      '/path with spaces/file.feature',
+    ])
+    expect(JSON.parse(result.stdout)).toEqual(['/path with spaces/file.feature'])
+  })
+
+  it('reports a non-zero exit code without throwing', async () => {
+    const result = await runner.exec(process.execPath, ['-e', 'process.exit(3)'])
+    expect(result.code).toBe(3)
+  })
+
+  it('times out long-running commands and returns code -1', async () => {
+    const result = await runner.exec(
+      process.execPath,
+      ['-e', 'setTimeout(() => {}, 10000)'],
+      { timeout: 200 },
+    )
+    expect(result.code).toBe(-1)
+    expect(result.stderr).toContain('timed out')
   })
 })

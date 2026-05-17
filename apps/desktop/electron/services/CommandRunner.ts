@@ -13,18 +13,31 @@ export class CommandRunner implements ICommandRunner {
     const { cwd, env, timeout = 60000 } = options
 
     return new Promise((resolve) => {
-      // On Windows with shell: true, paths with spaces need to be quoted
+      // Pass arguments to spawn as an array with shell disabled so that
+      // command/argument values (workspace paths, branch names, etc.) cannot
+      // be interpreted by a shell. This removes the command-injection surface
+      // and handles spaces in paths natively without manual quoting.
+      //
+      // The one exception is Windows batch shims (npm.cmd / *.bat): Node
+      // refuses to spawn these without a shell (CVE-2024-27980), so for that
+      // narrow case we enable the shell and quote every token. The commands
+      // that reach this path are internal and fixed (npm install/ci/--version).
       const isWindows = process.platform === 'win32'
-      const quotedCmd = isWindows && cmd.includes(' ') ? `"${cmd}"` : cmd
-      const quotedArgs = isWindows
-        ? args.map((arg) => (arg.includes(' ') ? `"${arg}"` : arg))
-        : args
+      const needsShell = isWindows && /\.(cmd|bat)$/i.test(cmd)
 
-      const fullCmd = `${quotedCmd} ${quotedArgs.join(' ')}`
-      const child = spawn(quotedCmd, quotedArgs, {
+      let spawnCmd = cmd
+      let spawnArgs = args
+      if (needsShell) {
+        spawnCmd = `"${cmd}"`
+        spawnArgs = args.map((arg) => `"${arg.replace(/"/g, '""')}"`)
+      }
+
+      const fullCmd = `${cmd} ${args.join(' ')}`
+      const child = spawn(spawnCmd, spawnArgs, {
         cwd,
         env: { ...process.env, ...env },
-        shell: true,
+        shell: needsShell,
+        windowsHide: true,
       })
 
       let stdout = ''
