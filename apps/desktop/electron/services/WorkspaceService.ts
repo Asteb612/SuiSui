@@ -745,30 +745,7 @@ export class WorkspaceService {
         ...(gitRoot && gitRoot !== workspacePath ? { gitRoot } : {}),
       }
 
-      await this.ensureGitRepo(workspacePath)
-      await this.ensureCucumberJson(workspacePath)
-      await this.ensurePlaywrightConfig(workspacePath)
-      await this.ensurePackageJsonScripts(workspacePath)
-      await this.ensureDefaultSteps(workspacePath)
-
-      // Install workspace dependencies using embedded Node.js
-      const depService = getDependencyService()
-      const depStatus = await depService.checkStatus(workspacePath)
-      if (depStatus.needsInstall) {
-        logger.info('Installing workspace dependencies', { reason: depStatus.reason })
-        const installResult = await depService.install(workspacePath)
-        if (!installResult.success) {
-          logger.error('Failed to install dependencies', undefined, { error: installResult.error })
-        } else {
-          logger.info('Dependencies installed', { duration: installResult.duration })
-
-          // Export steps after installation
-          await this.exportSteps()
-        }
-      } else {
-        // Dependencies already installed, still export steps to ensure cache is populated
-        await this.exportSteps()
-      }
+      await this.ensureWorkspaceSetup(workspacePath)
 
       const settingsService = getSettingsService()
       await settingsService.save({ workspacePath, gitRoot: gitRoot ?? null })
@@ -803,29 +780,7 @@ export class WorkspaceService {
           hasCucumberJson: true,
           ...(settings.gitRoot && settings.gitRoot !== settings.workspacePath ? { gitRoot: settings.gitRoot } : {}),
         }
-        await this.ensureGitRepo(settings.workspacePath)
-        await this.ensureCucumberJson(settings.workspacePath)
-        await this.ensurePlaywrightConfig(settings.workspacePath)
-        await this.ensurePackageJsonScripts(settings.workspacePath)
-        await this.ensureDefaultSteps(settings.workspacePath)
-
-        // Install workspace dependencies using embedded Node.js
-        const depService = getDependencyService()
-        const depStatus = await depService.checkStatus(settings.workspacePath)
-        if (depStatus.needsInstall) {
-          logger.info('Installing workspace dependencies', { reason: depStatus.reason })
-          const installResult = await depService.install(settings.workspacePath)
-          if (!installResult.success) {
-            logger.error('Failed to install dependencies', undefined, {
-              error: installResult.error,
-            })
-          } else {
-            logger.info('Dependencies installed', { duration: installResult.duration })
-          }
-        }
-
-        // Export steps after installation or if already installed
-        await this.exportSteps()
+        await this.ensureWorkspaceSetup(settings.workspacePath)
 
         logger.info('Workspace loaded from settings', { path: this.currentWorkspace.path })
         return this.currentWorkspace
@@ -853,6 +808,38 @@ export class WorkspaceService {
 
   clear(): void {
     this.currentWorkspace = null
+  }
+
+  /**
+   * Bring a validated workspace to a runnable state: ensure config files,
+   * package scripts, default steps and a git repo exist, install workspace
+   * dependencies if needed, then populate the step cache. Shared by `set()`
+   * and `get()` so the bootstrap sequence stays in one place.
+   */
+  private async ensureWorkspaceSetup(workspacePath: string): Promise<void> {
+    await this.ensureGitRepo(workspacePath)
+    await this.ensureCucumberJson(workspacePath)
+    await this.ensurePlaywrightConfig(workspacePath)
+    await this.ensurePackageJsonScripts(workspacePath)
+    await this.ensureDefaultSteps(workspacePath)
+
+    // Install workspace dependencies using embedded Node.js
+    const depService = getDependencyService()
+    const depStatus = await depService.checkStatus(workspacePath)
+    if (depStatus.needsInstall) {
+      logger.info('Installing workspace dependencies', { reason: depStatus.reason })
+      const installResult = await depService.install(workspacePath)
+      if (!installResult.success) {
+        logger.error('Failed to install dependencies', undefined, {
+          error: installResult.error,
+        })
+      } else {
+        logger.info('Dependencies installed', { duration: installResult.duration })
+      }
+    }
+
+    // Export steps so the cache is populated (safe no-op if deps are missing)
+    await this.exportSteps()
   }
 
   private async ensureGitRepo(workspacePath: string): Promise<void> {
