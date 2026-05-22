@@ -52,8 +52,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       isomorphic-git:
-        specifier: ^1.37.1
-        version: 1.37.1
+        specifier: ^1.38.1
+        version: 1.38.1
       keytar:
         specifier: ^7.9.0
         version: 7.9.0
@@ -3644,8 +3644,8 @@ packages:
     resolution: {integrity: sha512-LpB/54B+/2J5hqQ7imZHfdU31OlgQqx7ZicVlkm9kzg9/w8GKLEcFfJl/t7DCEDueOyBAD6zCCwTO6Fzs0NoEQ==}
     engines: {node: '>=16'}
 
-  isomorphic-git@1.37.1:
-    resolution: {integrity: sha512-3r98kY+X24i6za2zwoNnISGobykIdc4aP7ScJGHpN3wbWSCbJZ2Kp/8WIsHJwvOCVUBjUHNkcB+4ty5iNv6RQA==}
+  isomorphic-git@1.38.1:
+    resolution: {integrity: sha512-Vd2u5qDLa04fA/h5nUMU5UuffPXqg+3D3bJIV3n7Sno2qS3XMinUXRvNHrGPVy2kkC1ad5SPCC3WcpXjn0L9oQ==}
     engines: {node: '>=14.17'}
     hasBin: true
 
@@ -9765,7 +9765,7 @@ snapshots:
 
   isexe@3.1.1: {}
 
-  isomorphic-git@1.37.1:
+  isomorphic-git@1.38.1:
     dependencies:
       async-lock: 1.4.1
       clean-git-ref: 2.0.1
