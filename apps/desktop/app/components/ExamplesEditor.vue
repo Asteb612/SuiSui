@@ -31,6 +31,14 @@ function cancelAddColumn() {
   newColumnName.value = ''
   showAddColumn.value = false
 }
+
+function onColumnInputKeyup(event: KeyboardEvent) {
+  if (event.key === 'Enter') {
+    addColumn()
+  } else if (event.key === 'Escape') {
+    cancelAddColumn()
+  }
+}
 </script>
 
 <template>
@@ -72,8 +80,7 @@ function cancelAddColumn() {
             placeholder="Column name..."
             size="small"
             class="column-input"
-            @keyup.enter="addColumn"
-            @keyup.escape="cancelAddColumn"
+            @keyup="onColumnInputKeyup"
           />
           <Button
             icon="pi pi-check"
