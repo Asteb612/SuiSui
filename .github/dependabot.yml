@@ -7,17 +7,27 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     groups:
-      # Batch low-risk dev/tooling bumps into a single PR to cut noise
-      dev-dependencies:
-        dependency-type: development
+      # All security fixes batched into a single PR across the workspace.
+      # Keeps vulnerability remediation as one reviewable, testable unit
+      # instead of one PR per advisory.
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      # Low-risk routine bumps (minor + patch) in a single PR. Safe to
+      # review/merge together; CI gates them.
+      npm-minor-patch:
+        applies-to: version-updates
         update-types:
           - minor
           - patch
-      production-minor-patch:
-        dependency-type: production
+      # Major bumps grouped into their own PR so breaking changes are
+      # isolated from the low-risk group, but still consolidated rather
+      # than one PR per package.
+      npm-major:
+        applies-to: version-updates
         update-types:
-          - minor
-          - patch
+          - major
     labels:
       - dependencies
 
@@ -26,6 +36,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 5
     groups:
       github-actions:
         patterns:
