@@ -58,6 +58,61 @@ Grab the latest release for your platform:
 
 > [**Download latest release**](https://github.com/Asteb612/SuiSui/releases)
 
+### Installation
+
+SuiSui ships with an embedded Node.js runtime, so there are no external
+dependencies to install &mdash; download the package for your platform and run it.
+
+#### Windows
+
+1. Download the `.exe` installer from the [releases page](https://github.com/Asteb612/SuiSui/releases).
+2. Double-click the installer and follow the prompts.
+3. Launch **SuiSui** from the Start menu or desktop shortcut.
+
+**If SmartScreen shows a warning**, the app is unrecognized because the
+installer is not code-signed. To run it anyway:
+
+1. Click **More info**.
+2. Click **Run anyway**.
+
+#### macOS
+
+1. Download the `.dmg` file from the [releases page](https://github.com/Asteb612/SuiSui/releases).
+2. Open the `.dmg` and drag **SuiSui** into your **Applications** folder.
+3. Launch SuiSui from Applications or Launchpad.
+
+**If macOS blocks the app** (because it is not notarized), bypass Gatekeeper
+the first time you open it:
+
+1. Right-click (or Control-click) the application.
+2. Click **Open**.
+3. Confirm by clicking **Open** in the dialog.
+
+After the first launch, SuiSui opens normally.
+
+#### Linux
+
+**AppImage** &mdash; portable, no installation required:
+
+1. Download the `.AppImage` file from the [releases page](https://github.com/Asteb612/SuiSui/releases).
+2. Make it executable:
+   ```bash
+   chmod +x SuiSui-*.AppImage
+   ```
+3. Run it:
+   ```bash
+   ./SuiSui-*.AppImage
+   ```
+
+**.deb package** (Debian / Ubuntu and derivatives):
+
+1. Download the `.deb` file from the [releases page](https://github.com/Asteb612/SuiSui/releases).
+2. Install it:
+   ```bash
+   sudo apt install ./suisui_*.deb
+   ```
+3. Launch **SuiSui** from your application menu, or run `suisui` from a terminal.
+
 ### Getting Started
 
 1. Launch SuiSui and select a workspace folder (or clone a repo)
