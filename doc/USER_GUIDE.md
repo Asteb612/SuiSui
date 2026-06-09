@@ -20,6 +20,13 @@ This guide walks you through using SuiSui to create and run BDD tests with Playw
 
 ## Getting Started
 
+### Installation
+
+See the [Installation section in the README](../README.md#installation) for
+platform-specific download and setup steps on Windows, macOS, and Linux,
+including how to get past the SmartScreen and macOS Gatekeeper warnings on
+first launch.
+
 ### First Launch
 
 When you first launch SuiSui, you'll need to select or create a workspace:
