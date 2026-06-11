@@ -7,6 +7,34 @@ function generateStepId(): string {
   return `step-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
+/** Maximum number of undo steps retained in history. */
+const MAX_HISTORY = 100
+
+/** Window (ms) within which repeated edits of the same action are coalesced into one undo step. */
+const COALESCE_MS = 500
+
+/** Text-editing actions whose rapid repeats should collapse into a single undo step. */
+const COALESCED_ACTIONS = new Set([
+  'setName',
+  'setFeatureName',
+  'setFeatureDescription',
+  'setFeatureTags',
+  'setScenarioTags',
+  'updateStepArg',
+  'updateBackgroundStepArg',
+  'updateExampleCell',
+])
+
+/** Snapshot of the editable feature state used for undo/redo. */
+interface ScenarioSnapshot {
+  featureName: string
+  featureTags: string[]
+  featureDescription: string
+  background: ScenarioStep[]
+  scenarios: Scenario[]
+  activeScenarioIndex: number
+}
+
 export const useScenarioStore = defineStore('scenario', {
   state: () => ({
     featureName: '' as string,
@@ -18,9 +46,16 @@ export const useScenarioStore = defineStore('scenario', {
     validation: null as ValidationResult | null,
     isDirty: false,
     currentFeaturePath: null as string | null,
+    // Undo/redo history (snapshots serialized as JSON strings)
+    undoStack: [] as string[],
+    redoStack: [] as string[],
+    lastRecordAction: '' as string,
+    lastRecordTime: 0 as number,
   }),
 
   getters: {
+    canUndo: (state) => state.undoStack.length > 0,
+    canRedo: (state) => state.redoStack.length > 0,
     scenario: (state): Scenario => {
       return state.scenarios[state.activeScenarioIndex] ?? { name: '', steps: [] }
     },
@@ -34,6 +69,82 @@ export const useScenarioStore = defineStore('scenario', {
   },
 
   actions: {
+    // --- Undo/redo history ---
+
+    /** Capture the current editable state as a serializable snapshot. */
+    snapshotState(): string {
+      const snapshot: ScenarioSnapshot = {
+        featureName: this.featureName,
+        featureTags: this.featureTags,
+        featureDescription: this.featureDescription,
+        background: this.background,
+        scenarios: this.scenarios,
+        activeScenarioIndex: this.activeScenarioIndex,
+      }
+      return JSON.stringify(snapshot)
+    },
+
+    /** Replace the editable state from a serialized snapshot. */
+    restoreSnapshot(serialized: string) {
+      const snapshot = JSON.parse(serialized) as ScenarioSnapshot
+      this.featureName = snapshot.featureName
+      this.featureTags = snapshot.featureTags
+      this.featureDescription = snapshot.featureDescription
+      this.background = snapshot.background
+      this.scenarios = snapshot.scenarios
+      this.activeScenarioIndex = Math.min(snapshot.activeScenarioIndex, Math.max(0, snapshot.scenarios.length - 1))
+      this.validation = null
+      this.isDirty = true
+    },
+
+    /**
+     * Record the current state onto the undo stack before a mutating action runs.
+     * Rapid repeats of the same text-editing action are coalesced into one step.
+     */
+    recordHistory(actionName: string) {
+      const now = Date.now()
+      if (
+        COALESCED_ACTIONS.has(actionName) &&
+        actionName === this.lastRecordAction &&
+        now - this.lastRecordTime < COALESCE_MS
+      ) {
+        this.lastRecordTime = now
+        return
+      }
+      this.undoStack.push(this.snapshotState())
+      if (this.undoStack.length > MAX_HISTORY) {
+        this.undoStack.shift()
+      }
+      this.redoStack = []
+      this.lastRecordAction = actionName
+      this.lastRecordTime = now
+    },
+
+    undo() {
+      const previous = this.undoStack.pop()
+      if (previous === undefined) return
+      this.redoStack.push(this.snapshotState())
+      this.restoreSnapshot(previous)
+      this.lastRecordAction = ''
+      this.lastRecordTime = 0
+    },
+
+    redo() {
+      const next = this.redoStack.pop()
+      if (next === undefined) return
+      this.undoStack.push(this.snapshotState())
+      this.restoreSnapshot(next)
+      this.lastRecordAction = ''
+      this.lastRecordTime = 0
+    },
+
+    clearHistory() {
+      this.undoStack = []
+      this.redoStack = []
+      this.lastRecordAction = ''
+      this.lastRecordTime = 0
+    },
+
     // Tab management actions
     setActiveScenario(index: number) {
       if (index >= 0 && index < this.scenarios.length) {
@@ -537,6 +648,7 @@ export const useScenarioStore = defineStore('scenario', {
         this.parseGherkin(content, stepDefinitions)
         this.currentFeaturePath = featurePath
         this.isDirty = false
+        this.clearHistory()
       } catch {
         this.clear()
       }
@@ -729,6 +841,7 @@ export const useScenarioStore = defineStore('scenario', {
       this.validation = null
       this.isDirty = false
       this.currentFeaturePath = null
+      this.clearHistory()
     },
 
     createNew(name: string) {
@@ -741,6 +854,7 @@ export const useScenarioStore = defineStore('scenario', {
       this.validation = null
       this.isDirty = true
       this.currentFeaturePath = null
+      this.clearHistory()
     },
 
     replaceStep(stepId: string, keyword: StepKeyword, pattern: string, args: StepArgDefinition[]) {

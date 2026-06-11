@@ -650,4 +650,85 @@ describe('useScenarioStore actions', () => {
       expect(store.scenarios[0]?.name).toBe('')
     })
   })
+
+  describe('undo/redo history', () => {
+    it('undo restores the state captured before a mutation', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: 'First', tags: [], steps: [] }]
+      store.activeScenarioIndex = 0
+
+      // Plugin records before each mutation; simulate that here
+      store.recordHistory('addStep')
+      store.addStep('Given', 'I am on the {string} page', [])
+      expect(store.scenario.steps).toHaveLength(1)
+      expect(store.canUndo).toBe(true)
+
+      store.undo()
+      expect(store.scenario.steps).toHaveLength(0)
+      expect(store.canRedo).toBe(true)
+    })
+
+    it('redo reapplies an undone mutation', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: 'First', tags: [], steps: [] }]
+
+      store.recordHistory('setName')
+      store.setName('Renamed')
+      store.undo()
+      expect(store.scenario.name).toBe('First')
+
+      store.redo()
+      expect(store.scenario.name).toBe('Renamed')
+    })
+
+    it('recording a new change clears the redo stack', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: 'First', tags: [], steps: [] }]
+
+      store.recordHistory('addStep')
+      store.addStep('Given', 'step A', [])
+      store.undo()
+      expect(store.canRedo).toBe(true)
+
+      store.recordHistory('addStep')
+      store.addStep('When', 'step B', [])
+      expect(store.canRedo).toBe(false)
+    })
+
+    it('coalesces rapid edits of the same text action into one undo step', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: '', tags: [], steps: [] }]
+
+      store.recordHistory('setName')
+      store.setName('A')
+      store.recordHistory('setName')
+      store.setName('AB')
+      store.recordHistory('setName')
+      store.setName('ABC')
+
+      // All three keystrokes collapse into a single history entry
+      expect(store.undoStack).toHaveLength(1)
+      store.undo()
+      expect(store.scenario.name).toBe('')
+    })
+
+    it('clears history on clear()', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: 'First', tags: [], steps: [] }]
+      store.recordHistory('addStep')
+      store.addStep('Given', 'step', [])
+      expect(store.canUndo).toBe(true)
+
+      store.clear()
+      expect(store.canUndo).toBe(false)
+      expect(store.canRedo).toBe(false)
+    })
+
+    it('undo is a no-op when there is no history', () => {
+      const store = useScenarioStore()
+      store.scenarios = [{ name: 'First', tags: [], steps: [] }]
+      expect(() => store.undo()).not.toThrow()
+      expect(store.scenario.name).toBe('First')
+    })
+  })
 })

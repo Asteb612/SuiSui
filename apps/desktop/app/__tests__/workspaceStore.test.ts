@@ -25,6 +25,12 @@ const mockApi = {
     copy: vi.fn(),
     delete: vi.fn(),
   },
+  trash: {
+    list: vi.fn(),
+    restore: vi.fn(),
+    delete: vi.fn(),
+    empty: vi.fn(),
+  },
 }
 
 const mockWorkspace: WorkspaceInfo = {
@@ -54,6 +60,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'api', { value: mockApi, writable: true })
   mockApi.features.list.mockResolvedValue(mockFeatures)
   mockApi.features.getTree.mockResolvedValue(mockTree)
+  mockApi.trash.list.mockResolvedValue([])
 })
 
 // ---------------------------------------------------------------------------

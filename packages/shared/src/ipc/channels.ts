@@ -20,6 +20,12 @@ export const IPC_CHANNELS = {
   FEATURES_MOVE: 'features:move',
   FEATURES_COPY: 'features:copy',
 
+  // Trash (recoverable deleted features/folders)
+  TRASH_LIST: 'trash:list',
+  TRASH_RESTORE: 'trash:restore',
+  TRASH_DELETE: 'trash:delete',
+  TRASH_EMPTY: 'trash:empty',
+
   // Steps
   STEPS_EXPORT: 'steps:export',
   STEPS_GET_CACHED: 'steps:getCached',

@@ -15,6 +15,12 @@ const showNewFolderDialog = ref(false)
 const showNewFeatureDialog = ref(false)
 const showRenameDialog = ref(false)
 const showDeleteConfirm = ref(false)
+const showTrashDialog = ref(false)
+
+async function openTrashDialog() {
+  await workspaceStore.loadTrash()
+  showTrashDialog.value = true
+}
 
 const newFolderName = ref('')
 const newFolderParent = ref('')
@@ -167,6 +173,16 @@ async function refreshTree() {
           title="New Folder"
           @click="openNewFolderDialog()"
         />
+        <Button
+          icon="pi pi-trash"
+          text
+          rounded
+          size="small"
+          title="Recently Deleted"
+          data-testid="open-trash-btn"
+          :badge="workspaceStore.trashCount > 0 ? String(workspaceStore.trashCount) : undefined"
+          @click="openTrashDialog"
+        />
       </div>
     </div>
 
@@ -281,7 +297,13 @@ async function refreshTree() {
           v-if="deleteNode?.type === 'folder'"
           class="warning-text"
         >
-          This folder and all its contents will be permanently deleted.
+          This folder and all its contents will be moved to the trash.
+        </p>
+        <p
+          v-else
+          class="warning-text"
+        >
+          You can restore it later from Recently Deleted.
         </p>
       </div>
       <template #footer>
@@ -296,6 +318,9 @@ async function refreshTree() {
         />
       </template>
     </Dialog>
+
+    <!-- Recently Deleted (Trash) -->
+    <TrashDialog v-model:visible="showTrashDialog" />
   </div>
 </template>
 
