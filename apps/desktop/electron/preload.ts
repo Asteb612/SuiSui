@@ -30,6 +30,13 @@ const api: ElectronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FEATURES_COPY, sourcePath, targetPath),
   },
 
+  trash: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.TRASH_LIST),
+    restore: (id) => ipcRenderer.invoke(IPC_CHANNELS.TRASH_RESTORE, id),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.TRASH_DELETE, id),
+    empty: () => ipcRenderer.invoke(IPC_CHANNELS.TRASH_EMPTY),
+  },
+
   steps: {
     export: () => ipcRenderer.invoke(IPC_CHANNELS.STEPS_EXPORT),
     getCached: () => ipcRenderer.invoke(IPC_CHANNELS.STEPS_GET_CACHED),

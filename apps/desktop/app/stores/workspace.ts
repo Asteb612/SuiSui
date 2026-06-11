@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { WorkspaceInfo, FeatureFile, WorkspaceValidation, FeatureTreeNode } from '@suisui/shared'
+import type { WorkspaceInfo, FeatureFile, WorkspaceValidation, FeatureTreeNode, TrashEntry } from '@suisui/shared'
 
 export const useWorkspaceStore = defineStore('workspace', {
   state: () => ({
@@ -7,6 +7,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     features: [] as FeatureFile[],
     featureTree: [] as FeatureTreeNode[],
     selectedFeature: null as FeatureFile | null,
+    trashItems: [] as TrashEntry[],
     expandedFolders: new Set<string>(),
     isLoading: false,
     isInitializing: false,
@@ -19,6 +20,7 @@ export const useWorkspaceStore = defineStore('workspace', {
   getters: {
     hasWorkspace: (state) => state.workspace !== null,
     featureCount: (state) => state.features.length,
+    trashCount: (state) => state.trashItems.length,
     needsInit: (state) => state.pendingPath !== null && state.pendingValidation !== null && !state.pendingValidation.isValid,
   },
 
@@ -31,6 +33,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         if (this.workspace) {
           await this.loadFeatures()
           await this.loadFeatureTree()
+          await this.loadTrash()
         }
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to load workspace'
@@ -145,6 +148,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
         await this.loadFeatureTree()
         await this.loadFeatures()
+        await this.loadTrash()
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to delete folder'
         throw err
@@ -196,8 +200,53 @@ export const useWorkspaceStore = defineStore('workspace', {
         }
         await this.loadFeatureTree()
         await this.loadFeatures()
+        await this.loadTrash()
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'Failed to delete feature'
+        throw err
+      }
+    },
+
+    async loadTrash() {
+      if (!this.workspace) return
+      try {
+        this.trashItems = await window.api.trash.list()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to load trash'
+      }
+    },
+
+    async restoreFromTrash(id: string) {
+      this.error = null
+      try {
+        await window.api.trash.restore(id)
+        await this.loadTrash()
+        await this.loadFeatureTree()
+        await this.loadFeatures()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to restore from trash'
+        throw err
+      }
+    },
+
+    async deleteFromTrash(id: string) {
+      this.error = null
+      try {
+        await window.api.trash.delete(id)
+        await this.loadTrash()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to delete from trash'
+        throw err
+      }
+    },
+
+    async emptyTrash() {
+      this.error = null
+      try {
+        await window.api.trash.empty()
+        await this.loadTrash()
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to empty trash'
         throw err
       }
     },
@@ -244,6 +293,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       this.features = []
       this.featureTree = []
       this.selectedFeature = null
+      this.trashItems = []
       this.expandedFolders.clear()
     },
   },

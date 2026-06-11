@@ -5,6 +5,7 @@ import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResu
 import {
   getWorkspaceService,
   getFeatureService,
+  getTrashService,
   getStepService,
   getValidationService,
   getRunnerService,
@@ -238,6 +239,25 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.FEATURES_COPY, async (_event, sourcePath: string, targetPath: string) => {
     await featureService.copyFeature(sourcePath, targetPath)
+  })
+
+  // Trash handlers
+  const trashService = getTrashService()
+
+  ipcMain.handle(IPC_CHANNELS.TRASH_LIST, async () => {
+    return trashService.list()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRASH_RESTORE, async (_event, id: string) => {
+    await trashService.restore(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRASH_DELETE, async (_event, id: string) => {
+    await trashService.deletePermanent(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TRASH_EMPTY, async () => {
+    await trashService.empty()
   })
 
   // Steps handlers

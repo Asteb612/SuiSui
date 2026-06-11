@@ -335,7 +335,7 @@ describe('FeatureTree', () => {
 
       await fireEvent.click(screen.getByText('Delete'))
 
-      expect(screen.getByText(/permanently deleted/)).toBeTruthy()
+      expect(screen.getByText(/moved to the trash/)).toBeTruthy()
     })
 
     it('calls deleteFolder when confirmed for folder', async () => {

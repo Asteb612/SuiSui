@@ -1,6 +1,7 @@
 // Types
 export * from './types/workspace'
 export * from './types/feature'
+export * from './types/trash'
 export * from './types/step'
 export * from './types/validation'
 export * from './types/runner'

@@ -1,5 +1,6 @@
 import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../types/workspace'
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
+import type { TrashEntry } from '../types/trash'
 import type { StepExportResult, DecoratorDefinition } from '../types/step'
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
@@ -36,6 +37,13 @@ export interface ElectronAPI {
     rename: (oldPath: string, newPath: string) => Promise<void>
     move: (filePath: string, newFolderPath: string) => Promise<void>
     copy: (sourcePath: string, targetPath: string) => Promise<void>
+  }
+
+  trash: {
+    list: () => Promise<TrashEntry[]>
+    restore: (id: string) => Promise<void>
+    delete: (id: string) => Promise<void>
+    empty: () => Promise<void>
   }
 
   steps: {

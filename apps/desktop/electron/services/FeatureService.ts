@@ -2,6 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import type { FeatureFile, FeatureTreeNode } from '@suisui/shared'
 import { getWorkspaceService } from './WorkspaceService'
+import { getTrashService } from './TrashService'
 
 export class FeatureService {
   private validatePath(relativePath: string): void {
@@ -83,8 +84,10 @@ export class FeatureService {
   }
 
   async delete(relativePath: string): Promise<void> {
-    const fullPath = await this.getFullPath(relativePath)
-    await fs.unlink(fullPath)
+    // Validate path/workspace, then move to the recoverable trash bin
+    // instead of permanently deleting.
+    this.validatePath(relativePath)
+    await getTrashService().trashItem(relativePath, 'file')
   }
 
   async exists(relativePath: string): Promise<boolean> {
@@ -133,24 +136,10 @@ export class FeatureService {
   }
 
   async deleteFolder(relativePath: string): Promise<void> {
+    // Validate path, then move the folder to the recoverable trash bin
+    // instead of permanently deleting it and its contents.
     this.validatePath(relativePath + '/dummy.feature')
-    const workspaceService = getWorkspaceService()
-    const workspacePath = workspaceService.getPath()
-    if (!workspacePath) {
-      throw new Error('No workspace selected')
-    }
-    const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
-    const fullPath = path.join(workspacePath, featuresDir, relativePath)
-    
-    try {
-      await fs.rm(fullPath, { recursive: true, force: false })
-    } catch (error) {
-      const nodeError = error as NodeJS.ErrnoException
-      if (nodeError.code === 'ENOENT') {
-        throw new Error(`Folder not found: ${relativePath}`)
-      }
-      throw error
-    }
+    await getTrashService().trashItem(relativePath, 'folder')
   }
 
   async renameFeature(oldPath: string, newPath: string): Promise<void> {
@@ -231,8 +220,9 @@ export class FeatureService {
           const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
           
           if (entry.isDirectory()) {
-            // Hide internal directories (e.g., steps/) from the feature tree
-            if (entry.name === 'steps') continue
+            // Hide internal directories (e.g., steps/) and dot-directories
+            // (e.g., .app/ which holds the trash bin) from the feature tree
+            if (entry.name === 'steps' || entry.name.startsWith('.')) continue
 
             const children = await scanDir(path.join(dir, entry.name), relativePath)
             nodes.push({

@@ -183,6 +183,28 @@ async function resetScenario() {
   await scenarioStore.loadFromFeature(scenarioStore.currentFeaturePath, stepsStore.steps)
 }
 
+// Undo/redo: only active while editing a scenario
+function handleUndoRedoKeydown(event: KeyboardEvent) {
+  if (currentViewMode.value !== 'edit') return
+  const mod = event.metaKey || event.ctrlKey
+  if (!mod) return
+  const key = event.key.toLowerCase()
+  if (key === 'z' && !event.shiftKey) {
+    event.preventDefault()
+    scenarioStore.undo()
+  } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+    event.preventDefault()
+    scenarioStore.redo()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleUndoRedoKeydown)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleUndoRedoKeydown)
+})
+
 
 function handleCreateScenario(data: { name: string; fileName: string }) {
   scenarioStore.createNew(data.name)
@@ -447,6 +469,25 @@ function cancelInit() {
                 />
                 <!-- Edit mode buttons -->
                 <template v-else>
+                  <!-- Undo / Redo -->
+                  <Button
+                    icon="pi pi-undo"
+                    text
+                    size="small"
+                    data-testid="undo-btn"
+                    :disabled="!scenarioStore.canUndo"
+                    title="Undo (Ctrl/Cmd+Z)"
+                    @click="scenarioStore.undo()"
+                  />
+                  <Button
+                    icon="pi pi-replay"
+                    text
+                    size="small"
+                    data-testid="redo-btn"
+                    :disabled="!scenarioStore.canRedo"
+                    title="Redo (Ctrl/Cmd+Shift+Z)"
+                    @click="scenarioStore.redo()"
+                  />
                   <!-- Cancel button (only if dirty) -->
                   <Button
                     v-if="scenarioStore.isDirty"
