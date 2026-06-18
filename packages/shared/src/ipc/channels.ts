@@ -65,6 +65,22 @@ export const IPC_CHANNELS = {
   GIT_CRED_SAVE: 'git:credSave',
   GIT_CRED_GET: 'git:credGet',
   GIT_CRED_DELETE: 'git:credDelete',
+
+  // AI: config, credentials, status (invoke)
+  AI_CONFIG_GET: 'ai:configGet',
+  AI_CONFIG_SET: 'ai:configSet',
+  AI_KEY_SET: 'ai:keySet',
+  AI_KEY_CLEAR: 'ai:keyClear',
+  AI_STATUS: 'ai:status',
+
+  // AI: streaming generation (invoke to start/cancel)
+  AI_START: 'ai:start',
+  AI_CANCEL: 'ai:cancel',
+
+  // AI: main -> renderer stream events (webContents.send)
+  AI_CHUNK: 'ai:chunk',
+  AI_DONE: 'ai:done',
+  AI_ERROR: 'ai:error',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

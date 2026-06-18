@@ -7,6 +7,7 @@ import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
 import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
+import type { AIProviderConfig, AIProviderStatus, AIGenerationRequest, AIStreamChunk, AIStreamDone, AIStreamError } from '../types/ai'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -92,6 +93,25 @@ export interface ElectronAPI {
     save: (workspacePath: string, credentials: GitCredentials) => Promise<void>
     get: (workspacePath: string) => Promise<GitCredentials | null>
     delete: (workspacePath: string) => Promise<void>
+  }
+
+  ai: {
+    // config / credentials / status (invoke)
+    getConfig: () => Promise<AIProviderConfig>
+    setConfig: (config: AIProviderConfig) => Promise<void>
+    /** Write-only: the key is never read back to the renderer. */
+    setKey: (apiKey: string) => Promise<void>
+    clearKey: () => Promise<void>
+    status: () => Promise<AIProviderStatus>
+
+    // streaming generation
+    start: (req: AIGenerationRequest) => Promise<{ accepted: true }>
+    cancel: (requestId: string) => Promise<void>
+
+    // subscriptions (return an unsubscribe fn — call on onUnmounted)
+    onChunk: (callback: (chunk: AIStreamChunk) => void) => () => void
+    onDone: (callback: (done: AIStreamDone) => void) => () => void
+    onError: (callback: (err: AIStreamError) => void) => () => void
   }
 }
 

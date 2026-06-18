@@ -76,6 +76,7 @@ onUnmounted(() => {
 
 const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
+const showAiSettingsDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -228,6 +229,14 @@ function cancelInit() {
         text
         size="small"
         @click="showHelpDialog = true"
+      />
+      <Button
+        icon="pi pi-sparkles"
+        text
+        size="small"
+        aria-label="AI settings"
+        data-testid="ai-settings-btn"
+        @click="showAiSettingsDialog = true"
       />
       <Button
         v-if="workspaceStore.hasWorkspace"
@@ -548,6 +557,8 @@ function cancelInit() {
     </footer>
 
     <!-- Dialogs -->
+    <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
+
     <NewScenarioDialog
       v-model:visible="showNewScenarioDialog"
       @create="handleCreateScenario"

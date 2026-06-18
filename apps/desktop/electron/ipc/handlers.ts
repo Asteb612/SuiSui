@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseArgs } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials, AIProviderConfig, AIGenerationRequest } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -13,6 +13,11 @@ import {
   getDependencyService,
   getGitWorkspaceService,
   getGitCredentialsService,
+  getAIService,
+  getAICredentialsService,
+  AIService,
+  FakeAIProvider,
+  type AICredentialsService,
   FakeCommandRunner,
   setCommandRunner,
 } from '../services'
@@ -416,6 +421,107 @@ export function registerIpcHandlers(
       await githubAuthService.deleteCredentials(workspacePath)
     })
   }
+
+  // AI handlers
+  let aiService: AIService
+  let aiCredentials: AICredentialsService
+  if (isTestMode) {
+    // Test mode: drive AIService with a FakeAIProvider and no-op credentials so
+    // no real model, CLI, network, or safeStorage is touched (Constitution Principle III).
+    const fakeCredentials = {
+      setKey: async () => {},
+      getKey: async () => null,
+      hasKey: async () => false,
+      clearKey: async () => {},
+    } as unknown as AICredentialsService
+    aiCredentials = fakeCredentials
+    aiService = new AIService({ provider: new FakeAIProvider(), credentialsService: fakeCredentials })
+  } else {
+    aiService = getAIService()
+    aiCredentials = getAICredentialsService()
+  }
+
+  ipcMain.handle(IPC_CHANNELS.AI_CONFIG_GET, async () => {
+    return aiService.getConfig()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.AI_CONFIG_SET, async (_event, config: AIProviderConfig) => {
+    await aiService.setConfig(config)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.AI_KEY_SET, async (_event, apiKey: string) => {
+    await aiCredentials.setKey(apiKey)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.AI_KEY_CLEAR, async () => {
+    await aiCredentials.clearKey()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.AI_STATUS, async () => {
+    return aiService.status()
+  })
+
+  // Streaming generation: AI_START returns immediately and streams chunks over
+  // AI_CHUNK / AI_DONE / AI_ERROR (webContents.send). Cancellation via AI_CANCEL.
+  const aiControllers = new Map<string, AbortController>()
+
+  ipcMain.handle(IPC_CHANNELS.AI_START, async (event, req: AIGenerationRequest) => {
+    const controller = new AbortController()
+    aiControllers.set(req.requestId, controller)
+
+    // Coalesce deltas on a short timer to avoid flooding the renderer.
+    let buffer = ''
+    let flushTimer: NodeJS.Timeout | null = null
+    const flush = () => {
+      flushTimer = null
+      if (buffer.length === 0) return
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.AI_CHUNK, { requestId: req.requestId, delta: buffer })
+      }
+      buffer = ''
+    }
+
+    // Drive the stream without awaiting inside the handler.
+    void (async () => {
+      try {
+        for await (const delta of aiService.stream({
+          kind: req.kind,
+          input: req.input,
+          context: req.context,
+          signal: controller.signal,
+        })) {
+          buffer += delta
+          if (!flushTimer) flushTimer = setTimeout(flush, 32)
+        }
+        if (flushTimer) clearTimeout(flushTimer)
+        flush()
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC_CHANNELS.AI_DONE, { requestId: req.requestId, finishReason: 'stop' })
+        }
+      } catch (err) {
+        if (flushTimer) clearTimeout(flushTimer)
+        const aborted = err instanceof Error && err.name === 'AbortError'
+        if (!event.sender.isDestroyed()) {
+          if (aborted) {
+            event.sender.send(IPC_CHANNELS.AI_DONE, { requestId: req.requestId, finishReason: 'aborted' })
+          } else {
+            const message = err instanceof Error ? err.message : String(err)
+            logger.warn('AI_START stream error', { requestId: req.requestId, message })
+            event.sender.send(IPC_CHANNELS.AI_ERROR, { requestId: req.requestId, message })
+          }
+        }
+      } finally {
+        aiControllers.delete(req.requestId)
+      }
+    })()
+
+    return { accepted: true as const }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.AI_CANCEL, async (_event, requestId: string) => {
+    aiControllers.get(requestId)?.abort()
+    aiControllers.delete(requestId)
+  })
 
   logger.info('IPC handlers registered', { isTestMode })
 }

@@ -91,6 +91,31 @@ const api: ElectronAPI = {
     get: (workspacePath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_GET, workspacePath),
     delete: (workspacePath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_CRED_DELETE, workspacePath),
   },
+
+  ai: {
+    getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.AI_CONFIG_GET),
+    setConfig: (config) => ipcRenderer.invoke(IPC_CHANNELS.AI_CONFIG_SET, config),
+    setKey: (apiKey) => ipcRenderer.invoke(IPC_CHANNELS.AI_KEY_SET, apiKey),
+    clearKey: () => ipcRenderer.invoke(IPC_CHANNELS.AI_KEY_CLEAR),
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.AI_STATUS),
+    start: (req) => ipcRenderer.invoke(IPC_CHANNELS.AI_START, req),
+    cancel: (requestId) => ipcRenderer.invoke(IPC_CHANNELS.AI_CANCEL, requestId),
+    onChunk: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, chunk: Parameters<typeof callback>[0]) => callback(chunk)
+      ipcRenderer.on(IPC_CHANNELS.AI_CHUNK, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AI_CHUNK, listener)
+    },
+    onDone: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, done: Parameters<typeof callback>[0]) => callback(done)
+      ipcRenderer.on(IPC_CHANNELS.AI_DONE, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AI_DONE, listener)
+    },
+    onError: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, err: Parameters<typeof callback>[0]) => callback(err)
+      ipcRenderer.on(IPC_CHANNELS.AI_ERROR, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.AI_ERROR, listener)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

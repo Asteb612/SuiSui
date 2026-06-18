@@ -9,6 +9,7 @@ export * from './types/command'
 export * from './types/settings'
 export * from './types/node'
 export * from './types/dependency'
+export * from './types/ai'
 
 // Patterns
 export * from './patterns/processor'
