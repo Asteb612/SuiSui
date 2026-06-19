@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import type { AIProviderConfig, AIProviderStatus, AIGenerationKind, AIRequestContext } from '@suisui/shared'
-import { DEFAULT_AI_PROVIDER_CONFIG } from '@suisui/shared'
+import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIGenerationKind, AIRequestContext } from '@suisui/shared'
+import { DEFAULT_AI_PROVIDER_CONFIG, AUTO_DETECTABLE_PROVIDER_TYPES } from '@suisui/shared'
 
 export interface GenerateResult {
   text: string
@@ -12,6 +12,9 @@ export const useAiStore = defineStore('ai', {
   state: () => ({
     config: { ...DEFAULT_AI_PROVIDER_CONFIG } as AIProviderConfig,
     status: null as AIProviderStatus | null,
+    /** Per-provider detection results for the settings page (spec FR-020/FR-021). */
+    detection: {} as Partial<Record<AIProviderType, AIProviderStatus>>,
+    isDetecting: false,
     streamingDraft: '',
     isStreaming: false,
     isCheckingStatus: false,
@@ -22,6 +25,17 @@ export const useAiStore = defineStore('ai', {
   getters: {
     /** Whether AI features should be enabled in the UI (spec FR-014). */
     isConfigured: (state) => state.config.type !== null,
+
+    /**
+     * Whether a provider type is selectable in the settings UI (spec FR-020).
+     * Auto-detectable providers (Ollama / Codex CLI / Claude CLI) are selectable
+     * only when detection reports them available; the BYOK `openai-compatible`
+     * provider is exempt (always selectable, verified on save).
+     */
+    isSelectable: (state) => (type: AIProviderType): boolean => {
+      if (!AUTO_DETECTABLE_PROVIDER_TYPES.includes(type)) return true
+      return state.detection[type]?.available ?? false
+    },
   },
 
   actions: {
@@ -58,6 +72,37 @@ export const useAiStore = defineStore('ai', {
         this.status = { available: false, reason: this.error, models: null, detail: null }
       } finally {
         this.isCheckingStatus = false
+      }
+    },
+
+    /**
+     * Detect a single provider WITHOUT persisting any config change (spec FR-021),
+     * storing the result under `detection[type]`. Used to gate selection in the UI.
+     */
+    async detect(type: AIProviderType, baseUrl?: string | null) {
+      try {
+        this.detection[type] = await window.api.ai.status({ type, baseUrl })
+      } catch (err) {
+        this.detection[type] = {
+          available: false,
+          reason: err instanceof Error ? err.message : 'Detection failed',
+          models: null,
+          detail: null,
+        }
+      }
+    },
+
+    /**
+     * Detect all auto-detectable providers (run when the settings page opens, plus
+     * on manual re-detect). No background polling (spec FR-021). The BYOK provider is
+     * not probed here — it is always selectable and verified on save.
+     */
+    async detectAll() {
+      this.isDetecting = true
+      try {
+        await Promise.all(AUTO_DETECTABLE_PROVIDER_TYPES.map((t) => this.detect(t)))
+      } finally {
+        this.isDetecting = false
       }
     },
 

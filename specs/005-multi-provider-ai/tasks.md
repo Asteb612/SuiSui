@@ -11,6 +11,8 @@ description: 'Task list for Multi-provider AI integration'
 
 **Organization**: Tasks are grouped by user story (US1–US5) for independent implementation and testing.
 
+> **Amendments (Session 2026-06-19 clarifications)**: T001–T057 were generated and largely implemented against the original **3-provider, no-detection-gating** spec. Two clarifications changed scope: (1) **detection-gated provider selection** on the settings page + `status(target)` probe-on-open (FR-020/FR-021); (2) a **fourth provider type — the OpenAI Codex CLI** (FR-001/FR-006/FR-019). Completed tasks are left `[x]` (they were correct for their time); the delta is captured as new **amendment tasks T058–T069** appended to the relevant phases. Do these before `/speckit.implement` finishes US1.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies on incomplete tasks)
@@ -70,15 +72,23 @@ description: 'Task list for Multi-provider AI integration'
 - [x] T019 [P] Write `apps/desktop/electron/__tests__/AICredentialsService.test.ts` (encrypt/store/clear; never exposes key) and `apps/desktop/electron/__tests__/AIService.test.ts` (provider selection + `stream` via `FakeAIProvider`)
 - [x] T020 Run `pnpm --filter @suisui/shared build && pnpm typecheck && pnpm test`
 
-**Checkpoint**: Contracts + seam + plumbing exist and are tested with fakes. User stories can now begin.
+### Amendments — detection-gating + 4th provider type (FR-020/FR-021, Session 2026-06-19)
+
+- [x] T058 [P] Amend `packages/shared/src/types/ai.ts`: add `'openai-codex-cli'` to `AIProviderType` (now 4 values: `'ollama' | 'openai-compatible' | 'openai-codex-cli' | 'claude-subscription'`) and add `AIStatusTarget { type: AIProviderType; baseUrl?: string | null }`; export both from `packages/shared/src/index.ts`
+- [x] T059 Amend the `status` method signature to `status(target?: AIStatusTarget): Promise<AIProviderStatus>` in `packages/shared/src/ipc/api.ts` and update the `AI_STATUS` comment in `packages/shared/src/ipc/channels.ts` per contracts/ipc-api.md; then run `pnpm --filter @suisui/shared build`
+- [x] T060 Amend `apps/desktop/electron/services/ai/AIService.ts` `status(target?)`: when `target` is supplied, build a **transient** provider for `target.type`/`target.baseUrl` and return its `status()` **without mutating** persisted `AIProviderConfig`; when omitted, probe the currently-configured provider (FR-021)
+- [x] T061 Amend the `AI_STATUS` handler in `apps/desktop/electron/ipc/handlers.ts` to forward the optional `AIStatusTarget` to `getAIService().status(target)` (test-mode branch honored)
+- [x] T062 [P] Amend `apps/desktop/app/stores/ai.ts`: track per-provider detection status (e.g. `detection: Partial<Record<AIProviderType, AIProviderStatus>>`) with `detectAll()` / `detect(type, baseUrl?)` actions calling `useApi().ai.status(target)`; run `detectAll()` for the auto-detectable providers when settings open; no background polling (FR-021)
+
+**Checkpoint**: Contracts + seam + plumbing exist and are tested with fakes. User stories can now begin. (Amendments T058–T062 extend the foundation for detection-gating + the 4th provider.)
 
 ---
 
 ## Phase 3: User Story 1 - Configure an AI provider (Priority: P1) 🎯 MVP
 
-**Goal**: User selects a provider type (local Ollama / BYOK / Claude subscription), stores any key encrypted, and verifies the connection. Maps to epic sub-issues #2 + #3.
+**Goal**: User selects a provider type on the settings page (local Ollama / BYOK OpenAI-compatible / **OpenAI Codex CLI** / Claude CLI), stores any key encrypted, and verifies the connection. Auto-detectable providers (Ollama, Codex CLI, Claude CLI) are selectable only when detected; BYOK is always selectable (FR-020/FR-021). Maps to epic sub-issues #2 + #3.
 
-**Independent Test**: Configure each provider type, run "test connection", get a clear success/failure; confirm no provider configured → app behaves as today.
+**Independent Test**: Configure each provider type, run "test connection", get a clear success/failure; confirm undetected auto-detectable providers are shown disabled with a reason; confirm no provider configured → app behaves as today.
 
 ### Concrete providers
 
@@ -98,7 +108,16 @@ description: 'Task list for Multi-provider AI integration'
 - [x] T028 [US1] Add an "AI settings" entry point (gear/menu) in `apps/desktop/app/pages/index.vue` opening `AiSettingsDialog.vue`
 - [x] T029 [US1] Run `pnpm --filter @suisui/shared build && pnpm typecheck && pnpm test && pnpm lint:fix`
 
-**Checkpoint**: A user can configure + verify any provider; key stored encrypted; no provider = unchanged app. US1 independently shippable (MVP).
+### Amendments — OpenAI Codex CLI provider + detection-gated UI (Session 2026-06-19)
+
+- [x] T063 [P] [US1] Create `apps/desktop/electron/services/ai/OpenAiCodexProvider.ts` implementing `IAIProvider`: drive `codex exec --json` via the existing `CommandRunner` with a **sanitized env** (omit `OPENAI_API_KEY` and `CODEX_API_KEY`); accumulate assistant text from JSONL `item.completed` events where `item.type === 'agent_message'`; cancel = kill the child process; `status()` via `codex --version` (installed?) + `codex login status` (logged in?), best-effort, per research Decision 3b
+- [x] T064 [US1] Wire `'openai-codex-cli'` into `apps/desktop/electron/services/ai/AIService.ts` provider selection (all 4 types) and into the `status(target)` transient-provider map (depends on T060, T063)
+- [x] T065 [P] [US1] Add `OpenAiCodexProvider` cases to `apps/desktop/electron/__tests__/ai-providers.test.ts` via `FakeCommandRunner`: assert `OPENAI_API_KEY` and `CODEX_API_KEY` are **never** present in the effective env (FR-006), `agent_message` delta accumulation, and kill-on-cancel
+- [x] T066 [US1] Amend `apps/desktop/app/components/AiSettingsDialog.vue` for detection-gated selection (FR-020/FR-021): on open call `useAiStore().detectAll()`; render auto-detectable providers that are not detected as **disabled with the `reason`** + a "re-detect" button; add the **OpenAI Codex CLI** option (4 providers total); keep BYOK always selectable and verified on save
+- [x] T067 [P] [US1] Add detection-gating tests: in `apps/desktop/electron/__tests__/AIService.test.ts` assert `status(target)` probes a provider **without persisting** config (config unchanged after call); add a renderer/store guard asserting undetected auto-detectable providers are non-activatable while BYOK stays selectable
+- [x] T068 [US1] Run `pnpm --filter @suisui/shared build && pnpm typecheck && pnpm test && pnpm lint:fix`
+
+**Checkpoint**: A user can configure + verify any of the four providers; auto-detectable ones are detection-gated; key stored encrypted; no provider = unchanged app. US1 independently shippable (MVP).
 
 ---
 
@@ -176,8 +195,9 @@ description: 'Task list for Multi-provider AI integration'
 - [ ] T053 [P] Ensure provider errors (unreachable/timeout/malformed/interrupted stream) surface as clear, non-blocking messages and never insert a partial draft (FR-015 + edge cases) across `AiGenerationDialog.vue` and `stores/ai.ts`
 - [ ] T054 [P] Confirm cancellation cleans up the `AbortController` map in `handlers.ts` and the renderer unsubscribes listeners on `onUnmounted` (no leaks)
 - [ ] T055 [P] Add an AI integration section to docs: update `doc/SERVICES.md` (AIService/providers/credentials), `doc/IPC_TYPES.md` (AI\_\* channels), `doc/FRONTEND.md` (ai store + dialogs); cross-link from `CLAUDE.md`
-- [ ] T056 [P] Document the Claude-subscription best-effort caveat + `ANTHROPIC_API_KEY`-must-be-unset footgun and the BYOK-Anthropic fallback in `doc/ARCHITECTURE.md` (security/billing model)
-- [ ] T057 Final gate: `pnpm --filter @suisui/shared build && pnpm typecheck && pnpm test && pnpm lint:fix`; then run the quickstart.md manual A/B/C verification
+- [ ] T056 [P] Document the Claude-CLI best-effort caveat + `ANTHROPIC_API_KEY`-must-be-unset footgun and the BYOK-Anthropic fallback in `doc/ARCHITECTURE.md` (security/billing model)
+- [ ] T057 Final gate: `pnpm --filter @suisui/shared build && pnpm typecheck && pnpm test && pnpm lint:fix`; then run the quickstart.md manual A/B/C/D verification
+- [ ] T069 [P] Document the OpenAI Codex CLI provider in `doc/ARCHITECTURE.md`: best-effort caveat, `OPENAI_API_KEY`/`CODEX_API_KEY`-must-be-unset footgun, the `~/.codex/config.toml` `preferred_auth_method` override risk, the message-granular streaming caveat (research Decision 3b), and the BYOK fallback; also verify the detection-gating + "setup required" disabled states (FR-020) for all auto-detectable providers
 
 ---
 
@@ -190,6 +210,15 @@ description: 'Task list for Multi-provider AI integration'
 - **US2 (P4)** depends on Foundational + US1 (needs a configured provider + streaming plumbing, which US1's providers complete). US2 also exercises the streaming handler from T016.
 - **US3 (P5)**, **US4 (P6)**, **US5 (P7)** each depend on Foundational + US1 (a working provider). They are independent of each other and of US2 (each adds a new `kind` use case + its own UI entry point) — once US1 is done they can be built in any order / parallel.
 - **Polish (P8)** depends on all targeted stories being present.
+
+### Amendment dependencies (Session 2026-06-19)
+
+- **T058** (shared types: 4th `AIProviderType` + `AIStatusTarget`) blocks **T059** (api signature) → **T060** (AIService `status(target)`) → **T061** (handler). T058→T059 require the shared rebuild before dependents typecheck.
+- **T062** (store per-provider detection) depends on T059 (typed `status(target)`).
+- **T063** (`OpenAiCodexProvider`) is independent and `[P]`; **T064** (wire 4th type into selection + transient-provider map) depends on T058 + T060 + T063.
+- **T065** (Codex tests) `[P]` after T063; **T067** (detection-gating tests) after T060/T062.
+- **T066** (detection-gated settings UI + 4th option) depends on T062 (store `detectAll`) + T064 (4th provider selectable). **T068** is the US1 gate after the amendments.
+- **T069** (Codex docs/degradation) belongs to Polish, after T063/T066.
 
 ### Story completion order
 
@@ -228,4 +257,4 @@ T025 ai-providers.test.ts  [P]
 
 ## Format validation
 
-All tasks use `- [ ] T### [P?] [US#?] description + file path`. Setup/Foundational/Polish tasks carry no story label; US1–US5 tasks carry their label. Every task names a concrete file path.
+All tasks use `- [ ] T### [P?] [US#?] description + file path`. Setup/Foundational/Polish tasks carry no story label; US1–US5 tasks carry their label. Every task names a concrete file path. Total: **69 tasks** (T001–T057 original + T058–T069 amendments for FR-020/FR-021 detection-gating and the OpenAI Codex CLI provider). Foundational amendments T058–T062 carry no story label; US1 amendments T063–T068 carry `[US1]`; T069 is Polish.

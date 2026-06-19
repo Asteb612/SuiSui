@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseArgs } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials, AIProviderConfig, AIGenerationRequest } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -457,8 +457,8 @@ export function registerIpcHandlers(
     await aiCredentials.clearKey()
   })
 
-  ipcMain.handle(IPC_CHANNELS.AI_STATUS, async () => {
-    return aiService.status()
+  ipcMain.handle(IPC_CHANNELS.AI_STATUS, async (_event, target?: AIStatusTarget) => {
+    return aiService.status(target)
   })
 
   // Streaming generation: AI_START returns immediately and streams chunks over

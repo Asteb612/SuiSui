@@ -102,4 +102,23 @@ describe('AIService', () => {
     const status = await service.status()
     expect(status.available).toBe(false)
   })
+
+  it('status(target) probes a provider WITHOUT persisting config (FR-021)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [{ name: 'llama3.2' }] }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const configured: AIProviderConfig = { type: 'claude-subscription', model: null, baseUrl: null, hasApiKey: false }
+    const settings = fakeSettings({ aiProvider: configured })
+    const saveSpy = vi.spyOn(settings, 'save')
+    const service = new AIService({ settingsService: settings, credentialsService: fakeCreds(false) })
+
+    // Probe a DIFFERENT provider than the configured one.
+    const status = await service.status({ type: 'ollama', baseUrl: 'http://127.0.0.1:11434' })
+
+    expect(status.available).toBe(true)
+    expect(status.models).toEqual(['llama3.2'])
+    // No config mutation: the persisted provider is still the configured one.
+    expect(saveSpy).not.toHaveBeenCalled()
+    expect((await settings.get()).aiProvider!.type).toBe('claude-subscription')
+    vi.unstubAllGlobals()
+  })
 })

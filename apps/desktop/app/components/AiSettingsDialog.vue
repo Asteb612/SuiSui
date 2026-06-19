@@ -13,11 +13,29 @@ const emit = defineEmits<{
 
 const aiStore = useAiStore()
 
-const providerOptions: Array<{ label: string; value: AIProviderType }> = [
+const PROVIDER_LABELS: Array<{ label: string; value: AIProviderType }> = [
   { label: 'Local model (Ollama)', value: 'ollama' },
   { label: 'Bring your own key (OpenAI-compatible)', value: 'openai-compatible' },
-  { label: 'Claude subscription', value: 'claude-subscription' },
+  { label: 'OpenAI Codex CLI', value: 'openai-codex-cli' },
+  { label: 'Claude CLI', value: 'claude-subscription' },
 ]
+
+/**
+ * Provider options with detection-gating applied (spec FR-020): auto-detectable
+ * providers that are not detected are disabled and annotated with the reason;
+ * the BYOK provider is always selectable.
+ */
+const providerOptions = computed(() =>
+  PROVIDER_LABELS.map((opt) => {
+    const selectable = aiStore.isSelectable(opt.value)
+    const reason = aiStore.detection[opt.value]?.reason
+    return {
+      value: opt.value,
+      disabled: !selectable,
+      label: selectable || !reason ? opt.label : `${opt.label} — ${reason}`,
+    }
+  })
+)
 
 const type = ref<AIProviderType | null>(null)
 const model = ref('')
@@ -40,6 +58,8 @@ watch(
     hasStoredKey.value = aiStore.config.hasApiKey
     apiKey.value = ''
     aiStore.status = null
+    // Auto-detect the auto-detectable providers on open (FR-021); no background polling.
+    void aiStore.detectAll()
   }
 )
 
@@ -102,19 +122,31 @@ function onDisable() {
   >
     <div class="dialog-content">
       <div class="field">
-        <label for="ai-provider-type">Provider</label>
+        <div class="label-row">
+          <label for="ai-provider-type">Provider</label>
+          <Button
+            label="Re-detect"
+            icon="pi pi-refresh"
+            text
+            size="small"
+            :loading="aiStore.isDetecting"
+            data-testid="ai-redetect"
+            @click="aiStore.detectAll()"
+          />
+        </div>
         <Select
           id="ai-provider-type"
           v-model="type"
           :options="providerOptions"
           option-label="label"
           option-value="value"
+          option-disabled="disabled"
           placeholder="No provider (AI disabled)"
           show-clear
           class="w-full"
           data-testid="ai-provider-select"
         />
-        <small class="hint">With no provider selected, AI features stay disabled and the rest of the app is unaffected.</small>
+        <small class="hint">Local and CLI providers are selectable only when detected; the bring-your-own-key option is always available and verified when you save. With no provider selected, AI features stay disabled and the rest of the app is unaffected.</small>
       </div>
 
       <div
@@ -192,6 +224,14 @@ function onDisable() {
       </div>
 
       <div
+        v-if="type === 'openai-codex-cli'"
+        class="callout"
+      >
+        <i class="pi pi-info-circle" />
+        <span>Uses your logged-in <code>codex</code> CLI (ChatGPT/Codex subscription). Ensure <code>OPENAI_API_KEY</code> and <code>CODEX_API_KEY</code> are unset so the subscription is used, not API billing. Best-effort.</span>
+      </div>
+
+      <div
         v-if="type"
         class="status-row"
       >
@@ -255,6 +295,12 @@ function onDisable() {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-color-secondary);
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .hint {

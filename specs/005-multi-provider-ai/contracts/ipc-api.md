@@ -12,7 +12,7 @@ AI_CONFIG_GET: 'ai:configGet',          // () => AIProviderConfig
 AI_CONFIG_SET: 'ai:configSet',          // (config: AIProviderConfig) => void
 AI_KEY_SET:    'ai:keySet',             // (apiKey: string) => void           (key never returned)
 AI_KEY_CLEAR:  'ai:keyClear',           // () => void
-AI_STATUS:     'ai:status',             // () => AIProviderStatus             (detect / test connection)
+AI_STATUS:     'ai:status',             // (target?: AIStatusTarget) => AIProviderStatus  (probe a given provider / test configured one)
 
 // AI generation (streaming)
 AI_START:      'ai:start',              // (req: AIGenerationRequest) => { accepted: true }
@@ -33,7 +33,7 @@ ai: {
   setConfig(config: AIProviderConfig): Promise<void>
   setKey(apiKey: string): Promise<void>      // write-only; key never read back to renderer
   clearKey(): Promise<void>
-  status(): Promise<AIProviderStatus>
+  status(target?: AIStatusTarget): Promise<AIProviderStatus>  // target → probe that provider w/o persisting (FR-021); omitted → test the configured provider (FR-004)
 
   // streaming generation
   start(req: AIGenerationRequest): Promise<{ accepted: true }>
@@ -49,6 +49,7 @@ ai: {
 ## Handler registration — `apps/desktop/electron/ipc/handlers.ts`
 
 - `AI_*` invoke handlers delegate to `getAIService()` / `getAICredentialsService()`.
+- `AI_STATUS` with an `AIStatusTarget` builds a **transient** provider for that target and returns its status **without** mutating persisted config (FR-021); with no arg it probes the configured provider (FR-004).
 - `AI_START` records an `AbortController` in a `Map<requestId, AbortController>`, returns `{ accepted: true }` immediately, then drives `getAIService().stream(req)` asynchronously, calling `webContents.send(AI_CHUNK | AI_DONE | AI_ERROR, ...)`. Coalesce chunks (~16–50ms). Guard `webContents.isDestroyed()`. Delete the controller in `finally`.
 - `AI_CANCEL` looks up the controller and calls `.abort()`.
 - **Test mode** (`isTestMode`): register handlers backed by `FakeAIProvider` / no-op credentials, exactly as the existing `GIT_CRED_*` handlers do — never touch a real model/CLI.
@@ -64,3 +65,4 @@ ai: {
 - **C2**: With `config.type === null`, the renderer disables AI entry points; `status()` reflects "not configured" (FR-014).
 - **C3**: Streaming uses the event-channel pattern, not `invoke`, so intermediate tokens can be emitted (FR-018); each stream is correlated by `requestId`.
 - **C4**: After editing the shared package, run `pnpm --filter @suisui/shared build` before typecheck/test (Shared Package Rebuild Rule).
+- **C5**: The settings UI gates selection of auto-detectable providers (`ollama`, `claude-subscription`) on `status(target).available`: undetected → shown disabled with `reason`, not hidden; `openai-compatible` (BYOK) is exempt and always selectable, verified on save (FR-020). Detection runs on settings-page open and on manual re-detect; no background polling (FR-021). `status(target)` MUST NOT persist a config change.

@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   AI_CONFIG_SET: 'ai:configSet',
   AI_KEY_SET: 'ai:keySet',
   AI_KEY_CLEAR: 'ai:keyClear',
+  // (target?: AIStatusTarget) => AIProviderStatus — probe a given provider w/o persisting, or test the configured one
   AI_STATUS: 'ai:status',
 
   // AI: streaming generation (invoke to start/cancel)

@@ -59,6 +59,29 @@ Use `streamText({ model, prompt, abortSignal })` and consume `result.textStream`
 
 ---
 
+## Decision 3b — Provider D: OpenAI Codex CLI — **best-effort, subscription session, sanitized env**
+
+**Decision**: Implement the OpenAI Codex CLI provider by driving the locally-installed `codex` binary in non-interactive streaming mode — either via the official **`@openai/codex-sdk`** (`codex.startThread().runStreamed(prompt)` → async generator of structured events; the SDK is a thin spawn-wrapper over the CLI, structurally identical to `@anthropic-ai/claude-agent-sdk`) or by spawning **`codex exec --json`** through the existing `CommandRunner` and parsing the JSONL event stream. **Treat it as best-effort / "may break"**, mirroring provider C; the reliable fallback is the BYOK OpenAI-compatible API key (provider B). Satisfies spec FR-001(c), FR-006, FR-019.
+
+**Rationale & risk**:
+
+- Codex supports **Sign in with ChatGPT (subscription)** vs **API key (per-token billing)**. `codex exec` reuses saved CLI auth by default, so the subscription path is available without an API key — directly satisfies FR-006/FR-019 (streaming `exec`, not a one-shot that bills).
+- **API-billing footgun (must mitigate, parallels Claude)**: an `OPENAI_API_KEY` (or `CODEX_API_KEY`, the documented force-API-billing var) in the environment / a project `.env` can silently route to **paid API billing**. The provider MUST spawn `codex` with a curated env that **omits `OPENAI_API_KEY` and `CODEX_API_KEY`**. Additionally, `~/.codex/config.toml` `preferred_auth_method = "apikey"` can override a sanitized env, and auth lives in `~/.codex/auth.json` — account for these (validate config doesn't force apikey). → FR-006/SC-006.
+- Spawning the CLI ourselves (vs the SDK) gives full env control and a clean process-kill cancellation path, and reuses `FakeCommandRunner` for tests (Principle III).
+
+**Implementation notes**:
+
+- **Streaming format**: `codex exec --json` emits JSONL thread events (`thread.started → turn.started → item.completed* → turn.completed`). Accumulate assistant text from **`item.completed` where `item.type === 'agent_message'`** (`item.text`); ignore `reasoning`/`command_execution`/`file_change`/tool events. `turn.completed` carries token usage.
+- **Token-granularity caveat**: as of the Sept-2025 `--json` format, `exec` may emit **message-granular** `item.completed`, not token deltas. True incremental deltas (`item.updated` / `agent_message_delta`) live in the lower-level app-server JSON-RPC protocol. **Verify on the installed version**; if `exec --json` doesn't stream deltas, either accept message-granular streaming for this provider or use the app-server interface. This does not violate FR-018 (output is still streamed incrementally per message) but is a known degradation to document.
+- **Cancellation**: a clean `abort()` is **not yet shipped** in the SDK (openai/codex#5494). Plan to **kill the child process** on cancel (natural when spawning via `CommandRunner`). Maps `AbortSignal` → process kill.
+- **Detection** (Decision 5 analog): `codex --version` (installed?) + `codex login status` (logged in? prints login type / masked key suffix; unauthenticated reports no session); `~/.codex/auth.json` presence as a heuristic.
+
+**Alternatives considered**: the official `@openai/codex-sdk` `runStreamed` (cleaner API, but no abort yet and adds a dependency whose schema is evolving) — kept as an option; spawning `codex exec --json` via the existing `CommandRunner` is preferred for env control + cancellation + test reuse. The community **`ben-vargas/ai-sdk-provider-codex-cli`** (a Vercel-AI-SDK provider that already drives Codex CLI via subprocess on a subscription) is a useful reference since the feature already depends on `ai` v6. Dropping provider D — rejected; it is a direct user requirement (Session 2026-06-19), shipped best-effort with clear degradation.
+
+> Version note: Codex tooling is evolving fast (flag renames `--json`/`--experimental-json`, abort support, delta streaming). Pin `@openai/codex-sdk` / the `codex` version and gate on `codex --version`.
+
+---
+
 ## Decision 4 — Streaming transport over Electron IPC: event channel, not `invoke`
 
 **Decision**: Start generation with a single `ipcRenderer.invoke('ai:start', { requestId, ... })` (resolves to "accepted"), then stream incremental chunks main→renderer via `webContents.send('ai:chunk', ...)` consumed through a `contextBridge`-exposed `onChunk(cb): unsubscribe` subscription. Add `ai:done` and `ai:error` events and an `ai:cancel` invoke channel.
@@ -100,13 +123,14 @@ Use `streamText({ model, prompt, abortSignal })` and consume `result.textStream`
 
 ## Resolved unknowns summary
 
-| Unknown (from spec)                              | Resolution                                                                                              |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| Local model technology                           | Ollama via `ollama-ai-provider-v2`, detect via `/api/tags`                                              |
-| BYOK API technology                              | `@ai-sdk/openai-compatible` (also serves BYOK Anthropic API key)                                        |
-| Subscription technology                          | `@anthropic-ai/claude-agent-sdk` (best-effort) + sanitized env; BYOK-Anthropic is the reliable fallback |
-| Streaming transport (FR-018/019)                 | `invoke` to start + `webContents.send` event channel for chunks + `invoke` to cancel                    |
-| Secret storage                                   | Electron `safeStorage`, reusing the `GitCredentialsService` pattern                                     |
-| Config persistence                               | `SettingsService` + new fields on `AppSettings`                                                         |
-| Test substitute (FR-016)                         | `FakeAIProvider` implementing `IAIProvider`; `FakeCommandRunner` for provider C                         |
-| Time-to-first-token / timeout targets (deferred) | Coalesce 16–50ms; per-request `AbortController` with `AbortSignal.timeout` for deadlines                |
+| Unknown (from spec)                              | Resolution                                                                                                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local model technology                           | Ollama via `ollama-ai-provider-v2`, detect via `/api/tags`                                                                                                            |
+| BYOK API technology                              | `@ai-sdk/openai-compatible` (also serves BYOK Anthropic API key)                                                                                                      |
+| Claude CLI technology                            | `@anthropic-ai/claude-agent-sdk` (best-effort) + sanitized env; BYOK-Anthropic is the reliable fallback                                                               |
+| OpenAI Codex CLI technology                      | `codex exec --json` via `CommandRunner` (or `@openai/codex-sdk`), sanitized env (no `OPENAI_API_KEY`/`CODEX_API_KEY`), best-effort; cancel = kill child (Decision 3b) |
+| Streaming transport (FR-018/019)                 | `invoke` to start + `webContents.send` event channel for chunks + `invoke` to cancel                                                                                  |
+| Secret storage                                   | Electron `safeStorage`, reusing the `GitCredentialsService` pattern                                                                                                   |
+| Config persistence                               | `SettingsService` + new fields on `AppSettings`                                                                                                                       |
+| Test substitute (FR-016)                         | `FakeAIProvider` implementing `IAIProvider`; `FakeCommandRunner` for provider C                                                                                       |
+| Time-to-first-token / timeout targets (deferred) | Coalesce 16–50ms; per-request `AbortController` with `AbortSignal.timeout` for deadlines                                                                              |

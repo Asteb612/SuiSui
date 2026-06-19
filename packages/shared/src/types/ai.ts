@@ -2,12 +2,26 @@ import type { StepDefinition } from './step'
 import type { ValidationResult } from './validation'
 
 /**
- * The three supported AI provider categories.
+ * The four supported AI provider categories. CLI/subscription usage and API-key
+ * usage are distinct, separately-selectable providers (spec FR-001).
  * - `ollama`: a model running locally via Ollama.
  * - `openai-compatible`: a bring-your-own-key OpenAI-compatible API (also a BYOK Anthropic API key).
- * - `claude-subscription`: the user's Claude subscription, driven via the locally-installed `claude` (best-effort).
+ * - `openai-codex-cli`: the user's ChatGPT/Codex subscription, driven via the locally-installed `codex` CLI (best-effort, no per-token billing).
+ * - `claude-subscription`: the user's Claude subscription, driven via the locally-installed `claude` CLI (best-effort, no per-token billing).
  */
-export type AIProviderType = 'ollama' | 'openai-compatible' | 'claude-subscription'
+export type AIProviderType = 'ollama' | 'openai-compatible' | 'openai-codex-cli' | 'claude-subscription'
+
+/**
+ * The set of provider types whose availability can be auto-detected (local service /
+ * installed-and-logged-in CLI). Selection of these is gated on detection in the
+ * settings UI (spec FR-020); `openai-compatible` (BYOK) is exempt — always selectable,
+ * verified on save.
+ */
+export const AUTO_DETECTABLE_PROVIDER_TYPES: readonly AIProviderType[] = [
+  'ollama',
+  'openai-codex-cli',
+  'claude-subscription',
+]
 
 /**
  * The user's chosen provider and its NON-SECRET settings. Persisted via SettingsService.
@@ -33,6 +47,17 @@ export interface AIProviderStatus {
   reason: string | null
   models: string[] | null
   detail: 'running' | 'installed-not-running' | 'not-installed' | null
+}
+
+/**
+ * Probe a specific provider on the settings page BEFORE any config is committed
+ * (spec FR-021). When passed to `ai.status(target)`, the main process builds a
+ * transient provider for this target and returns its status WITHOUT persisting a
+ * config change. Omitting the target probes the currently-configured provider.
+ */
+export interface AIStatusTarget {
+  type: AIProviderType
+  baseUrl?: string | null
 }
 
 /** The use case a generation request serves. */

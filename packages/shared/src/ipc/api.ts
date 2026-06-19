@@ -7,7 +7,7 @@ import type { AppSettings } from '../types/settings'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
 import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
-import type { AIProviderConfig, AIProviderStatus, AIGenerationRequest, AIStreamChunk, AIStreamDone, AIStreamError } from '../types/ai'
+import type { AIProviderConfig, AIProviderStatus, AIStatusTarget, AIGenerationRequest, AIStreamChunk, AIStreamDone, AIStreamError } from '../types/ai'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -102,7 +102,8 @@ export interface ElectronAPI {
     /** Write-only: the key is never read back to the renderer. */
     setKey: (apiKey: string) => Promise<void>
     clearKey: () => Promise<void>
-    status: () => Promise<AIProviderStatus>
+    /** With a target → probe that provider WITHOUT persisting (FR-021); omitted → test the configured provider (FR-004). */
+    status: (target?: AIStatusTarget) => Promise<AIProviderStatus>
 
     // streaming generation
     start: (req: AIGenerationRequest) => Promise<{ accepted: true }>

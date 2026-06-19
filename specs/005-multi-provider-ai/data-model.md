@@ -8,11 +8,17 @@ All shared types live in `packages/shared/src/types/ai.ts` and are exported from
 
 ## Entity: AIProviderType
 
-Enumerates the three supported provider categories (spec FR-001).
+Enumerates the four supported provider categories (spec FR-001). CLI/subscription usage and API-key usage are distinct providers (Session 2026-06-19 clarification).
 
 ```ts
-type AIProviderType = 'ollama' | 'openai-compatible' | 'claude-subscription'
+type AIProviderType =
+  | 'ollama' // local model service
+  | 'openai-compatible' // BYOK API key (serves OpenAI + Anthropic via OpenAI-compatible endpoints)
+  | 'openai-codex-cli' // OpenAI Codex CLI, subscription session (auto-detectable, no per-token billing)
+  | 'claude-subscription' // Claude CLI, subscription session (auto-detectable, no per-token billing)
 ```
+
+The two CLI providers (`openai-codex-cli`, `claude-subscription`) and the local `ollama` provider are **auto-detectable** → detection-gated in the settings UI (FR-020). The `openai-compatible` BYOK provider is **exempt** (always selectable, verified on save).
 
 ---
 
@@ -31,7 +37,8 @@ The user's chosen provider and its **non-secret** settings. Persisted via `Setti
 
 - If `type === 'openai-compatible'`: `baseUrl` required; a stored key is expected (`hasApiKey` true) unless the endpoint is keyless.
 - If `type === 'ollama'`: `baseUrl` required (defaulted).
-- If `type === 'claude-subscription'`: no `baseUrl`/key required; relies on the locally-installed `claude`.
+- If `type === 'claude-subscription'`: no `baseUrl`/key required; relies on the locally-installed `claude` CLI.
+- If `type === 'openai-codex-cli'`: no `baseUrl`/key required; relies on the locally-installed `codex` CLI (subscription session).
 
 **Persistence**: Added to `AppSettings` as `aiProvider?: AIProviderConfig` with a `DEFAULT_SETTINGS` entry of `{ type: null, model: null, baseUrl: null, hasApiKey: false }`.
 
@@ -59,6 +66,21 @@ Result of detection / "test connection" (spec FR-004, FR-005).
 | `reason`    | `string \| null`                                                  | Human-readable failure reason (e.g. `http 404`, `ECONNREFUSED`, `claude not logged in`). |
 | `models`    | `string[] \| null`                                                | For Ollama: list from `/api/tags`.                                                       |
 | `detail`    | `'running' \| 'installed-not-running' \| 'not-installed' \| null` | For local-model disambiguation.                                                          |
+
+**Detection-gating (spec FR-020/FR-021)**: the settings UI uses `AIProviderStatus.available` to decide selectability of the **auto-detectable** providers (`ollama`, `claude-subscription`): `available === false` → the option is shown **disabled** with `reason` as the human-readable explanation, never hidden. The `openai-compatible` (BYOK) provider is **exempt** from this gate — it is always selectable and its connection is verified via a `status()` test-connection on save rather than by pre-detection.
+
+---
+
+## Entity: AIStatusTarget (transport — detection probe)
+
+Lets the settings page detect a specific provider **when the page opens, before any config is committed** (spec FR-021), without persisting a config change.
+
+| Field     | Type             | Notes                                                                                        |
+| --------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `type`    | `AIProviderType` | Which provider to probe.                                                                     |
+| `baseUrl` | `string \| null` | Optional override (e.g. an Ollama host the user typed) used for the probe without saving it. |
+
+`status(target?)`: when `target` is supplied, the main process builds a **transient** provider for that target and returns its `AIProviderStatus` **without mutating** persisted `AIProviderConfig`. When omitted, it probes the currently-configured provider (the "test connection" action, FR-004). Detection runs on settings-page open and on a manual re-detect action; the system does not poll in the background (FR-021).
 
 ---
 
@@ -117,7 +139,7 @@ The assembled draft plus its validation status (spec FR-008, FR-013). Built in t
 
 ## Relationships
 
-- `AIProviderConfig` 1—0..1 `AICredential` (a configured provider may have one stored key; subscription/ollama usually none).
+- `AIProviderConfig` 1—0..1 `AICredential` (only `openai-compatible` stores a key; `ollama` and the two CLI providers store none).
 - `AIGenerationRequest` 1—\* `AIStreamChunk` → 1 `AIGenerationResult`.
 - `AIGenerationResult` (kind `scenario`) 1—1 `ValidationResult` (reused from feature 002/validation).
 - `AIRequestContext.steps` reuses `StepDefinition` from `@suisui/shared` (no new step type).

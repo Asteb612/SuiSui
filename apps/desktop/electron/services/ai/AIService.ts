@@ -1,4 +1,4 @@
-import type { AIProviderConfig, AIProviderStatus } from '@suisui/shared'
+import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIStatusTarget } from '@suisui/shared'
 import { DEFAULT_AI_PROVIDER_CONFIG } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
 import { getSettingsService, type SettingsService } from '../SettingsService'
@@ -6,6 +6,7 @@ import { getAICredentialsService, type AICredentialsService } from './AICredenti
 import type { IAIProvider, AIStreamRequest } from './IAIProvider'
 import { VercelAIProvider } from './VercelAIProvider'
 import { ClaudeSubscriptionProvider } from './ClaudeSubscriptionProvider'
+import { OpenAiCodexProvider } from './OpenAiCodexProvider'
 
 const logger = createLogger('AIService')
 
@@ -55,7 +56,17 @@ export class AIService {
     logger.info('AI provider config saved', { type: config.type, model: config.model })
   }
 
-  async status(): Promise<AIProviderStatus> {
+  /**
+   * Detect a provider's availability.
+   * - With a `target`: build a TRANSIENT provider for that type/baseUrl and return
+   *   its status WITHOUT persisting any config change (spec FR-021) — used by the
+   *   settings page to detect providers before the user commits a selection.
+   * - Without a `target`: probe the currently-configured provider ("test connection", FR-004).
+   */
+  async status(target?: AIStatusTarget): Promise<AIProviderStatus> {
+    if (target) {
+      return this.buildProvider(target.type, null, target.baseUrl ?? null).status()
+    }
     const provider = await this.resolveProvider()
     if (!provider) return NOT_CONFIGURED_STATUS
     return provider.status()
@@ -99,25 +110,31 @@ export class AIService {
   }
 
   /**
-   * Resolve the provider for the active config. Returns null when unconfigured.
-   * Concrete-provider wiring (Ollama / OpenAI-compatible / Claude subscription)
-   * is completed in the US1 phase (task T024).
+   * Resolve the provider for the active config. Returns null when unconfigured
+   * (or when a test override is injected, that override wins).
    */
   private async resolveProvider(): Promise<IAIProvider | null> {
     if (this.providerOverride) return this.providerOverride
     const config = await this.getConfig()
     if (!config.type) return null
+    return this.buildProvider(config.type, config.model, config.baseUrl)
+  }
 
+  /**
+   * Construct the concrete provider for a given type without touching persisted
+   * config. Shared by `resolveProvider` (active config) and `status(target)` (probe).
+   */
+  private buildProvider(type: AIProviderType, model: string | null, baseUrl: string | null): IAIProvider {
     const getKey = () => this.credentialsService.getKey()
-    switch (config.type) {
+    switch (type) {
       case 'ollama':
-        return new VercelAIProvider({ mode: 'ollama', model: config.model, baseUrl: config.baseUrl, getKey })
+        return new VercelAIProvider({ mode: 'ollama', model, baseUrl, getKey })
       case 'openai-compatible':
-        return new VercelAIProvider({ mode: 'openai-compatible', model: config.model, baseUrl: config.baseUrl, getKey })
+        return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey })
+      case 'openai-codex-cli':
+        return new OpenAiCodexProvider({ model })
       case 'claude-subscription':
-        return new ClaudeSubscriptionProvider({ model: config.model })
-      default:
-        return null
+        return new ClaudeSubscriptionProvider({ model })
     }
   }
 }
