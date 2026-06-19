@@ -69,7 +69,9 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 700,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // Bundled by scripts/build-preload.mjs so the sandboxed preload has no
+      // bare `require('@suisui/shared')` (unresolvable under sandbox: true).
+      preload: path.join(__dirname, 'preload.bundle.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -103,9 +105,9 @@ function setupAutoReload() {
   const distElectronPath = path.join(__dirname)
   
   try {
-    watch(distElectronPath, { recursive: true }, (eventType, filename) => {
-      // Ignore changes to preload.js to avoid reload loops
-      if (filename && filename.includes('preload.js')) return
+    watch(distElectronPath, { recursive: true }, (_eventType, filename) => {
+      // Ignore preload artifacts (preload.js / preload.bundle.js / .map) to avoid reload loops
+      if (filename && filename.includes('preload')) return
       
       // Debounce reload to avoid multiple rapid reloads
       if (reloadTimeout) {
