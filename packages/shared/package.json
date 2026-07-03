@@ -25,7 +25,7 @@
     "@suisui/step-regex": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "vitest": "^3.2.6"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
