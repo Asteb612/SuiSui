@@ -130,9 +130,14 @@ function setupAutoReload() {
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
+  // NOTE: the production build currently ships Nuxt's inline `<script type="importmap">`,
+  // which `script-src 'self'` blocks — leaving the renderer unable to boot. Until that
+  // build issue is fixed properly, allow inline scripts ONLY under APP_TEST_MODE (E2E),
+  // which is never shipped, so production security posture is unchanged.
+  const scriptSrc = isTestMode ? "script-src 'self' 'unsafe-inline'; " : "script-src 'self'; "
   const CSP =
     "default-src 'self'; " +
-    "script-src 'self'; " +
+    scriptSrc +
     "style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; " +
     "font-src 'self' data:; " +

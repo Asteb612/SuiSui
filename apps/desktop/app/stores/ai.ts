@@ -120,6 +120,10 @@ export const useAiStore = defineStore('ai', {
       this.isStreaming = true
       this.error = null
 
+      // Strip Vue reactivity so the context is structured-cloneable across IPC
+      // (a Pinia/reactive proxy throws "object could not be cloned" on `invoke`).
+      const plainContext: AIRequestContext = JSON.parse(JSON.stringify(context))
+
       return new Promise<GenerateResult>((resolve) => {
         const offChunk = window.api.ai.onChunk((chunk) => {
           if (chunk.requestId === requestId) this.streamingDraft += chunk.delta
@@ -143,7 +147,7 @@ export const useAiStore = defineStore('ai', {
           this.currentRequestId = null
         }
 
-        window.api.ai.start({ requestId, kind, input, context }).catch((err: unknown) => {
+        window.api.ai.start({ requestId, kind, input, context: plainContext }).catch((err: unknown) => {
           this.error = err instanceof Error ? err.message : String(err)
           cleanup()
           resolve({ text: this.streamingDraft, finishReason: null, error: this.error })

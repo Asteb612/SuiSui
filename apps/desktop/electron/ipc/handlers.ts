@@ -435,7 +435,38 @@ export function registerIpcHandlers(
       clearKey: async () => {},
     } as unknown as AICredentialsService
     aiCredentials = fakeCredentials
-    aiService = new AIService({ provider: new FakeAIProvider(), credentialsService: fakeCredentials })
+    // Context-aware canned output so E2E can exercise each use case deterministically
+    // (Gherkin for scenario, a real existing-step pattern for step-match, a JSON arg map
+    // for arg-fill, prose for failure-explain). Still a fake — no real model/CLI/network.
+    aiService = new AIService({
+      provider: new FakeAIProvider({
+        responder: (req) => {
+          switch (req.kind) {
+            case 'scenario':
+              return [
+                'Feature: AI generated\n',
+                '\n',
+                '  Scenario: generated flow\n',
+                '    Given I am on the "home" page\n',
+                '    Then I should see "Welcome"\n',
+              ]
+            case 'step-match': {
+              const first = req.context.steps[0]
+              return [first ? `${first.keyword} ${first.pattern}` : 'NONE']
+            }
+            case 'arg-fill': {
+              const args = req.context.targetStep?.args ?? []
+              return [JSON.stringify(Object.fromEntries(args.map((a) => [a.name, 'AI value'])))]
+            }
+            case 'failure-explain':
+              return ['The target element was not found. ', 'Verify the selector and re-run the test.']
+            default:
+              return ['Fake']
+          }
+        },
+      }),
+      credentialsService: fakeCredentials,
+    })
   } else {
     aiService = getAIService()
     aiCredentials = getAICredentialsService()
