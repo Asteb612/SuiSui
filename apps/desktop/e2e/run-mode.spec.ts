@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { launchApp, closeApp, type AppContext } from './helpers/app'
+import { launchApp, closeApp, ensureFolderPanelVisible, type AppContext } from './helpers/app'
 import { copyFixture, cleanupFixture } from './helpers/fixtures'
 import { SEL } from './helpers/selectors'
 
@@ -32,38 +32,35 @@ test.describe('Run Mode', () => {
     await expect(window.locator(SEL.validationIndicator)).toBeVisible()
   })
 
-  test('should enable run button for valid scenario', async () => {
+  test('should show the "Run Tests" button in the sidebar', async () => {
     const { window } = ctx
 
-    // Run button should be visible and enabled
-    const runBtn = window.locator(SEL.runModeBtn)
+    // The Run Tests button lives in the sidebar, which auto-hides after a feature
+    // is opened; reopen it. The button is always enabled (it opens the runner view).
+    await ensureFolderPanelVisible(window)
+    const runBtn = window.locator(SEL.sidebarRunBtn)
     await expect(runBtn).toBeVisible()
     await expect(runBtn).toBeEnabled()
   })
 
-  test('should switch to run mode', async () => {
+  test('should switch to the test runner view', async () => {
     const { window } = ctx
 
-    // Click Run button
-    await window.locator(SEL.runModeBtn).click()
+    await ensureFolderPanelVisible(window)
+    await window.locator(SEL.sidebarRunBtn).click()
 
-    // Scenario builder should still be visible in run mode
-    await expect(window.locator(SEL.scenarioBuilder)).toBeVisible()
-
-    // Should show a Close button to exit run mode
-    const closeBtn = window.locator('button:has-text("Close")')
-    await expect(closeBtn).toBeVisible()
+    // Runner view shows a "Back to editor" affordance.
+    await expect(window.locator(SEL.backToEditorBtn)).toBeVisible()
   })
 
-  test('should exit run mode via Close button', async () => {
+  test('should return to the editor via the back button', async () => {
     const { window } = ctx
 
-    // Click Close to exit run mode
-    const closeBtn = window.locator('button:has-text("Close")')
-    await closeBtn.click()
+    await window.locator(SEL.backToEditorBtn).click()
 
-    // Should be back in read mode — Edit and Run buttons should be visible
-    await expect(window.locator(SEL.editModeBtn)).toBeVisible()
-    await expect(window.locator(SEL.runModeBtn)).toBeVisible()
+    // Back in the editor: the runner "back" button is gone and Run Tests is available again.
+    await expect(window.locator(SEL.backToEditorBtn)).toHaveCount(0)
+    await ensureFolderPanelVisible(window)
+    await expect(window.locator(SEL.sidebarRunBtn)).toBeVisible()
   })
 })
