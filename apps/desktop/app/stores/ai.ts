@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
-import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIGenerationKind, AIRequestContext } from '@suisui/shared'
+import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIGenerationKind, AIRequestContext, StepDefinition, ScenarioStep } from '@suisui/shared'
 import { DEFAULT_AI_PROVIDER_CONFIG, AUTO_DETECTABLE_PROVIDER_TYPES } from '@suisui/shared'
+import { reconcileSuggestedStep } from '~/utils/aiMatch'
+import { parseSuggestedArgs } from '~/utils/aiArgs'
 
 export interface GenerateResult {
   text: string
@@ -147,6 +149,37 @@ export const useAiStore = defineStore('ai', {
           resolve({ text: this.streamingDraft, finishReason: null, error: this.error })
         })
       })
+    },
+
+    /**
+     * Suggest the best-matching existing step for a natural-language action (spec FR-010).
+     * Streams a step-match generation, then reconciles the reply against the real steps.
+     * Returns the matched `StepDefinition`, or `null` when the model finds no good match.
+     */
+    async suggestStep(input: string, steps: StepDefinition[]): Promise<StepDefinition | null> {
+      const context: AIRequestContext = { steps, scenarioText: null, targetStep: null }
+      const result = await this.generate('step-match', input, context)
+      if (result.error) return null
+      return reconcileSuggestedStep(result.text, steps)
+    },
+
+    /**
+     * Suggest values for a parameterized step's arguments from scenario context (spec FR-011).
+     * Returns a `paramName -> value` map (only real params, empty on failure); the caller
+     * populates the editable arg fields so the user reviews/edits before commit.
+     */
+    async autoFillArgs(step: ScenarioStep, scenarioText: string | null): Promise<Record<string, string>> {
+      const targetStep: StepDefinition = {
+        id: step.id,
+        pattern: step.pattern,
+        keyword: step.keyword,
+        location: '',
+        args: step.args.map((a) => ({ name: a.name, type: a.type, required: true, enumValues: a.enumValues })),
+      }
+      const context: AIRequestContext = { steps: [], scenarioText, targetStep }
+      const result = await this.generate('arg-fill', step.pattern, context)
+      if (result.error) return {}
+      return parseSuggestedArgs(result.text, step.args.map((a) => a.name))
     },
 
     cancel() {

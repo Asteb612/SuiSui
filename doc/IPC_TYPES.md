@@ -585,6 +585,31 @@ export interface CommandOptions {
 4. Expose in preload: `apps/desktop/electron/preload.ts`
 5. Rebuild shared package: `pnpm build`
 
+## AI channels (`AI_*`) and the `ai` API group
+
+AI types live in `packages/shared/src/types/ai.ts` (`AIProviderType`,
+`AIProviderConfig`, `AIProviderStatus`, `AIStatusTarget`, `AIRequestContext`,
+`AIGenerationRequest`, `AIStreamChunk/Done/Error`, `AIGenerationResult`). The
+provider config persists on `AppSettings.aiProvider`.
+
+**Invoke channels** (request/response): `AI_CONFIG_GET` / `AI_CONFIG_SET`,
+`AI_KEY_SET` (write-only — the key is never read back to the renderer) / `AI_KEY_CLEAR`,
+`AI_STATUS`, `AI_START`, `AI_CANCEL`.
+
+**Streaming** is a hybrid: the renderer calls `ai.start(req)` (invoke, returns
+`{ accepted: true }`), then the main process pushes `AI_CHUNK` / `AI_DONE` / `AI_ERROR`
+via `webContents.send`. `ai.onChunk/onDone/onError` register listeners and return an
+unsubscribe function. Each in-flight request has an `AbortController` keyed by
+`requestId`; `ai.cancel(requestId)` aborts it (emitting `AI_DONE` with
+`finishReason: 'aborted'`). The `ElectronAPI.ai` group's `status(target?: AIStatusTarget)`
+takes an **optional probe target** — with it, the main process detects a provider
+_without persisting_ a config change (FR-021); without it, it tests the configured
+provider (FR-004).
+
+Results (`AIGenerationResult`: gherkin / suggestedStep / suggestedArgs / explanation +
+validation) are **assembled in the renderer** after the stream completes — reconciliation
+(`app/utils/aiMatch.ts`, `aiArgs.ts`) and validation happen renderer-side.
+
 ## Related Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture

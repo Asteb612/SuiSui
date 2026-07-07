@@ -127,6 +127,44 @@ class FakeCommandRunner implements ICommandRunner {
 
 ---
 
+## Fake-CLI Executable Stubs (subprocess integration)
+
+`FakeCommandRunner` is the right tool when a service calls out through the
+`ICommandRunner` seam — it intercepts at the abstraction and never spawns a
+process. Some providers, however, spawn a CLI **directly** via
+`node:child_process` (e.g. `OpenAiCodexProvider` runs `codex exec --json`). For
+those, the real spawn → stream-parse → environment-sanitization → kill-on-cancel
+path is exactly the risk surface, and `FakeCommandRunner` bypasses it.
+
+To cover that path without invoking a real CLI (Constitution Principle III still
+holds — the stub is **not** the real `codex`/`claude` binary), use a **fake-CLI
+executable stub**: a small Node script that stands in for the CLI.
+
+- **Fixtures**: `apps/desktop/electron/__tests__/fixtures/fake-cli/{codex,claude}`
+  — shebang (`#!/usr/bin/env node`) scripts, committed with the executable bit set
+  (`chmod +x`). Each emits canned JSONL/stream output and switches behavior on a
+  sentinel prompt (`__HANG__` to stay alive for a cancel test, `__EXIT1__` to
+  simulate a failed CLI). If `FAKE_CLI_ENV_OUT` is set they record the billing-env
+  keys they actually received, so a test can assert the sanitized env truly reached
+  the child; in `__HANG__` mode they write `FAKE_CLI_KILLED_OUT` on `SIGTERM` for a
+  positive kill-on-cancel assertion.
+- **Provider seam**: providers accept an optional `command` constructor option
+  (production default `'codex'` / `'claude'`) so a test can point them at the stub —
+  the same singleton + DI pattern used elsewhere.
+- **Test file**: `apps/desktop/electron/__tests__/ai-cli-integration.test.ts`. Keep
+  these in a **separate file** from `ai-providers.test.ts` — that file mocks
+  `node:child_process` at module scope, which would prevent a real spawn.
+
+This validates SC-008: streamed-text assembly from JSONL, env-sanitization (no
+`OPENAI_API_KEY`/`CODEX_API_KEY`/`ANTHROPIC_API_KEY` in the child), and clean
+kill-on-cancel.
+
+> **Platform note**: shebang stubs run on Linux/macOS (and CI). On Windows a bare
+> shebang script is not directly spawnable; run this integration file on a
+> POSIX platform (unit-level `FakeCommandRunner` coverage remains cross-platform).
+
+---
+
 ## Writing Unit Tests
 
 ### Service Test Template

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useStepsStore } from '~/stores/steps'
+import { useAiStore } from '~/stores/ai'
 import { formatStepPattern } from '~/utils/stepPatternFormatter'
 import type { StepKeyword, StepDefinition } from '@suisui/shared'
 
@@ -16,11 +17,19 @@ const emit = defineEmits<{
 }>()
 
 const stepsStore = useStepsStore()
+const aiStore = useAiStore()
 
 const selectedKeyword = ref<StepKeyword>('Given')
 const searchQuery = ref('')
 
+// AI step-match state (spec FR-010).
+const suggesting = ref(false)
+const suggestion = ref<StepDefinition | null>(null)
+const suggestTried = ref(false)
+
 const keywords: StepKeyword[] = ['Given', 'When', 'Then']
+
+const canSuggest = computed(() => aiStore.isConfigured && searchQuery.value.trim().length > 0 && !suggesting.value)
 
 // Reset state when dialog opens
 watch(
@@ -29,9 +38,29 @@ watch(
     if (visible) {
       selectedKeyword.value = 'Given'
       searchQuery.value = ''
+      resetSuggestion()
     }
   }
 )
+
+// A new/changed action invalidates a prior suggestion.
+watch(searchQuery, resetSuggestion)
+
+function resetSuggestion() {
+  suggestion.value = null
+  suggestTried.value = false
+}
+
+async function onSuggest() {
+  if (!canSuggest.value) return
+  suggesting.value = true
+  suggestTried.value = true
+  try {
+    suggestion.value = await aiStore.suggestStep(searchQuery.value.trim(), stepsStore.allSteps)
+  } finally {
+    suggesting.value = false
+  }
+}
 
 const filteredSteps = computed(() => {
   const steps = stepsStore.stepsByKeyword(selectedKeyword.value)
@@ -75,10 +104,55 @@ function onClose() {
             <InputIcon class="pi pi-search" />
             <InputText
               v-model="searchQuery"
-              placeholder="Search steps..."
+              placeholder="Search steps, or describe an action for AI..."
               size="small"
             />
           </IconField>
+          <Button
+            v-if="aiStore.isConfigured"
+            label="Suggest (AI)"
+            icon="pi pi-sparkles"
+            size="small"
+            outlined
+            :disabled="!canSuggest"
+            :loading="suggesting"
+            data-testid="ai-suggest-step"
+            @click="onSuggest"
+          />
+        </div>
+
+        <!-- AI step-match result (spec FR-010) -->
+        <div
+          v-if="suggestTried && !suggesting"
+          class="ai-suggestion"
+          data-testid="ai-suggestion"
+        >
+          <div
+            v-if="suggestion"
+            class="suggestion-hit"
+          >
+            <div class="step-pattern">
+              <span class="keyword">{{ suggestion.keyword }}</span>
+              <span
+                :aria-label="suggestion.pattern"
+                v-html="formatStepPattern(suggestion.pattern).html"
+              />
+            </div>
+            <Button
+              label="Use this step"
+              icon="pi pi-check"
+              size="small"
+              data-testid="ai-suggestion-accept"
+              @click="selectStep(suggestion)"
+            />
+          </div>
+          <div
+            v-else
+            class="suggestion-none"
+            data-testid="ai-suggestion-none"
+          >
+            <i class="pi pi-info-circle" /> No close match — pick a step below or refine your description.
+          </div>
         </div>
 
         <div
@@ -158,8 +232,40 @@ function onClose() {
   gap: 0.5rem;
 }
 
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .search-box :deep(input) {
   width: 100%;
+}
+
+.search-box .p-iconfield {
+  flex: 1;
+}
+
+.ai-suggestion {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--primary-color);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+}
+
+.suggestion-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.suggestion-none {
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .empty-state {

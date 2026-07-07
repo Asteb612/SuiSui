@@ -19,6 +19,11 @@
 - Q: Should CLI and API-key usage for OpenAI and Claude be separate providers, and what is the resulting provider set? → A: Keep the **single generic OpenAI-compatible API-key (BYOK) provider** (serves OpenAI and Anthropic via their OpenAI-compatible endpoints) and add the two **CLI** assistants as separate providers — an **OpenAI Codex CLI** provider alongside the existing **Claude CLI** provider. Net result = four provider types: local model (Ollama), BYOK OpenAI-compatible API key, OpenAI Codex CLI, Claude CLI.
 - Q: What is the "OpenAI CLI" provider and how is it driven? → A: The locally-installed **OpenAI Codex CLI**, driven via a **streaming-capable invocation using the user's ChatGPT/Codex subscription session** — mirroring the Claude CLI provider: best-effort, detection-gated, **no per-token API billing**, with a sanitized environment so a stray `OPENAI_API_KEY` is never silently billed.
 
+### Session 2026-07-07
+
+- Q: How should the Claude CLI / OpenAI Codex CLI providers be faked in tests? → A: **Two layers** — `FakeCommandRunner` for fast provider-logic unit tests, **plus** a fake-CLI executable fixture (a stub script emitting canned JSONL/stream output) that drives each CLI provider through the real spawn → stream-parse → env-sanitization → kill-on-cancel path. The stub is not a real CLI tool, so Constitution Principle III (no real CLI in tests) still holds.
+- Q: What is the measurable "validated integration" signal for the CLI providers? → A: Add **SC-008** — each CLI provider passes an integration test (via the fake-CLI stub) asserting correct streamed-text assembly from JSONL, environment sanitization (no `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`CODEX_API_KEY` in the effective env), and clean kill-on-cancel.
+
 ## User Scenarios & Testing _(mandatory)_
 
 SuiSui currently has no AI assistance. This feature adds an optional AI assistant that helps users author and troubleshoot BDD tests faster, while letting each user bring their own source of AI "quota": local hardware they already own, their own API account, or an existing AI subscription — so no central billing is required. AI output is always treated as a **draft**: generated Gherkin is run back through the existing validation before it is accepted, so correctness never depends on the model being right.
@@ -118,7 +123,7 @@ After a Playwright/BDD test fails, the user asks the assistant to explain the fa
 
 ### Functional Requirements
 
-- **FR-001**: System MUST let users select the active AI provider on a settings page, choosing among four provider types: (a) a locally-run model, (b) a bring-your-own-key OpenAI-compatible API account (serves OpenAI and Anthropic via their OpenAI-compatible endpoints), (c) the OpenAI Codex CLI (subscription-session), and (d) the Claude CLI (subscription-session). CLI-based usage and API-key usage are distinct, separately-selectable providers.
+- **FR-001**: System MUST let users select the active AI provider on a settings page, choosing among four provider types: (a) a locally-run model, (b) a bring-your-own-key OpenAI-compatible API account (serves OpenAI and Anthropic via their OpenAI-compatible endpoints), (c) the OpenAI Codex CLI (subscription-session; enum `openai-codex-cli`), and (d) the Claude CLI (subscription-session; enum `claude-subscription`). CLI-based usage and API-key usage are distinct, separately-selectable providers.
 - **FR-002**: System MUST keep all AI credentials and secrets in the secure backend and MUST NOT expose secret values to the renderer/UI layer.
 - **FR-003**: System MUST store any user-supplied API key encrypted on the local machine.
 - **FR-004**: System MUST provide a "test connection" action that reports a clear success or human-readable failure for the configured provider.
@@ -133,7 +138,7 @@ After a Playwright/BDD test fails, the user asks the assistant to explain the fa
 - **FR-013**: System MUST treat the AI as a draft generator only; no AI output may bypass existing validation/correctness checks.
 - **FR-014**: When no provider is configured, system MUST disable AI entry points and leave the core builder and test runner fully functional.
 - **FR-015**: System MUST surface provider errors (unreachable, timeout, malformed output) as clear, non-blocking messages without inserting partial results.
-- **FR-016**: AI behavior MUST be fully testable without contacting a real model (a test substitute MUST stand in for any provider).
+- **FR-016**: AI behavior MUST be fully testable without contacting a real model (a test substitute MUST stand in for any provider). For the two CLI/subscription providers (Claude CLI, OpenAI Codex CLI), testing MUST occur at two layers: (a) `FakeCommandRunner` for provider-logic unit tests, and (b) a **fake-CLI executable stub** (a script emitting canned JSONL/stream output, invoked in place of the real `claude`/`codex` binary) that exercises the real subprocess spawn, stream parsing, environment sanitization, and cancellation path. No test may invoke the real `claude` or `codex` binary (Constitution Principle III).
 - **FR-017**: System MUST persist the user's AI provider configuration across application restarts.
 - **FR-018**: System MUST stream AI responses incrementally for all provider types, so the user sees output as it is produced rather than only after completion.
 - **FR-019**: Each CLI/subscription provider (Claude CLI, OpenAI Codex CLI) MUST use a streaming-capable invocation of the locally-installed assistant rather than depending on a one-shot headless/print mode, so it remains functional if that headless mode is later restricted to a different subscription plan.
@@ -158,6 +163,7 @@ After a Playwright/BDD test fails, the user asks the assistant to explain the fa
 - **SC-005**: User-supplied secrets are never present in the renderer layer in any state (verifiable by inspection) and are stored encrypted at rest.
 - **SC-006**: When a CLI/subscription provider is selected (Claude CLI or OpenAI Codex CLI), no per-token API charges are incurred, including when the corresponding API key exists in the environment.
 - **SC-007**: All AI use cases pass automated tests using a model substitute, with zero calls to a real model during the test suite.
+- **SC-008**: Each CLI/subscription provider (Claude CLI, OpenAI Codex CLI) passes an integration test driven by a fake-CLI executable stub (never the real binary) that verifies: (a) streamed text is correctly assembled from the stub's JSONL/stream output, (b) no API key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `CODEX_API_KEY`) is present in the subprocess's effective environment, and (c) a cancel request cleanly kills the child process.
 
 ## Assumptions
 

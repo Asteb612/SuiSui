@@ -21,7 +21,7 @@ Technical approach (from Phase 0 research):
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x (strict)
-**Primary Dependencies**: Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`, `zod` (v4); the OpenAI Codex CLI is driven as a subprocess (via the existing `CommandRunner` / a thin SDK if available — see research Decision 3b), no always-on HTTP dependency
+**Primary Dependencies**: Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`; the OpenAI Codex CLI is driven as a subprocess (via the existing `CommandRunner` / a thin SDK if available — see research Decision 3b), no always-on HTTP dependency. (`zod` was planned for structured output but removed in Polish — all four use cases assemble results in the renderer via existing utilities; see analysis finding U1.)
 **Storage**: Encrypted API key via Electron `safeStorage` (file under `.app/`, reusing `GitCredentialsService` pattern); provider config persisted in `AppSettings` JSON via `SettingsService`; in-memory Pinia state in renderer
 **Testing**: Vitest 2.x with `FakeAIProvider` (own `IAIProvider`) + `FakeCommandRunner`; AI SDK `ai/test` mocks confined to targeted provider tests
 **Target Platform**: Electron desktop (Linux/macOS/Windows)

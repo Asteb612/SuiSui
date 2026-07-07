@@ -257,12 +257,23 @@ These are real playwright-bdd step definitions that users can customize or exten
 - Mutate Pinia state outside actions
 - Use untyped IPC channels
 - Skip shared package rebuild after type changes
+- Let AI credentials or the `ai`/provider SDKs reach the renderer (main-process only)
+
+## AI Assistant (multi-provider)
+
+Optional AI assistant (main-process only, behind the `IAIProvider` seam) for drafting
+and troubleshooting BDD tests. Four providers: Ollama, BYOK OpenAI-compatible, Claude
+CLI, OpenAI Codex CLI. The LLM is a **draft generator only** — output is validated
+before accept. See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) (security/billing model,
+CLI best-effort caveats), [doc/SERVICES.md](doc/SERVICES.md) (`electron/services/ai/`),
+[doc/IPC_TYPES.md](doc/IPC_TYPES.md) (`AI_*` channels), and
+[doc/FRONTEND.md](doc/FRONTEND.md) (`useAiStore` + AI dialogs).
 
 ## Active Technologies
 
-- TypeScript 5.x (strict) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`, `zod` (v4); the OpenAI Codex CLI is driven as a subprocess (via the existing `CommandRunner` / a thin SDK if available — see research Decision 3b), no always-on HTTP dependency (005-multi-provider-ai)
+- TypeScript 5.x (strict) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`; the OpenAI Codex CLI is driven as a subprocess (via the existing `CommandRunner` / a thin SDK if available — see research Decision 3b), no always-on HTTP dependency (005-multi-provider-ai)
 
-- TypeScript 5.x (strict) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`, `zod` (v4) (005-multi-provider-ai)
+- TypeScript 5.x (strict) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk` (005-multi-provider-ai)
 - Encrypted API key via Electron `safeStorage` (file under `.app/`, reusing `GitCredentialsService` pattern); provider config persisted in `AppSettings` JSON via `SettingsService`; in-memory Pinia state in renderer (005-multi-provider-ai)
 
 - TypeScript 5.x (strict mode) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x, Node.js fs/promises (004-bdd-subfolder-detection)

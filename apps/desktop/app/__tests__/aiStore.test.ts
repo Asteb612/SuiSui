@@ -64,3 +64,18 @@ describe('ai store — detection gating (FR-020/FR-021)', () => {
     expect(store.detection.ollama?.reason).toBe('boom')
   })
 })
+
+describe('ai store — entry-point gating (FR-014 / SC-004)', () => {
+  it('isConfigured is false by default (no provider) so all AI entry points stay disabled', () => {
+    const store = useAiStore()
+    // Every AI affordance (Generate/Suggest/Auto-fill/Explain) renders behind `isConfigured`.
+    expect(store.config.type).toBeNull()
+    expect(store.isConfigured).toBe(false)
+  })
+
+  it('isConfigured becomes true once a provider type is set', () => {
+    const store = useAiStore()
+    store.config = { type: 'ollama', model: 'llama3.2', baseUrl: 'http://127.0.0.1:11434', hasApiKey: false }
+    expect(store.isConfigured).toBe(true)
+  })
+})

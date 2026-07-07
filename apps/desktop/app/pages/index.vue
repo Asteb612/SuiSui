@@ -5,12 +5,14 @@ import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
+import { useAiStore } from '~/stores/ai'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
 const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
+const aiStore = useAiStore()
 const showGitClone = ref(false)
 const showBddFolderSelect = ref(false)
 const bddCandidates = ref<string[]>([])
@@ -77,6 +79,7 @@ onUnmounted(() => {
 const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
 const showAiSettingsDialog = ref(false)
+const showAiGenerationDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -130,11 +133,19 @@ function toggleEditMode() {
 }
 
 onMounted(async () => {
+  // Load AI config so the "Generate with AI" entry point reflects configuration (FR-014).
+  void aiStore.loadConfig()
   await workspaceStore.loadWorkspace()
   if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
     await loadWorkspaceDependencies()
   }
+})
+
+// Re-read AI config whenever the settings dialog closes, so enabling/disabling a
+// provider toggles the AI entry points immediately (FR-014).
+watch(showAiSettingsDialog, (open) => {
+  if (!open) void aiStore.loadConfig()
 })
 
 // When workspace changes (e.g. user selects a workspace from welcome screen),
@@ -231,7 +242,16 @@ function cancelInit() {
         @click="showHelpDialog = true"
       />
       <Button
+        v-if="aiStore.isConfigured && workspaceStore.hasWorkspace"
+        label="Generate with AI"
         icon="pi pi-sparkles"
+        text
+        size="small"
+        data-testid="ai-generate-btn"
+        @click="showAiGenerationDialog = true"
+      />
+      <Button
+        icon="pi pi-cog"
         text
         size="small"
         aria-label="AI settings"
@@ -558,6 +578,7 @@ function cancelInit() {
 
     <!-- Dialogs -->
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
+    <AiGenerationDialog v-model:visible="showAiGenerationDialog" />
 
     <NewScenarioDialog
       v-model:visible="showNewScenarioDialog"

@@ -103,6 +103,114 @@ describe('AIService', () => {
     expect(status.available).toBe(false)
   })
 
+  it('scenario use case: prompt embeds existing steps and instructs reuse (FR-007)', async () => {
+    const provider = new FakeAIProvider({ chunks: ['Feature: X'] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    await collect(
+      service.stream({
+        kind: 'scenario',
+        input: 'a user logs in',
+        context: {
+          steps: [
+            { keyword: 'Given', pattern: 'I am logged in as {string}' } as never,
+            { keyword: 'Then', pattern: 'I should see {string}' } as never,
+          ],
+          scenarioText: null,
+          targetStep: null,
+        },
+      })
+    )
+
+    // The provider receives the BUILT prompt as `input`.
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain('I am logged in as {string}')
+    expect(builtPrompt).toContain('I should see {string}')
+    expect(builtPrompt).toContain('a user logs in')
+    expect(builtPrompt.toLowerCase()).toContain('reuse')
+  })
+
+  it('scenario use case: stream assembles the full draft from deltas', async () => {
+    const provider = new FakeAIProvider({ chunks: ['Feature: Login\n', '  Scenario: valid\n', '    Given I am logged in\n'] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    const draft = await collect(service.stream(emptyRequest('log in')))
+    expect(draft).toBe('Feature: Login\n  Scenario: valid\n    Given I am logged in\n')
+  })
+
+  it('step-match use case: prompt embeds the action, existing steps, and a NONE escape (FR-010)', async () => {
+    const provider = new FakeAIProvider({ chunks: ['Given I am logged in as {string}'] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    await collect(
+      service.stream({
+        kind: 'step-match',
+        input: 'sign in as an administrator',
+        context: {
+          steps: [{ keyword: 'Given', pattern: 'I am logged in as {string}' } as never],
+          scenarioText: null,
+          targetStep: null,
+        },
+      })
+    )
+
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain('I am logged in as {string}')
+    expect(builtPrompt).toContain('sign in as an administrator')
+    expect(builtPrompt).toContain('NONE')
+  })
+
+  it('arg-fill use case: prompt lists the parameters and scenario context (FR-011)', async () => {
+    const provider = new FakeAIProvider({ chunks: ['{"username":"admin"}'] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    await collect(
+      service.stream({
+        kind: 'arg-fill',
+        input: 'I log in as {string} with {string}',
+        context: {
+          steps: [],
+          scenarioText: 'Feature: Auth\n  Scenario: admin login',
+          targetStep: {
+            id: 's1',
+            keyword: 'When',
+            pattern: 'I log in as {string} with {string}',
+            location: '',
+            args: [
+              { name: 'username', type: 'string', required: true },
+              { name: 'password', type: 'string', required: true },
+            ],
+          } as never,
+        },
+      })
+    )
+
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain('username')
+    expect(builtPrompt).toContain('password')
+    expect(builtPrompt).toContain('admin login')
+    expect(builtPrompt.toUpperCase()).toContain('JSON')
+  })
+
+  it('failure-explain use case: prompt wraps the failed-test output and streams an explanation (FR-012)', async () => {
+    const provider = new FakeAIProvider({ chunks: ['The locator ', 'timed out. ', 'Check the selector.'] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    const failureOutput = 'TimeoutError: locator.click: Timeout 30000ms exceeded\n  at login.feature:12'
+    const explanation = await collect(
+      service.stream({
+        kind: 'failure-explain',
+        input: failureOutput,
+        context: { steps: [], scenarioText: null, targetStep: null },
+      })
+    )
+
+    expect(explanation).toBe('The locator timed out. Check the selector.')
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain(failureOutput)
+    expect(builtPrompt.toLowerCase()).toContain('plain language')
+  })
+
   it('status(target) probes a provider WITHOUT persisting config (FR-021)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [{ name: 'llama3.2' }] }) })
     vi.stubGlobal('fetch', fetchMock)

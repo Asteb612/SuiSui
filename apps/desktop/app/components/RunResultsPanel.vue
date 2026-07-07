@@ -1,10 +1,67 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
+import { useAiStore } from '~/stores/ai'
 import type { FeatureRunResult } from '@suisui/shared'
 
 const runnerStore = useRunnerStore()
+const aiStore = useAiStore()
 const logsContainer = ref<HTMLPreElement | null>(null)
+
+// --- AI failure explanation (spec FR-012) ---
+const explaining = ref(false)
+const explanation = ref('')
+const explainError = ref<string | null>(null)
+
+const hasFailures = computed(() => {
+  const b = runnerStore.batchResult
+  return (!!b && b.summary.failed > 0) || runnerStore.errors.length > 0 || runnerStore.status === 'error'
+})
+
+/** Assemble the failed-test output the assistant explains: failed scenarios, errors, else logs. */
+const failureOutput = computed(() => {
+  const parts: string[] = []
+  const b = runnerStore.batchResult
+  if (b) {
+    for (const feature of b.featureResults) {
+      for (const scenario of feature.scenarioResults) {
+        if (scenario.status === 'failed' && scenario.error) {
+          parts.push(`${feature.name || feature.relativePath} › ${scenario.name}\n${scenario.error}`)
+        }
+      }
+    }
+  }
+  for (const error of runnerStore.errors) {
+    const loc = error.file ? ` (${error.file}${error.line ? `:${error.line}` : ''})` : ''
+    parts.push(`${error.message}${loc}`)
+  }
+  if (parts.length === 0 && runnerStore.logs.length > 0) {
+    parts.push(runnerStore.logs.join('\n'))
+  }
+  return parts.join('\n\n')
+})
+
+async function onExplainFailure() {
+  if (!hasFailures.value || explaining.value) return
+  explaining.value = true
+  explanation.value = ''
+  explainError.value = null
+  try {
+    const result = await aiStore.generate('failure-explain', failureOutput.value, {
+      steps: [],
+      scenarioText: null,
+      targetStep: null,
+    })
+    if (result.error) explainError.value = result.error
+    else explanation.value = result.text
+  } finally {
+    explaining.value = false
+  }
+}
+
+function onCancelExplain() {
+  aiStore.cancel()
+}
 
 watch(
   () => runnerStore.logs.length,
@@ -135,6 +192,52 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
           </span>
         </div>
         <span class="duration">{{ formatDuration(runnerStore.batchResult.duration) }}</span>
+      </div>
+
+      <!-- AI failure explanation (spec FR-012) -->
+      <div
+        v-if="hasFailures && aiStore.isConfigured"
+        class="ai-explain-section"
+        data-testid="ai-explain-section"
+      >
+        <div class="ai-explain-header">
+          <Button
+            :label="explanation || explaining ? 'Re-explain failure (AI)' : 'Explain failure (AI)'"
+            icon="pi pi-sparkles"
+            size="small"
+            outlined
+            :disabled="explaining"
+            :loading="explaining"
+            data-testid="ai-explain-btn"
+            @click="onExplainFailure"
+          />
+          <Button
+            v-if="explaining"
+            label="Cancel"
+            icon="pi pi-times"
+            text
+            size="small"
+            data-testid="ai-explain-cancel"
+            @click="onCancelExplain"
+          />
+        </div>
+        <div
+          v-if="explainError"
+          class="ai-explain-error"
+          data-testid="ai-explain-error"
+        >
+          <i class="pi pi-exclamation-triangle" /> {{ explainError }}
+        </div>
+        <pre
+          v-else-if="explaining"
+          class="ai-explain-body"
+          data-testid="ai-explain-stream"
+        >{{ aiStore.streamingDraft }}<span class="cursor">▍</span></pre>
+        <pre
+          v-else-if="explanation"
+          class="ai-explain-body"
+          data-testid="ai-explain-result"
+        >{{ explanation }}</pre>
       </div>
 
       <!-- Feature Results List -->
@@ -337,6 +440,49 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
 .duration {
   color: var(--p-text-muted-color);
   font-size: 0.8rem;
+}
+
+.ai-explain-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--p-content-border-color);
+  border-radius: var(--p-border-radius);
+}
+
+.ai-explain-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ai-explain-body {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--p-surface-100);
+  border-radius: var(--p-border-radius);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.ai-explain-error {
+  font-size: 0.8rem;
+  color: var(--p-red-700);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.cursor {
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
 }
 
 .feature-results {

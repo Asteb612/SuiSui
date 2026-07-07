@@ -6,6 +6,14 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     globals: true,
+    // Transform the linked workspace packages instead of externalizing them: their
+    // built ESM uses bundler-style (extensionless) imports that Node's ESM loader
+    // can't resolve. Inlining lets Vite handle resolution (as it does in the app).
+    server: {
+      deps: {
+        inline: [/@suisui\//],
+      },
+    },
     include: [
       'electron/__tests__/**/*.test.ts',
       'app/__tests__/**/*.test.ts',

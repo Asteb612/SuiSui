@@ -50,12 +50,21 @@ function extractTextDelta(event: unknown): string | null {
  * and runs with a sanitized env so it never silently bills the API (FR-006).
  */
 export class ClaudeSubscriptionProvider implements IAIProvider {
-  constructor(private opts: { model?: string | null } = {}) {}
+  /**
+   * The CLI binary spawned by `status()`. Defaults to `claude`; overridable (DI) so
+   * tests can point at a fake-CLI stub. NOTE: streaming goes through the Agent SDK's
+   * `query()`, which manages its own subprocess — this override only affects `status()`.
+   */
+  private readonly command: string
+
+  constructor(private opts: { model?: string | null; command?: string } = {}) {
+    this.command = opts.command ?? 'claude'
+  }
 
   async status(): Promise<AIProviderStatus> {
     // Cheap, quota-free check: can we run the `claude` CLI at all?
     return new Promise<AIProviderStatus>((resolve) => {
-      const child = spawn('claude', ['--version'], { env: buildSanitizedEnv(), windowsHide: true })
+      const child = spawn(this.command, ['--version'], { env: buildSanitizedEnv(), windowsHide: true })
       let done = false
       const finish = (status: AIProviderStatus) => {
         if (!done) {

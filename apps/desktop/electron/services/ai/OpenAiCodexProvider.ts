@@ -63,12 +63,17 @@ export function extractCodexText(event: unknown): string | null {
  * no clean abort yet — openai/codex#5494).
  */
 export class OpenAiCodexProvider implements IAIProvider {
-  constructor(private opts: { model?: string | null } = {}) {}
+  /** The CLI binary to spawn. Defaults to `codex`; overridable (DI) so tests can point at a fake-CLI stub. */
+  private readonly command: string
+
+  constructor(private opts: { model?: string | null; command?: string } = {}) {
+    this.command = opts.command ?? 'codex'
+  }
 
   async status(): Promise<AIProviderStatus> {
     // Cheap, quota-free check: is the `codex` CLI installed and runnable?
     return new Promise<AIProviderStatus>((resolve) => {
-      const child = spawn('codex', ['--version'], { env: buildSanitizedCodexEnv(), windowsHide: true })
+      const child = spawn(this.command, ['--version'], { env: buildSanitizedCodexEnv(), windowsHide: true })
       let done = false
       const finish = (status: AIProviderStatus) => {
         if (!done) {
@@ -103,7 +108,7 @@ export class OpenAiCodexProvider implements IAIProvider {
 
   async *stream(req: AIStreamRequest): AsyncIterable<string> {
     const modelArgs = this.opts.model ? ['-m', this.opts.model] : []
-    const child = spawn('codex', ['exec', '--json', ...modelArgs, req.input], {
+    const child = spawn(this.command, ['exec', '--json', ...modelArgs, req.input], {
       env: buildSanitizedCodexEnv(),
       windowsHide: true,
     })

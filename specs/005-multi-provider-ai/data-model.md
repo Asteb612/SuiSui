@@ -18,6 +18,8 @@ type AIProviderType =
   | 'claude-subscription' // Claude CLI, subscription session (auto-detectable, no per-token billing)
 ```
 
+> **User-facing label ↔ enum value** (avoids naming drift with spec FR-001): the spec's **"Claude CLI"** = `'claude-subscription'` and **"OpenAI Codex CLI"** = `'openai-codex-cli'`. Here "subscription" denotes the auth mode (a locally-installed CLI's session, not an API key), not a different product. Keep the enum values as-is; use the "Claude CLI" / "OpenAI Codex CLI" labels in all user-facing UI copy.
+
 The two CLI providers (`openai-codex-cli`, `claude-subscription`) and the local `ollama` provider are **auto-detectable** → detection-gated in the settings UI (FR-020). The `openai-compatible` BYOK provider is **exempt** (always selectable, verified on save).
 
 ---

@@ -89,7 +89,73 @@ export class AIService {
     if (req.kind === 'scenario') {
       return this.buildScenarioPrompt(req)
     }
+    if (req.kind === 'step-match') {
+      return this.buildStepMatchPrompt(req)
+    }
+    if (req.kind === 'arg-fill') {
+      return this.buildArgFillPrompt(req)
+    }
+    if (req.kind === 'failure-explain') {
+      return this.buildFailureExplainPrompt(req)
+    }
     return req.input
+  }
+
+  /**
+   * Prompt for a plain-language explanation of a failed test (spec FR-012). The
+   * explanation streams back incrementally (FR-018); it is advisory only and never
+   * modifies the scenario or runner state.
+   */
+  private buildFailureExplainPrompt(req: AIStreamRequest): string {
+    return [
+      'A BDD (Playwright / playwright-bdd) test run failed.',
+      'Explain the failure in plain language for the test author: the most likely cause,',
+      'and concrete next steps to fix it. Be concise. Do not invent output that is not shown.',
+      '',
+      'Failed test output:',
+      req.input,
+    ].join('\n')
+  }
+
+  /**
+   * Prompt for suggesting values for a parameterized step's arguments (spec FR-011),
+   * using the scenario context. The reply is parsed into a `paramName -> value` map
+   * in the renderer (`parseSuggestedArgs`) and reviewed by the user before commit.
+   */
+  private buildArgFillPrompt(req: AIStreamRequest): string {
+    const step = req.context.targetStep
+    const params = step?.args.map((a) => a.name) ?? []
+    return [
+      'You suggest argument values for a single Gherkin step, using the scenario context.',
+      'Reply with ONLY a JSON object mapping each parameter name to a suggested string value.',
+      'Use exactly these parameter names as keys; no explanations, no code fences, no extra keys.',
+      '',
+      `Step: ${step?.pattern ?? req.input}`,
+      `Parameters: ${params.join(', ') || '(none)'}`,
+      '',
+      'Scenario so far:',
+      req.context.scenarioText || '(none)',
+    ].join('\n')
+  }
+
+  /**
+   * Prompt for matching a user action to a single EXISTING step (spec FR-010). The
+   * reply is reconciled against the real workspace steps in the renderer
+   * (`reconcileSuggestedStep`), so we ask for a verbatim copy or an explicit `NONE`.
+   */
+  private buildStepMatchPrompt(req: AIStreamRequest): string {
+    const stepList = req.context.steps.map((s) => `${s.keyword} ${s.pattern}`).join('\n')
+    return [
+      'You match a user action to the SINGLE best-fitting existing Gherkin step below.',
+      'Reply with ONLY the exact step text (keyword + pattern) copied verbatim from the list.',
+      'If none is a good match, reply with exactly: NONE',
+      'No explanations, no quotes, no code fences.',
+      '',
+      'Existing steps:',
+      stepList || '(none provided)',
+      '',
+      `User action: ${req.input}`,
+    ].join('\n')
   }
 
   private buildScenarioPrompt(req: AIStreamRequest): string {

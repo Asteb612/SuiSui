@@ -64,8 +64,7 @@
     "ai": "^6.0.208",
     "isomorphic-git": "^1.38.4",
     "keytar": "^7.9.0",
-    "ollama-ai-provider-v2": "^3.6.0",
-    "zod": "^4.4.3"
+    "ollama-ai-provider-v2": "^3.6.0"
   },
   "devDependencies": {
     "@oxc-minify/binding-linux-x64-gnu": "^0.135.0",
