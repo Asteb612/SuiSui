@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } from 'electron'
 import path from 'node:path'
 import { watch } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { registerIpcHandlers } from './ipc/handlers'
 import { runDepCheck, printDepCheckReport } from './utils/depChecker'
+import { stripBillingEnv } from './services/ai/billingEnv'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
@@ -69,7 +71,9 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 700,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      // Bundled by scripts/build-preload.mjs so the sandboxed preload has no
+      // bare `require('@suisui/shared')` (unresolvable under sandbox: true).
+      preload: path.join(__dirname, 'preload.bundle.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -103,9 +107,9 @@ function setupAutoReload() {
   const distElectronPath = path.join(__dirname)
   
   try {
-    watch(distElectronPath, { recursive: true }, (eventType, filename) => {
-      // Ignore changes to preload.js to avoid reload loops
-      if (filename && filename.includes('preload.js')) return
+    watch(distElectronPath, { recursive: true }, (_eventType, filename) => {
+      // Ignore preload artifacts (preload.js / preload.bundle.js / .map) to avoid reload loops
+      if (filename && filename.includes('preload')) return
       
       // Debounce reload to avoid multiple rapid reloads
       if (reloadTimeout) {
@@ -128,29 +132,54 @@ function setupAutoReload() {
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
-  const CSP =
-    "default-src 'self'; " +
-    "script-src 'self'; " +
-    "style-src 'self' 'unsafe-inline'; " +
-    "img-src 'self' data:; " +
-    "font-src 'self' data:; " +
-    "connect-src 'self'; " +
-    "object-src 'none'; " +
-    "base-uri 'self'; " +
-    "frame-ancestors 'none'"
+  // Build the CSP with a caller-supplied `script-src` value. The renderer's HTML ships
+  // inline scripts (Nuxt's `<script type="importmap">` for `#entry`, plus a bootstrap
+  // script); `script-src 'self'` alone blocks those and the app can't boot. Rather than
+  // weaken the policy to `'unsafe-inline'`, we mint a per-response nonce, stamp it onto
+  // every inline <script> in index.html, and allow that nonce — which covers importmaps
+  // reliably in Chromium while keeping inline-script protection intact.
+  const buildCsp = (scriptSrc: string): string =>
+    [
+      "default-src 'self'",
+      scriptSrc,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data:",
+      "font-src 'self' data:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join('; ')
 
   protocol.handle('app', async (request) => {
     const url = new URL(request.url)
     let filePath = path.join(publicPath, url.pathname)
 
-    // Default to index.html for root or paths without extensions
-    if (url.pathname === '/' || !path.extname(filePath)) {
+    // The HTML document (served for the root, index.html itself, or any
+    // extensionless SPA route) gets the nonce treatment; everything else is a
+    // static asset served as-is.
+    const isDocument =
+      url.pathname === '/' || url.pathname.endsWith('.html') || !path.extname(filePath)
+    if (isDocument) {
       filePath = path.join(publicPath, 'index.html')
     }
 
     const response = await net.fetch(pathToFileURL(filePath).toString())
     const headers = new Headers(response.headers)
-    headers.set('Content-Security-Policy', CSP)
+
+    if (isDocument) {
+      // Nonce every inline <script> so the CSP can allow them by nonce (not 'unsafe-inline').
+      const nonce = randomBytes(16).toString('base64')
+      const html = (await response.text()).replace(/<script(?=[\s>])/g, `<script nonce="${nonce}"`)
+      headers.set('Content-Security-Policy', buildCsp(`script-src 'self' 'nonce-${nonce}'`))
+      return new Response(html, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      })
+    }
+
+    headers.set('Content-Security-Policy', buildCsp("script-src 'self'"))
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -160,6 +189,12 @@ function registerAppProtocol() {
 }
 
 app.whenReady().then(() => {
+  // Clear API-billing env vars process-wide so no descendant (including the Claude
+  // Agent SDK's self-managed `claude` subprocess) can silently bill the user's API
+  // account instead of their subscription (spec FR-006 / epic #59). The app itself
+  // never uses these keys — BYOK keys are stored via safeStorage.
+  stripBillingEnv()
+
   // Handle --test-deps mode: check dependencies and exit without UI
   if (isTestDepsMode) {
     console.log('Running in dependency test mode...')

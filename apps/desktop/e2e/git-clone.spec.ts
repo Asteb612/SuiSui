@@ -28,20 +28,22 @@ test.describe('Git Clone', () => {
     await expect(window.locator(SEL.gitCloneDialog)).toBeVisible({ timeout: 5_000 })
   })
 
-  test('dialog has URL, branch, and credential inputs', async () => {
+  test('dialog has URL, branch, and token inputs', async () => {
     const { window } = ctx
 
-    // Dialog should be open from previous test
+    // Dialog should be open from previous test. Auth is a single GitHub token
+    // (the username/password fields were replaced by token/device-flow auth).
     await expect(window.locator(SEL.gitCloneUrlInput)).toBeVisible()
     await expect(window.locator(SEL.gitCloneBranchInput)).toBeVisible()
-    await expect(window.locator(SEL.gitCloneUsernameInput)).toBeVisible()
-    await expect(window.locator(SEL.gitClonePasswordInput)).toBeVisible()
+    await expect(window.locator(SEL.gitCloneTokenInput)).toBeVisible()
   })
 
   test('clone button is disabled without URL and path', async () => {
     const { window } = ctx
 
-    const cloneBtn = window.locator(SEL.gitCloneSubmitBtn)
+    // The `git-clone-btn` testid is shared by the welcome-screen button and the
+    // dialog's submit; scope to the dialog to target the submit button.
+    const cloneBtn = window.locator(SEL.gitCloneDialog).locator(SEL.gitCloneSubmitBtn)
     await expect(cloneBtn).toBeDisabled()
   })
 })

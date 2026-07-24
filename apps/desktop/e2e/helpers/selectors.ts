@@ -52,9 +52,12 @@ export const SEL = {
   // View mode controls
   editModeBtn: '[data-testid="edit-mode-btn"]',
   readModeBtn: '[data-testid="read-mode-btn"]',
-  runModeBtn: '[data-testid="run-mode-btn"]',
   saveBtn: '[data-testid="save-btn"]',
   doneBtn: '[data-testid="done-btn"]',
+
+  // Test runner view
+  sidebarRunBtn: '[data-testid="sidebar-run-btn"]',
+  backToEditorBtn: '[data-testid="back-to-editor-btn"]',
 
   // Validation
   validationPanel: '[data-testid="validation-panel"]',
@@ -77,8 +80,7 @@ export const SEL = {
   gitCloneDialog: '[data-testid="git-clone-dialog"]',
   gitCloneUrlInput: '[data-testid="git-clone-url-input"]',
   gitCloneBranchInput: '[data-testid="git-clone-branch-input"]',
-  gitCloneUsernameInput: '[data-testid="git-clone-username-input"]',
-  gitClonePasswordInput: '[data-testid="git-clone-password-input"]',
+  gitCloneTokenInput: '[data-testid="git-clone-token-input"]',
   gitClonePathInput: '[data-testid="git-clone-path-input"]',
   gitCloneSubmitBtn: '[data-testid="git-clone-btn"]',
   gitCloneProgress: '[data-testid="git-clone-progress"]',

@@ -9,6 +9,20 @@ export default defineNuxtConfig({
 
   ssr: false,
 
+  // Applied only by `nuxt dev` (reliable, unlike process.env.NODE_ENV at
+  // config-load time). Dev serves over http://localhost:3000 where Vite needs
+  // an absolute base; the packaged build keeps the relative './' above.
+  $development: {
+    app: {
+      baseURL: '/',
+    },
+    vite: {
+      // Must equal app.baseURL ('/') + buildAssetsDir ('_nuxt/') so Vite's dev
+      // middleware serves /_nuxt/@vite/client and the entry module as JS.
+      base: '/_nuxt/',
+    },
+  },
+
   nitro: {
     preset: 'static',
   },
@@ -39,6 +53,9 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
 
   app: {
+    // Relative base for the packaged app (loaded via the app:// protocol).
+    // Overridden to '/' in dev via the $development key below — Vite's dev
+    // server needs an absolute base to serve /_nuxt/* modules.
     baseURL: './',
     buildAssetsDir: '_nuxt/',
     head: {
@@ -55,9 +72,20 @@ export default defineNuxtConfig({
 
   experimental: {
     appManifest: false,
+    // Required for SPA (ssr: false) dev with @nuxt/vite-builder 3.21.8 + Vite 7.
+    // Without it, vite-builder's dev hook reads rollupOptions.input.server, which
+    // is only registered under the Vite environment API — throwing
+    // "No entry found in rollupOptions.input". Does NOT enable runtime SSR.
+    viteEnvironmentApi: true,
   },
 
   vite: {
+    // Relative base so the packaged app (app:// protocol) resolves assets
+    // relative to index.html. Overridden to '/_nuxt/' in dev via $development —
+    // Vite's dev middleware must mount at the same path as the asset URLs in
+    // index.html (app.baseURL '/' + buildAssetsDir '_nuxt/'), otherwise
+    // /_nuxt/@vite/client falls through to the SPA fallback (200 text/html) and
+    // the renderer reports "Failed to load module script".
     base: './',
     build: {
       target: 'esnext',

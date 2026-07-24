@@ -19,7 +19,8 @@
     "dev": "tsc -p tsconfig.esm.json --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build:esm && npm run build:cjs"
   },
   "dependencies": {
     "@suisui/step-regex": "workspace:*"

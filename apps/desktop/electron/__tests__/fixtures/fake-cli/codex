@@ -1,0 +1,55 @@
+#!/usr/bin/env node
+/**
+ * Fake `codex` CLI stub for SC-008 integration tests.
+ *
+ * This is a TEST FIXTURE, not the real OpenAI Codex CLI — so tests exercise the
+ * provider's REAL subprocess spawn → JSONL-stream parse → env-sanitization →
+ * kill-on-cancel path without a real CLI, honoring Constitution Principle III.
+ *
+ * Behavior (mirrors `codex exec --json`):
+ *  - Emits `thread.started`, `turn.started`, a decoy non-assistant `item.completed`,
+ *    then an `agent_message` `item.completed` carrying the draft text, then `turn.completed`.
+ *  - The prompt (last argv) acts as a mode switch for deterministic tests:
+ *      "__HANG__"  → emit nothing and stay alive so the parent can kill it (cancel test).
+ *      "__EXIT1__" → write to stderr and exit 1 (error-surfacing test).
+ *  - If FAKE_CLI_ENV_OUT is set, writes the observed billing-env keys + argv to that
+ *    file so the test can assert the SANITIZED env actually reached this process.
+ */
+const fs = require('node:fs')
+
+const argv = process.argv.slice(2) // e.g. exec --json [-m model] <prompt>
+const prompt = argv[argv.length - 1]
+
+if (process.env.FAKE_CLI_ENV_OUT) {
+  fs.writeFileSync(
+    process.env.FAKE_CLI_ENV_OUT,
+    JSON.stringify({
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? null,
+      CODEX_API_KEY: process.env.CODEX_API_KEY ?? null,
+      argv,
+    })
+  )
+}
+
+if (prompt === '__HANG__') {
+  // Stay alive until SIGTERM (kill-on-cancel). Record the kill so the test can assert it positively.
+  process.on('SIGTERM', () => {
+    if (process.env.FAKE_CLI_KILLED_OUT) fs.writeFileSync(process.env.FAKE_CLI_KILLED_OUT, 'killed')
+    process.exit(0)
+  })
+  setInterval(() => {}, 1000)
+  return
+}
+
+if (prompt === '__EXIT1__') {
+  process.stderr.write('not logged in\n')
+  process.exit(1)
+}
+
+const emit = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
+emit({ type: 'thread.started' })
+emit({ type: 'turn.started' })
+emit({ type: 'item.completed', item: { type: 'reasoning', text: 'thinking (ignored)' } })
+emit({ type: 'item.completed', item: { type: 'agent_message', text: 'Feature: Login\n  Scenario: valid login' } })
+emit({ type: 'turn.completed' })
+process.exit(0)

@@ -916,6 +916,33 @@ export default defineNuxtConfig({
 4. Use `useApi()` for IPC calls
 5. Follow naming convention: `use{Name}Store`
 
+## AI assistant (renderer)
+
+**Store** — `app/stores/ai.ts` (`useAiStore`):
+
+- State: `config`, `status`, per-provider `detection`, `streamingDraft`, `isStreaming`,
+  `currentRequestId`, `error`.
+- Getters: `isConfigured` (gates every AI entry point — FR-014), `isSelectable(type)`
+  (detection-gating — FR-020).
+- Actions: `loadConfig`/`saveConfig`/`setKey`/`clearKey`, `refreshStatus` (test
+  connection), `detect`/`detectAll` (probe without persisting — FR-021),
+  `generate(kind, input, context)` (streams; accumulates deltas; resolves with
+  `{ text, finishReason, error }`), `cancel()`, and two higher-level helpers that
+  assemble results in the renderer: `suggestStep()` (reconciles via
+  `utils/aiMatch.ts`) and `autoFillArgs()` (parses via `utils/aiArgs.ts`).
+
+**Entry points** (all rendered behind `aiStore.isConfigured`):
+
+| Component                | Use case                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AiSettingsDialog.vue`   | Provider selection (detection-gated), encrypted key entry, test connection.                                                                             |
+| `AiGenerationDialog.vue` | US2 — NL → streamed Gherkin draft → validate (non-destructive snapshot/restore) → accept/regenerate/discard. Opened from the header "Generate with AI". |
+| `StepAddDialog.vue`      | US3 — "Suggest step (AI)": reconciles an NL action to an existing step, or "no close match".                                                            |
+| `ScenarioBuilder.vue`    | US4 — per-step "Auto-fill (AI)" ✨ button (edit mode) populates arg fields for review before commit.                                                    |
+| `RunResultsPanel.vue`    | US5 — "Explain failure (AI)": streams a plain-language failure explanation.                                                                             |
+
+Secrets never enter the renderer — the store only ever sees `hasApiKey: boolean`.
+
 ## Related Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture

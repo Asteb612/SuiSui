@@ -446,6 +446,29 @@ See [TESTING.md](./TESTING.md) for detailed testing documentation.
 6. Expose API in `electron/preload.ts`
 7. Write unit tests in `electron/__tests__/`
 
+## AI Services (`electron/services/ai/`)
+
+The AI assistant lives entirely in the main process behind the `IAIProvider` seam
+(mirroring `ICommandRunner`). Secrets never reach the renderer.
+
+| File                            | Responsibility                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IAIProvider.ts`                | The seam: `status()` (detect / test-connection) + `stream(req)` (async iterable of text deltas).                                                                                                                                                                                                                    |
+| `AIService.ts`                  | Singleton + DI. Resolves the active `AIProviderConfig` → concrete provider, builds the per-use-case prompt (`scenario` / `step-match` / `arg-fill` / `failure-explain`), exposes `status(target?)` and `stream(req)`. `status(target)` builds a **transient** provider to probe without persisting config (FR-021). |
+| `VercelAIProvider.ts`           | Ollama + OpenAI-compatible (BYOK) via the Vercel AI SDK `streamText`; Ollama detection via `GET /api/tags`.                                                                                                                                                                                                         |
+| `ClaudeSubscriptionProvider.ts` | Claude CLI (subscription) via `@anthropic-ai/claude-agent-sdk` with a sanitized env (no `ANTHROPIC_API_KEY`…). Best-effort.                                                                                                                                                                                         |
+| `OpenAiCodexProvider.ts`        | Codex CLI via `codex exec --json` with a sanitized env (no `OPENAI_API_KEY`/`CODEX_API_KEY`). Best-effort.                                                                                                                                                                                                          |
+| `FakeAIProvider.ts`             | Test double: scripted chunks, configurable status, simulated abort/error. Never touches a real model.                                                                                                                                                                                                               |
+| `AICredentialsService.ts`       | Singleton + DI. Encrypts the BYOK API key via Electron `safeStorage` (modeled on `GitCredentialsService`); `getKey()` is main-only.                                                                                                                                                                                 |
+
+**The LLM is a draft generator only** — `AIService` never mutates a scenario;
+generated Gherkin is validated by `ValidationService` in the renderer before accept.
+
+**Testing**: provider unit tests use `FakeCommandRunner` / mocked SDKs (`ai/test`); the
+two CLI providers additionally have an integration test against **fake-CLI executable
+stubs** (`__tests__/fixtures/fake-cli/`) that exercises the real spawn → JSONL-parse →
+env-sanitization → kill-on-cancel path (SC-008). See TESTING.md.
+
 ## Related Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture

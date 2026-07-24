@@ -1,4 +1,6 @@
 import type { RunConfiguration } from './runner'
+import type { AIProviderConfig } from './ai'
+import { DEFAULT_AI_PROVIDER_CONFIG } from './ai'
 
 export interface AppSettings {
   workspacePath: string | null
@@ -10,6 +12,7 @@ export interface AppSettings {
   showLineNumbers: boolean
   baseUrl: string | null
   runConfiguration?: RunConfiguration
+  aiProvider?: AIProviderConfig
 }
 
 export const DEFAULT_RUN_CONFIGURATION: RunConfiguration = {
@@ -32,4 +35,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showLineNumbers: true,
   baseUrl: null,
   runConfiguration: { ...DEFAULT_RUN_CONFIGURATION },
+  aiProvider: { ...DEFAULT_AI_PROVIDER_CONFIG },
 }

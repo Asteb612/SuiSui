@@ -1,10 +1,14 @@
 import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { SEL } from './selectors'
 
 export interface AppContext {
   app: ElectronApplication
   window: Page
+  /** The isolated Electron userData dir for this launch (cleaned up by the OS temp dir). */
+  userDataDir: string
 }
 
 /**
@@ -26,8 +30,14 @@ export async function launchApp(workspacePath?: string): Promise<AppContext> {
     env.TEST_WORKSPACE_PATH = workspacePath
   }
 
+  // Isolate each launch to a fresh Electron userData dir so tests never inherit a
+  // developer's persisted workspace/settings (which would skip the welcome screen)
+  // and never pollute real app data. In CI userData is already clean; this makes
+  // local runs deterministic too.
+  const userDataDir = mkdtempSync(path.join(tmpdir(), 'suisui-e2e-'))
+
   const app = await electron.launch({
-    args: ['--no-sandbox', mainPath],
+    args: [`--user-data-dir=${userDataDir}`, '--no-sandbox', mainPath],
     env,
   })
 
@@ -46,7 +56,7 @@ export async function launchApp(workspacePath?: string): Promise<AppContext> {
     await window.locator('[data-testid="status-bar"]').filter({ hasText: workspacePath }).waitFor({ timeout: 30_000 })
   }
 
-  return { app, window }
+  return { app, window, userDataDir }
 }
 
 /**

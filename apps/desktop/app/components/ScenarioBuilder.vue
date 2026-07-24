@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useScenarioStore } from '~/stores/scenario'
 import { useRunnerStore } from '~/stores/runner'
+import { useAiStore } from '~/stores/ai'
 import TableEditor from './TableEditor.vue'
 import TagsEditor from './TagsEditor.vue'
 import ExamplesEditor from './ExamplesEditor.vue'
@@ -307,6 +308,34 @@ function removeStep(stepId: string) {
 
 function updateArg(stepId: string, argName: string, value: string, argType?: 'string' | 'int' | 'float' | 'word' | 'any' | 'enum' | 'table', enumValues?: string[]) {
   scenarioStore.updateStepArg(stepId, argName, value, argType, enumValues)
+}
+
+// --- AI argument auto-fill (spec FR-011) ---
+const aiStore = useAiStore()
+const autoFillingStepId = ref<string | null>(null)
+
+/** A step qualifies for AI auto-fill when it has non-table args and a provider is configured. */
+function canAutoFillStep(step: ScenarioStep): boolean {
+  return aiStore.isConfigured && step.args.some((a) => a.type !== 'table')
+}
+
+async function autoFillStep(step: ScenarioStep) {
+  if (!canAutoFillStep(step) || autoFillingStepId.value) return
+  autoFillingStepId.value = step.id
+  try {
+    const values = await aiStore.autoFillArgs(step, scenarioStore.toGherkin())
+    // Populate the editable fields via the normal edit path so the user reviews/edits
+    // before commit (FR-011). Tables are handled by TableEditor, not auto-fill.
+    for (const arg of step.args) {
+      if (arg.type === 'table') continue
+      const value = values[arg.name]
+      if (typeof value === 'string' && value.length > 0) {
+        updateArg(step.id, arg.name, value, arg.type, arg.enumValues)
+      }
+    }
+  } finally {
+    autoFillingStepId.value = null
+  }
 }
 
 function updateTableArg(stepId: string, argName: string, rows: TableRow[]) {
@@ -1105,6 +1134,18 @@ function selectScenario(index: number) {
                         v-if="isEditMode"
                         class="step-actions"
                       >
+                        <Button
+                          v-if="canAutoFillStep(step)"
+                          icon="pi pi-sparkles"
+                          text
+                          rounded
+                          size="small"
+                          aria-label="Auto-fill arguments with AI"
+                          title="Auto-fill arguments with AI"
+                          :loading="autoFillingStepId === step.id"
+                          :data-testid="`ai-autofill-${step.id}`"
+                          @click="autoFillStep(step)"
+                        />
                         <Button
                           icon="pi pi-times"
                           text

@@ -240,6 +240,55 @@ export const IPC_CHANNELS = {
 | Tests         | \*.test.ts     | `ValidationService.test.ts` |
 | E2E Tests     | \*.spec.ts     | `app.spec.ts`               |
 
+## AI Assistant (multi-provider) — security & billing model
+
+The optional AI assistant runs **entirely in the main process** behind the
+`IAIProvider` seam; credentials never reach the renderer. It is a **draft
+generator only** — generated Gherkin is re-run through `ValidationService` before
+it can be accepted, so correctness never depends on the model. With no provider
+configured, all AI entry points are hidden/disabled and the builder + runner are
+unaffected.
+
+**Four provider types** (`AIProviderType`): `ollama` (local), `openai-compatible`
+(bring-your-own-key API), `openai-codex-cli`, `claude-subscription`. The three
+auto-detectable ones (Ollama + the two CLIs) are **detection-gated** in the settings
+UI — selectable only when detected, otherwise shown disabled with a reason and a
+re-detect action; the BYOK API provider is always selectable and verified on save.
+
+### CLI subscription providers are best-effort — and must never bill an API
+
+Both CLI providers drive a locally-installed subscription CLI with a **sanitized
+environment** so a stray API key can never be silently billed (spec FR-006):
+
+- **Claude CLI** (`claude-subscription`, via `@anthropic-ai/claude-agent-sdk`):
+  the effective env strips `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_USE_BEDROCK` / `_VERTEX` / `_FOUNDRY`. **Footgun**: if
+  `ANTHROPIC_API_KEY` is set in your shell, it would otherwise be billed per-token
+  instead of using the subscription — the provider unsets it in the child.
+- **OpenAI Codex CLI** (`openai-codex-cli`, via `codex exec --json`): the effective
+  env strips `OPENAI_API_KEY` and `CODEX_API_KEY`. **Footgun**: `CODEX_API_KEY` is
+  the documented way to _force_ API billing for `codex exec`; both it and
+  `OPENAI_API_KEY` are unset in the child. A second risk lives outside the env: the
+  `~/.codex/config.toml` `preferred_auth_method` can override auth selection — if a
+  user has pinned API-key auth there, detection/streaming may still not use the
+  subscription. This is documented as a known limitation.
+
+Both are **best-effort / "may break"** (subscription-based programmatic use is
+unofficial and evolving) and use a **streaming** invocation rather than a one-shot
+headless mode, so they keep working if headless/print mode is later restricted to a
+different plan (FR-019). Codex streaming is **message-granular** in some CLI versions
+(a full `agent_message` per turn rather than token deltas), so time-to-first-token
+can be coarser than the API providers. The **reliable fallback** for both is the BYOK
+`openai-compatible` provider (Anthropic and OpenAI both expose OpenAI-compatible
+endpoints), which bills the user's own API account explicitly.
+
+### Graceful degradation
+
+Provider errors (unreachable, timeout, malformed/empty output, interrupted stream)
+surface as clear, non-blocking messages and never insert a partial draft; a
+user-cancelled generation discards its partial output. Undetected auto-detectable
+providers show a "setup required"/disabled state with an actionable reason (FR-020).
+
 ## Related Documentation
 
 - [SERVICES.md](./SERVICES.md) - Backend services documentation
