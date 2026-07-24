@@ -85,7 +85,7 @@ exports.default = async function (context) {
       fs.rmSync(unpackedDir, { recursive: true, force: true })
     }
     // Preserve asarUnpack patterns from package.json build config
-    // Without this, files like scripts/bddgen-export.js get trapped inside
+    // Without this, files under scripts/ get trapped inside
     // the asar and can't be executed by the embedded Node.js runtime
     await asar.createPackage(tempDir, asarPath, {
       unpack: '{**/*.node,scripts/**}',

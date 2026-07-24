@@ -948,3 +948,22 @@ Secrets never enter the renderer — the store only ever sees `hasApiKey: boolea
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture
 - [IPC_TYPES.md](./IPC_TYPES.md) - IPC channels and types
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Development workflow
+
+## Step Catalog in the frontend (feature 006-step-catalog)
+
+`useStepsStore` is catalog-first:
+
+- `ensureStepsLoaded()` — load the cached catalog, else generate it, else fall
+  back to the legacy exporter. Called on workspace load.
+- `generateCatalog()` / `loadCatalogCached()` — populate `catalog` (rich
+  `CatalogStep[]`) and mirror it into `steps` (adapted `StepDefinition[]`) via
+  `catalogStepToStepDefinition`, so scenario/Gherkin behavior is unchanged.
+- Getters: `catalogStepById`, `catalogCategories`, `catalogTags`,
+  `catalogParameterTypes`, `catalogPrecisions`.
+
+`StepSelector.vue` gains catalog filters (keyword, text, category, tag,
+parameter type, precision) and shows per-step source `file:line`, a precision
+marker, and diagnostics badges. Filtering logic is the pure
+`app/utils/catalogFilters.ts` (`filterCatalogSteps`, `stepMaxSeverity`).
+`ScenarioBuilder.vue` renders numeric inputs for `int`/`float` parameters
+(enum → select, table → grid, string/unknown → text).

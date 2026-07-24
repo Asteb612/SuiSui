@@ -1,6 +1,6 @@
 import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../types/workspace'
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
-import type { StepExportResult, DecoratorDefinition } from '../types/step'
+import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions } from '../types/step-catalog'
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
@@ -39,10 +39,11 @@ export interface ElectronAPI {
     copy: (sourcePath: string, targetPath: string) => Promise<void>
   }
 
-  steps: {
-    export: () => Promise<StepExportResult>
-    getCached: () => Promise<StepExportResult | null>
-    getDecorators: () => Promise<DecoratorDefinition[]>
+  stepCatalog: {
+    generate: (options?: GenerateCatalogOptions) => Promise<StepCatalogResult>
+    getCached: () => Promise<StepCatalogResult | null>
+    clearCache: () => Promise<void>
+    getStep: (id: string) => Promise<CatalogStep | null>
   }
 
   validate: {

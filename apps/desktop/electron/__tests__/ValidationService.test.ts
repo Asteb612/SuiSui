@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { Scenario, ScenarioStep } from '@suisui/shared'
 
-vi.mock('../services/StepService', () => ({
-  getStepService: () => ({
+vi.mock('../services/StepCatalogService', () => ({
+  getStepCatalogService: () => ({
     getCached: () => Promise.resolve(null),
   }),
 }))

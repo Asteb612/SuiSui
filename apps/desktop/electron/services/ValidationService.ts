@@ -1,6 +1,6 @@
-import type { Scenario, ValidationResult, ValidationIssue, StepExportResult, ScenarioStep } from '@suisui/shared'
-import { patternToRegex, resolvePattern, getOutlinePlaceholder } from '@suisui/shared'
-import { getStepService } from './StepService'
+import type { Scenario, ValidationResult, ValidationIssue, StepDefinition, ScenarioStep } from '@suisui/shared'
+import { patternToRegex, resolvePattern, getOutlinePlaceholder, catalogStepToStepDefinition } from '@suisui/shared'
+import { getStepCatalogService } from './StepCatalogService'
 
 export class ValidationService {
   async validateScenario(scenario: Scenario): Promise<ValidationResult> {
@@ -21,8 +21,7 @@ export class ValidationService {
       })
     }
 
-    const stepService = getStepService()
-    const cachedSteps = await stepService.getCached()
+    const cachedSteps = await this.getCachedStepDefinitions()
 
     let hasGiven = false
     let hasWhen = false
@@ -66,8 +65,7 @@ export class ValidationService {
       return { isValid: true, issues: [] }
     }
 
-    const stepService = getStepService()
-    const cachedSteps = await stepService.getCached()
+    const cachedSteps = await this.getCachedStepDefinitions()
 
     for (const step of background) {
       this.validateStepArguments(step, issues)
@@ -113,17 +111,23 @@ export class ValidationService {
     }
   }
 
+  /** Cached catalog steps as legacy StepDefinition[] (pattern matching only). */
+  private async getCachedStepDefinitions(): Promise<StepDefinition[] | null> {
+    const catalog = await getStepCatalogService().getCached()
+    return catalog ? catalog.steps.map(catalogStepToStepDefinition) : null
+  }
+
   private validateStepDefinition(
     step: ScenarioStep,
-    cachedSteps: StepExportResult | null,
+    cachedSteps: StepDefinition[] | null,
     issues: ValidationIssue[]
   ): void {
     if (cachedSteps) {
-      const matchingStep = cachedSteps.steps.find((s) => s.pattern === step.pattern)
+      const matchingStep = cachedSteps.find((s) => s.pattern === step.pattern)
       if (!matchingStep) {
         issues.push({
           severity: 'warning',
-          message: `Step not found in exported definitions: "${step.pattern}"`,
+          message: `Step not found in the step catalog: "${step.pattern}"`,
           stepId: step.id,
         })
       }
@@ -132,7 +136,7 @@ export class ValidationService {
 
   private checkForAmbiguities(
     scenario: Scenario,
-    cachedSteps: StepExportResult | null,
+    cachedSteps: StepDefinition[] | null,
     issues: ValidationIssue[]
   ): void {
     if (!cachedSteps) {
@@ -141,7 +145,7 @@ export class ValidationService {
 
     for (const step of scenario.steps) {
       const stepText = resolvePattern(step.pattern, step.args)
-      const matchingSteps = cachedSteps.steps.filter((s) => {
+      const matchingSteps = cachedSteps.filter((s) => {
         const regex = patternToRegex(s.pattern)
         return regex.test(stepText)
       })

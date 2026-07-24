@@ -10,6 +10,10 @@ export * from './types/settings'
 export * from './types/node'
 export * from './types/dependency'
 export * from './types/ai'
+export * from './types/step-catalog'
+
+// Catalog (backward-compat adapter added in US1)
+export * from './catalog/adapter'
 
 // Patterns
 export * from './patterns/processor'

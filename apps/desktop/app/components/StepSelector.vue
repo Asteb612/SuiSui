@@ -4,7 +4,9 @@ import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { formatStepPattern } from '~/utils/stepPatternFormatter'
-import type { StepKeyword, StepDefinition } from '@suisui/shared'
+import { filterCatalogSteps, stepMaxSeverity, stepSourceLabel } from '~/utils/catalogFilters'
+import { catalogStepToStepDefinition } from '@suisui/shared'
+import type { StepKeyword, StepDefinition, CatalogStep } from '@suisui/shared'
 
 const stepsStore = useStepsStore()
 const scenarioStore = useScenarioStore()
@@ -22,19 +24,60 @@ const props = withDefaults(
 const selectedKeyword = ref<StepKeyword>('Given')
 const searchQuery = ref('')
 
+// Catalog filters (feature 006-step-catalog, US3)
+const categoryFilter = ref('')
+const tagFilter = ref('')
+const typeFilter = ref('')
+const precisionFilter = ref('')
+
 const keywords: StepKeyword[] = ['Given', 'When', 'Then']
+
+const hasCatalog = computed(() => stepsStore.catalog.length > 0)
 
 const hasFeatureSelected = computed(() => {
   return workspaceStore.selectedFeature !== null || scenarioStore.currentFeaturePath !== null
 })
 
-const filteredSteps = computed(() => {
+const filteredSteps = computed<StepDefinition[]>(() => {
+  if (hasCatalog.value) {
+    return filterCatalogSteps(stepsStore.catalog, {
+      keyword: selectedKeyword.value,
+      text: searchQuery.value,
+      category: categoryFilter.value || undefined,
+      tag: tagFilter.value || undefined,
+      parameterType: typeFilter.value || undefined,
+      precision: precisionFilter.value || undefined,
+    }).map(catalogStepToStepDefinition)
+  }
+
+  // Legacy fallback (pre-catalog): keyword + text over exported steps.
   const steps = stepsStore.stepsByKeyword(selectedKeyword.value)
   if (!searchQuery.value) return steps
-
   const query = searchQuery.value.toLowerCase()
   return steps.filter((step) => step.pattern.toLowerCase().includes(query))
 })
+
+/** Rich catalog metadata for a rendered (adapted) step, if available. */
+function catalogFor(id: string): CatalogStep | undefined {
+  return stepsStore.catalogStepById(id)
+}
+function severityFor(id: string): string | null {
+  const cat = catalogFor(id)
+  return cat ? stepMaxSeverity(cat) : null
+}
+function sourceFor(id: string): string | null {
+  const cat = catalogFor(id)
+  return cat ? stepSourceLabel(cat) : null
+}
+function precisionFor(id: string): string | null {
+  return catalogFor(id)?.precision ?? null
+}
+function titleFor(id: string): string | null {
+  return catalogFor(id)?.title ?? null
+}
+function categoryFor(id: string): string | null {
+  return catalogFor(id)?.category ?? null
+}
 
 function addStep(step: StepDefinition) {
   if (props.addTarget === 'background') {
@@ -52,7 +95,7 @@ function handleDragStart(step: StepDefinition, event: DragEvent) {
 }
 
 async function refreshSteps() {
-  await stepsStore.exportSteps()
+  await stepsStore.generateCatalog()
 }
 </script>
 
@@ -107,6 +150,48 @@ async function refreshSteps() {
         </IconField>
       </div>
 
+      <!-- Catalog filters (feature 006-step-catalog, US3) -->
+      <div
+        v-if="hasCatalog"
+        class="catalog-filters"
+        data-testid="catalog-filters"
+      >
+        <Select
+          v-if="stepsStore.catalogCategories.length"
+          v-model="categoryFilter"
+          :options="['', ...stepsStore.catalogCategories]"
+          placeholder="Category"
+          size="small"
+          show-clear
+          data-testid="filter-category"
+        />
+        <Select
+          v-if="stepsStore.catalogTags.length"
+          v-model="tagFilter"
+          :options="['', ...stepsStore.catalogTags]"
+          placeholder="Tag"
+          size="small"
+          show-clear
+          data-testid="filter-tag"
+        />
+        <Select
+          v-model="typeFilter"
+          :options="['', ...stepsStore.catalogParameterTypes]"
+          placeholder="Param type"
+          size="small"
+          show-clear
+          data-testid="filter-type"
+        />
+        <Select
+          v-model="precisionFilter"
+          :options="['', ...stepsStore.catalogPrecisions]"
+          placeholder="Precision"
+          size="small"
+          show-clear
+          data-testid="filter-precision"
+        />
+      </div>
+
       <div
         v-if="stepsStore.error"
         class="error-message"
@@ -148,6 +233,21 @@ async function refreshSteps() {
             />
           </div>
           <div
+            v-if="titleFor(step.id) || categoryFor(step.id)"
+            class="catalog-title"
+          >
+            <span
+              v-if="titleFor(step.id)"
+              class="step-title"
+              data-testid="step-title"
+            >{{ titleFor(step.id) }}</span>
+            <span
+              v-if="categoryFor(step.id)"
+              class="category-badge"
+              data-testid="step-category"
+            >{{ categoryFor(step.id) }}</span>
+          </div>
+          <div
             v-if="formatStepPattern(step.pattern).argDescriptions.length > 0"
             class="step-arg-descriptions"
           >
@@ -164,6 +264,29 @@ async function refreshSteps() {
                 {{ argDesc.name }}: {{ argDesc.tableColumns.join(', ') }}
               </template>
             </span>
+          </div>
+          <!-- Catalog metadata: source, precision, diagnostics (US3) -->
+          <div
+            v-if="catalogFor(step.id)"
+            class="catalog-meta"
+          >
+            <span
+              v-if="sourceFor(step.id)"
+              class="source-badge"
+              data-testid="step-source"
+            ><i class="pi pi-file-o" /> {{ sourceFor(step.id) }}</span>
+            <span
+              class="precision-badge"
+              :class="`precision-${precisionFor(step.id)}`"
+              data-testid="step-precision"
+            >{{ precisionFor(step.id) }}</span>
+            <span
+              v-if="severityFor(step.id)"
+              class="diagnostic-badge"
+              :class="`severity-${severityFor(step.id)}`"
+              data-testid="step-diagnostic"
+              :title="catalogFor(step.id)!.diagnostics.map((d) => d.message).join('\n')"
+            ><i class="pi pi-exclamation-circle" /> {{ catalogFor(step.id)!.diagnostics.length }}</span>
           </div>
           <span
             v-if="step.isGeneric"
@@ -372,5 +495,69 @@ async function refreshSteps() {
 .decorator-badge {
   background: #6366f1;
   color: white;
+}
+
+/* Catalog filters + per-step metadata (feature 006-step-catalog, US3) */
+.catalog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+.catalog-meta {
+  margin-top: 0.375rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+}
+
+.source-badge {
+  color: var(--text-color-secondary);
+  font-family: monospace;
+}
+
+.precision-badge {
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  text-transform: capitalize;
+  background: var(--surface-ground);
+  color: var(--text-color-secondary);
+}
+
+.precision-badge.precision-exact {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.precision-badge.precision-partial,
+.precision-badge.precision-unknown {
+  background: rgba(234, 179, 8, 0.15);
+  color: #a16207;
+}
+
+.diagnostic-badge {
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.diagnostic-badge.severity-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+
+.diagnostic-badge.severity-warning {
+  background: rgba(234, 179, 8, 0.15);
+  color: #a16207;
+}
+
+.diagnostic-badge.severity-error {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
 }
 </style>

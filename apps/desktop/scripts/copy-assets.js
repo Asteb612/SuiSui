@@ -38,7 +38,7 @@ if (fs.existsSync(assetsSourceDir)) {
   console.log(`Assets directory not found: ${assetsSourceDir} (skipping)`);
 }
 
-// Copy scripts directory (for bddgen-export.js wrapper)
+// Copy scripts directory (bddgen-test.js and other runtime script helpers)
 const scriptsSourceDir = path.join(__dirname, '..', 'electron', 'scripts');
 const scriptsDestDir = path.join(__dirname, '..', 'dist-electron', 'scripts');
 

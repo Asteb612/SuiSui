@@ -1,11 +1,11 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
-import { IPC_CHANNELS, parseArgs } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, StepExportResult, StepDefinition, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget } from '@suisui/shared'
+import { IPC_CHANNELS } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
-  getStepService,
+  getStepCatalogService,
   getValidationService,
   getRunnerService,
   getSettingsService,
@@ -28,45 +28,6 @@ import type {
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('IPC')
-
-/**
- * Build mock step export data matching the 10 default generic.steps.ts definitions.
- * Used in test mode so StepService.export() doesn't need to spawn real processes.
- */
-function buildMockStepData(): StepExportResult {
-  const patterns: Array<{ keyword: 'Given' | 'When' | 'Then'; pattern: string }> = [
-    { keyword: 'Given', pattern: 'I am on the {string} page' },
-    { keyword: 'Given', pattern: 'I am logged in as {string}' },
-    { keyword: 'When', pattern: 'I click on {string}' },
-    { keyword: 'When', pattern: 'I fill {string} with {string}' },
-    { keyword: 'When', pattern: 'I select {string} from {string}' },
-    { keyword: 'When', pattern: 'I wait for {int} seconds' },
-    { keyword: 'Then', pattern: 'I should see {string}' },
-    { keyword: 'Then', pattern: 'I should not see {string}' },
-    { keyword: 'Then', pattern: 'the URL should contain {string}' },
-    { keyword: 'Then', pattern: 'the element {string} should be visible' },
-  ]
-
-  const steps: StepDefinition[] = patterns.map(({ keyword, pattern }) => {
-    const hash = `${keyword}-${pattern}`
-      .split('')
-      .reduce((acc, char) => ((acc << 5) - acc + char.charCodeAt(0)) | 0, 0)
-    return {
-      id: `step-${Math.abs(hash).toString(16)}`,
-      keyword,
-      pattern,
-      location: 'features/steps/generic.steps.ts',
-      args: parseArgs(pattern),
-      isGeneric: true,
-    }
-  })
-
-  return {
-    steps,
-    decorators: [],
-    exportedAt: new Date().toISOString(),
-  }
-}
 
 interface HandlerOptions {
   isTestMode: boolean
@@ -95,7 +56,7 @@ export function registerIpcHandlers(
 
   const workspaceService = getWorkspaceService()
   const featureService = getFeatureService()
-  const stepService = getStepService()
+  const stepCatalogService = getStepCatalogService()
   const validationService = getValidationService()
   const runnerService = getRunnerService()
   const settingsService = getSettingsService()
@@ -245,28 +206,54 @@ export function registerIpcHandlers(
     await featureService.copyFeature(sourcePath, targetPath)
   })
 
-  // Steps handlers
-  if (isTestMode) {
-    // In test mode, StepService.export() would fail because it spawns real processes.
-    // Instead, return mock step data matching the 10 default generic.steps.ts definitions.
-    const mockStepData = buildMockStepData()
-    ipcMain.handle(IPC_CHANNELS.STEPS_EXPORT, async () => {
-      return mockStepData
-    })
-    ipcMain.handle(IPC_CHANNELS.STEPS_GET_CACHED, async () => {
-      return mockStepData
-    })
-  } else {
-    ipcMain.handle(IPC_CHANNELS.STEPS_EXPORT, async () => {
-      return stepService.export()
-    })
-    ipcMain.handle(IPC_CHANNELS.STEPS_GET_CACHED, async () => {
-      return stepService.getCached()
-    })
+  // Step Catalog handlers (native structured catalog)
+  // Validate renderer-supplied options: the workspace root always comes from
+  // WorkspaceService, never the caller; globs must be workspace-relative.
+  const validateGenerateOptions = (raw: unknown): GenerateCatalogOptions | undefined => {
+    if (raw === undefined || raw === null) return undefined
+    if (typeof raw !== 'object') throw new Error('generate: invalid options')
+    const obj = raw as Record<string, unknown>
+    const validateGlobs = (value: unknown, field: string): string[] | undefined => {
+      if (value === undefined) return undefined
+      if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+        throw new Error(`generate: ${field} must be an array of strings`)
+      }
+      for (const g of value as string[]) {
+        if (g.startsWith('/') || g.includes('..')) {
+          throw new Error(`generate: ${field} must be workspace-relative (no absolute paths or "..")`)
+        }
+      }
+      return value as string[]
+    }
+    const options: GenerateCatalogOptions = {}
+    if (obj.force !== undefined) {
+      if (typeof obj.force !== 'boolean') throw new Error('generate: force must be a boolean')
+      options.force = obj.force
+    }
+    const include = validateGlobs(obj.include, 'include')
+    if (include) options.include = include
+    const exclude = validateGlobs(obj.exclude, 'exclude')
+    if (exclude) options.exclude = exclude
+    return options
   }
 
-  ipcMain.handle(IPC_CHANNELS.STEPS_GET_DECORATORS, async () => {
-    return stepService.getDecorators()
+  ipcMain.handle(IPC_CHANNELS.STEP_CATALOG_GENERATE, async (_event, options?: unknown) => {
+    return stepCatalogService.generate(validateGenerateOptions(options))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.STEP_CATALOG_GET_CACHED, async () => {
+    return stepCatalogService.getCached()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.STEP_CATALOG_CLEAR_CACHE, async () => {
+    return stepCatalogService.clearCache()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.STEP_CATALOG_GET_STEP, async (_event, id: unknown) => {
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error('getStep: invalid id')
+    }
+    return stepCatalogService.getStepById(id) ?? null
   })
 
   // Validation handlers

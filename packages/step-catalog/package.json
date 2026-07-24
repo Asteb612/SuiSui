@@ -1,0 +1,40 @@
+{
+  "name": "@suisui/step-catalog",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native, structured step catalog: static discovery and analysis of Playwright BDD step definitions for SuiSui.",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "require": "./dist/cjs/index.js",
+      "import": "./dist/esm/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/create-package-json.js module dist/esm",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node scripts/create-package-json.js commonjs dist/cjs",
+    "dev": "tsc -p tsconfig.esm.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build:esm && npm run build:cjs"
+  },
+  "dependencies": {
+    "@suisui/shared": "workspace:*",
+    "@suisui/step-regex": "workspace:*",
+    "typescript": "^5.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "vitest": "^3.2.6"
+  }
+}
