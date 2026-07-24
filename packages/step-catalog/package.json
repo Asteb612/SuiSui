@@ -31,10 +31,10 @@
   "dependencies": {
     "@suisui/shared": "workspace:*",
     "@suisui/step-regex": "workspace:*",
-    "typescript": "^7.0.2"
+    "typescript": "^5.3.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "vitest": "^4.1.10"
+    "vitest": "^3.2.6"
   }
 }
