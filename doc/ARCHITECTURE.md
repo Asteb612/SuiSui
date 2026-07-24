@@ -343,6 +343,7 @@ BDD steps — never exposing Playwright's Inspector window **or its in-page over
   validated and never auto-accepted (never a dependency of basic recording).
 - **Testability (Constitution III)**: everything sits behind `IRecorderAdapter`;
   CI replays checked-in NDJSON via `FakeRecorderAdapter` — no real browser/CLI.
-  The real `PlaywrightRecorderAdapter` is manual-harness only.
+  The real `PlaywrightRecorderAdapter` (spawns the embedded-Node child, streams
+  its NDJSON) is implemented and validated by a manual/opt-in harness, never CI.
 - **Insertion**: confirmed actions insert through the `scenario` store; the
   `.feature` remains the source of truth (recorder metadata is never written to Gherkin).
