@@ -615,3 +615,19 @@ validation) are **assembled in the renderer** after the stream completes — rec
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture
 - [SERVICES.md](./SERVICES.md) - Backend services
 - [FRONTEND.md](./FRONTEND.md) - Frontend components
+
+## Step Catalog channels (feature 006-step-catalog)
+
+| Constant                   | Value                | Signature                                                          |
+| -------------------------- | -------------------- | ------------------------------------------------------------------ |
+| `STEP_CATALOG_GENERATE`    | `catalog:generate`   | `(options?: GenerateCatalogOptions) => Promise<StepCatalogResult>` |
+| `STEP_CATALOG_GET_CACHED`  | `catalog:getCached`  | `() => Promise<StepCatalogResult \| null>`                         |
+| `STEP_CATALOG_CLEAR_CACHE` | `catalog:clearCache` | `() => Promise<void>`                                              |
+| `STEP_CATALOG_GET_STEP`    | `catalog:getStep`    | `(id: string) => Promise<CatalogStep \| null>`                     |
+
+Exposed as `window.api.stepCatalog.{generate,getCached,clearCache,getStep}`.
+The handler validates input: `getStep` requires a non-empty string id;
+`generate` options must be workspace-relative globs (no absolute paths or `..`).
+Serializable types (`StepCatalogResult`, `CatalogStep`, `CatalogParameter`,
+`CatalogDiagnostic`, `GenerateCatalogOptions`, …) live in
+`packages/shared/src/types/step-catalog.ts`.

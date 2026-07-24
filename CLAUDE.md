@@ -269,7 +269,43 @@ CLI best-effort caveats), [doc/SERVICES.md](doc/SERVICES.md) (`electron/services
 [doc/IPC_TYPES.md](doc/IPC_TYPES.md) (`AI_*` channels), and
 [doc/FRONTEND.md](doc/FRONTEND.md) (`useAiStore` + AI dialogs).
 
+## Native Step Catalog (`@suisui/step-catalog`)
+
+The step picker is populated by a **native, structured step catalog** that
+statically analyzes step-definition files with the TypeScript Compiler API
+(main-process only, no project-code execution, no `playwright-bdd` internals).
+It replaces the fragile "flatten to text then re-parse" `bddgen-export.js` path
+as the primary metadata source.
+
+- **Engine** (`packages/step-catalog/`): discovery → per-file AST analysis
+  (isolated: one bad file → `FILE_PARSE_ERROR`, others survive) → provenance-aware
+  merge → duplicate/ambiguity diagnostics → versioned `StepCatalogResult`.
+- **Serializable contract types** live in `@suisui/shared` (`types/step-catalog.ts`) —
+  SSoT, since they cross IPC. The engine (which depends on `typescript`) never
+  reaches the renderer.
+- **Metadata precedence** (never overwrite more precise with less precise):
+  explicit `defineStep()` → callback types → `step``` fragments → pattern
+inference → runtime → unknown. Every step/param carries `origin`+`precision`
+  (exact/inferred/partial/unknown).
+- **`@suisui/step-regex`** gained optional `defineStep()` + fragment metadata
+  (dependency-free); `step``` still returns a plain string for playwright-bdd.
+- **Backward-compat**: `catalogStepToStepDefinition()` (in `@suisui/shared`)
+  adapts a `CatalogStep` to the legacy `StepDefinition` so scenario/Gherkin
+  output is unchanged. The steps store is catalog-first with a legacy fallback.
+- **IPC**: `catalog:generate|getCached|clearCache|getStep` (`STEP_CATALOG_*`),
+  validated I/O; workspace root comes from `WorkspaceService`, never the renderer.
+- **Cache**: `<workspace>/.app/cache/step-catalog.json`, invalidated by file
+  mtime+hash / Playwright config / package config / schema+engine version;
+  `.app/.gitignore` is written to keep it out of the user's VCS.
+
+See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md), [doc/SERVICES.md](doc/SERVICES.md)
+(`StepCatalogService`), [doc/IPC_TYPES.md](doc/IPC_TYPES.md) (`catalog:*`), and
+[doc/FRONTEND.md](doc/FRONTEND.md) (`useStepsStore` catalog + selector filters).
+
 ## Active Technologies
+
+- TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; **new (main-process/engine only)**: `typescript` (Compiler API, already a dev dep) as a runtime dep of `@suisui/step-catalog`; reuses `@suisui/step-regex` pattern parsers (006-step-catalog)
+- In-memory catalog in the service; on-disk JSON cache at `<workspace>/.app/cache/step-catalog.json` (git-ignored via a written `.app/.gitignore`); provider/settings unchanged (006-step-catalog)
 
 - TypeScript 5.x (strict) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; new (main-process only): `ai` (v6), `ollama-ai-provider-v2`, `@ai-sdk/openai-compatible`, `@anthropic-ai/claude-agent-sdk`; the OpenAI Codex CLI is driven as a subprocess (via the existing `CommandRunner` / a thin SDK if available — see research Decision 3b), no always-on HTTP dependency (005-multi-provider-ai)
 

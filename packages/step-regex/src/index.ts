@@ -11,15 +11,22 @@ export {
   alt,
   cols,
   bindSteps,
+  getStepFragments,
 } from './step'
 export type {
   StepPattern,
   StepArgs,
   Frag,
+  FragmentKind,
+  FragmentMeta,
   DataTableArg,
   BoundStepFn,
   BoundSteps,
 } from './typed'
+
+// Rich step metadata (defineStep)
+export { defineStep, getStepMetadata } from './define'
+export type { StepMetadata, StepParameterMeta } from './define'
 
 // Low-level fragment builders
 export {

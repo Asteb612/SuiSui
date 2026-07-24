@@ -20,10 +20,11 @@ export const IPC_CHANNELS = {
   FEATURES_MOVE: 'features:move',
   FEATURES_COPY: 'features:copy',
 
-  // Steps
-  STEPS_EXPORT: 'steps:export',
-  STEPS_GET_CACHED: 'steps:getCached',
-  STEPS_GET_DECORATORS: 'steps:getDecorators',
+  // Step Catalog (native structured catalog)
+  STEP_CATALOG_GENERATE: 'catalog:generate',
+  STEP_CATALOG_GET_CACHED: 'catalog:getCached',
+  STEP_CATALOG_CLEAR_CACHE: 'catalog:clearCache',
+  STEP_CATALOG_GET_STEP: 'catalog:getStep',
 
   // Validation
   VALIDATE_SCENARIO: 'validate:scenario',

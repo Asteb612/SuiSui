@@ -13,16 +13,3 @@ export interface StepDefinition {
   decorator?: string
   isGeneric?: boolean
 }
-
-export interface DecoratorDefinition {
-  name: string
-  description?: string
-  location: string
-  tags?: string[]
-}
-
-export interface StepExportResult {
-  steps: StepDefinition[]
-  decorators: DecoratorDefinition[]
-  exportedAt: string
-}

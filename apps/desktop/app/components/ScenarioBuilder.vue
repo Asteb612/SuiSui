@@ -831,7 +831,20 @@ function selectScenario(index: number) {
                       @update:model-value="updateBackgroundArg(step.id, segment.arg!.name, $event, 'enum', segment.arg!.enumValues)"
                     />
 
-                    <!-- Standard Input inline (string, int, float, any, etc.) -->
+                    <!-- Numeric input for int/float parameters -->
+                    <InputText
+                      v-else-if="segment.arg && (segment.arg.type === 'int' || segment.arg.type === 'float')"
+                      :model-value="segment.arg.value"
+                      :placeholder="segment.arg.name"
+                      type="number"
+                      :step="segment.arg.type === 'float' ? 'any' : '1'"
+                      class="inline-arg-input"
+                      data-testid="inline-arg-number-background"
+                      @click.stop
+                      @update:model-value="updateBackgroundArg(step.id, segment.arg!.name, $event as string, segment.arg!.type as any, segment.arg!.enumValues)"
+                    />
+
+                    <!-- Standard Input inline (string, any, etc.) -->
                     <InputText
                       v-else-if="segment.arg && segment.arg.type !== 'table'"
                       :model-value="segment.arg.value"
@@ -1053,7 +1066,20 @@ function selectScenario(index: number) {
                             @update:model-value="updateArg(step.id, segment.arg!.name, $event as string, segment.arg!.type as any, segment.arg!.enumValues)"
                           />
 
-                          <!-- Standard Input inline (string, int, float, any, etc.) -->
+                          <!-- Numeric input for int/float parameters -->
+                          <InputText
+                            v-else-if="segment.arg && (segment.arg.type === 'int' || segment.arg.type === 'float')"
+                            :model-value="segment.arg.value"
+                            :placeholder="segment.arg.name"
+                            type="number"
+                            :step="segment.arg.type === 'float' ? 'any' : '1'"
+                            class="inline-arg-input"
+                            data-testid="inline-arg-number"
+                            @click.stop
+                            @update:model-value="updateArg(step.id, segment.arg!.name, $event as string, segment.arg!.type as any, segment.arg!.enumValues)"
+                          />
+
+                          <!-- Standard Input inline (string, any, etc.) -->
                           <InputText
                             v-else-if="segment.arg && segment.arg.type !== 'table'"
                             :model-value="segment.arg.value"

@@ -17,14 +17,36 @@ export type StepPattern<A extends StepArgs = StepArgs> = string & {
   readonly __args?: A
 }
 
+/** Structured runtime metadata carried by a pattern fragment. */
+export type FragmentKind =
+  | 'string'
+  | 'int'
+  | 'float'
+  | 'word'
+  | 'any'
+  | 'enum'
+  | 'table'
+  | 'optional'
+  | 'alternative'
+
+export interface FragmentMeta {
+  kind: FragmentKind
+  name?: string
+  enumValues?: string[]
+  tableColumns?: string[]
+  captures: boolean
+}
+
 /**
  * A pattern fragment produced by an interpolation helper. `text` is the
  * literal pattern piece; `__t` is a phantom carrying the captured arg type
- * (`never` for non-capturing fragments such as `opt`/`alt`).
+ * (`never` for non-capturing fragments such as `opt`/`alt`); `meta` carries
+ * structured runtime metadata about the fragment (feature 006-step-catalog).
  */
 export interface Frag<T = never> {
   readonly text: string
   readonly __t?: T
+  readonly meta?: FragmentMeta
 }
 
 /**

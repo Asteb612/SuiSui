@@ -72,8 +72,11 @@ vi.mock('../services/FeatureService', () => ({
   getFeatureService: () => ({}),
 }))
 
-vi.mock('../services/StepService', () => ({
-  getStepService: () => ({}),
+vi.mock('../services/StepCatalogService', () => ({
+  getStepCatalogService: () => ({
+    generate: () => Promise.resolve({ steps: [], diagnostics: [], schemaVersion: 1, generatedAt: '', workspacePath: '', analyzedFiles: 0, durationMs: 0 }),
+    getCached: () => Promise.resolve(null),
+  }),
 }))
 
 vi.mock('../services/ValidationService', () => ({

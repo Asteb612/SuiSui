@@ -296,3 +296,28 @@ providers show a "setup required"/disabled state with an actionable reason (FR-0
 - [IPC_TYPES.md](./IPC_TYPES.md) - IPC channels and shared types
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - Development workflow
 - [TESTING.md](./TESTING.md) - Testing strategies
+
+## Native Step Catalog (feature 006-step-catalog)
+
+The step catalog replaces the text-based `bddgen-export.js` extraction as the
+primary source of step metadata. It is a new workspace package,
+`@suisui/step-catalog`, that runs **only in the main process**.
+
+- **Static analysis, no execution**: step-definition files are parsed with the
+  TypeScript Compiler API (syntactic AST; a lazy Program is reserved for future
+  cross-file type resolution). Project/test code is never executed during
+  catalog generation, and no undocumented `playwright-bdd` internals are used.
+- **Robustness**: each file is analyzed in isolation — one unparseable file
+  becomes a `FILE_PARSE_ERROR` diagnostic while every other file is still
+  cataloged; a dynamic/unsupported step becomes a partial entry with diagnostics
+  rather than aborting the run.
+- **Provenance**: metadata is merged by a fixed precedence (defineStep →
+  callback types → `step``` fragments → pattern inference → runtime → unknown),
+and every step/parameter records `origin`+`precision`. Lower-precedence
+  sources never overwrite higher-precedence fields; conflicts emit diagnostics.
+- **Security boundary**: only the serialized, versioned `StepCatalogResult`
+  crosses IPC; the renderer cannot request arbitrary file access, and the
+  workspace root is always taken from `WorkspaceService`.
+- **Caching**: results are cached at `<workspace>/.app/cache/step-catalog.json`
+  with a fingerprint (file mtime+hash, Playwright config, package config,
+  schema+engine version); a git-ignore guard is written under `.app/`.

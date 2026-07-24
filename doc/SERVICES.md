@@ -474,3 +474,24 @@ env-sanitization → kill-on-cancel path (SC-008). See TESTING.md.
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Overall architecture
 - [IPC_TYPES.md](./IPC_TYPES.md) - IPC channels and types
 - [TESTING.md](./TESTING.md) - Testing strategies
+
+## StepCatalogService (feature 006-step-catalog)
+
+`electron/services/StepCatalogService.ts` — singleton + DI, delegating to the
+`@suisui/step-catalog` engine. Replaces `StepService` (text export) as the
+primary step source; the legacy service remains as a fallback.
+
+```ts
+class StepCatalogService {
+  generate(options?: GenerateCatalogOptions): Promise<StepCatalogResult>
+  getCached(): Promise<StepCatalogResult | null> // in-memory, then on-disk cache
+  clearCache(): Promise<void> // drops memory + deletes cache file
+  getStepById(id: string): CatalogStep | undefined
+  findMatchingSteps(text: string, keyword?: CatalogStepKeyword): CatalogStep[]
+}
+```
+
+- Injectable deps: `generate` (engine), `getWorkspacePath`, `resolveConfigPath`
+  — so tests run over in-memory/temp-dir fixtures with no CLI (Constitution III).
+- The engine reads step files from the workspace resolved by `WorkspaceService`;
+  the renderer never supplies paths.

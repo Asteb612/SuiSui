@@ -5,7 +5,7 @@ import git from 'isomorphic-git'
 import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '@suisui/shared'
 import { getSettingsService } from './SettingsService'
 import { getDependencyService } from './DependencyService'
-import { getStepService } from './StepService'
+import { getStepCatalogService } from './StepCatalogService'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('WorkspaceService')
@@ -580,13 +580,12 @@ export class WorkspaceService {
 
   private async exportSteps(): Promise<void> {
     try {
-      logger.info('Exporting steps for workspace')
-      const stepService = getStepService()
-      const result = await stepService.export()
-      logger.info('Steps exported successfully', { stepCount: result.steps.length })
+      logger.info('Generating step catalog for workspace')
+      const result = await getStepCatalogService().generate()
+      logger.info('Step catalog generated', { stepCount: result.steps.length })
     } catch (error) {
-      // Don't fail workspace setup if step export fails
-      logger.warn('Failed to export steps', {
+      // Don't fail workspace setup if catalog generation fails
+      logger.warn('Failed to generate step catalog', {
         error: error instanceof Error ? error.message : String(error),
       })
     }

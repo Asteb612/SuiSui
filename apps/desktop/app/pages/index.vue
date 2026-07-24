@@ -160,7 +160,7 @@ watch(
 )
 
 async function loadWorkspaceDependencies() {
-  await stepsStore.loadCached()
+  await stepsStore.ensureStepsLoaded()
   if (!isMounted.value) return
   const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
   if (gitRoot) {
@@ -209,7 +209,7 @@ async function initializeWorkspace() {
   await workspaceStore.initWorkspace()
   if (!isMounted.value) return
   if (workspaceStore.hasWorkspace) {
-    await stepsStore.loadCached()
+    await stepsStore.ensureStepsLoaded()
     if (!isMounted.value) return
     const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
     if (gitRoot) {

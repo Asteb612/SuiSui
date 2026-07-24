@@ -30,10 +30,11 @@ const api: ElectronAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.FEATURES_COPY, sourcePath, targetPath),
   },
 
-  steps: {
-    export: () => ipcRenderer.invoke(IPC_CHANNELS.STEPS_EXPORT),
-    getCached: () => ipcRenderer.invoke(IPC_CHANNELS.STEPS_GET_CACHED),
-    getDecorators: () => ipcRenderer.invoke(IPC_CHANNELS.STEPS_GET_DECORATORS),
+  stepCatalog: {
+    generate: (options) => ipcRenderer.invoke(IPC_CHANNELS.STEP_CATALOG_GENERATE, options),
+    getCached: () => ipcRenderer.invoke(IPC_CHANNELS.STEP_CATALOG_GET_CACHED),
+    clearCache: () => ipcRenderer.invoke(IPC_CHANNELS.STEP_CATALOG_CLEAR_CACHE),
+    getStep: (id) => ipcRenderer.invoke(IPC_CHANNELS.STEP_CATALOG_GET_STEP, id),
   },
 
   validate: {
