@@ -59,9 +59,15 @@ watch(
     apiKey.value = ''
     aiStore.status = null
     // Auto-detect the auto-detectable providers on open (FR-021); no background polling.
-    void aiStore.detectAll()
+    // Probe Ollama at the currently-shown base URL so a custom host is detected.
+    void aiStore.detectAll({ ollamaBaseUrl: baseUrl.value || null })
   }
 )
+
+/** Re-detect on demand, probing Ollama at whatever base URL the user has typed. */
+function onRedetect() {
+  void aiStore.detectAll({ ollamaBaseUrl: baseUrl.value || null })
+}
 
 watch(type, (next) => {
   if (next === 'ollama' && !baseUrl.value) baseUrl.value = 'http://127.0.0.1:11434'
@@ -131,7 +137,7 @@ function onDisable() {
             size="small"
             :loading="aiStore.isDetecting"
             data-testid="ai-redetect"
-            @click="aiStore.detectAll()"
+            @click="onRedetect"
           />
         </div>
         <Select

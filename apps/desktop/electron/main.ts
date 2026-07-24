@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { registerIpcHandlers } from './ipc/handlers'
 import { runDepCheck, printDepCheckReport } from './utils/depChecker'
+import { stripBillingEnv } from './services/ai/billingEnv'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
@@ -188,6 +189,12 @@ function registerAppProtocol() {
 }
 
 app.whenReady().then(() => {
+  // Clear API-billing env vars process-wide so no descendant (including the Claude
+  // Agent SDK's self-managed `claude` subprocess) can silently bill the user's API
+  // account instead of their subscription (spec FR-006 / epic #59). The app itself
+  // never uses these keys — BYOK keys are stored via safeStorage.
+  stripBillingEnv()
+
   // Handle --test-deps mode: check dependencies and exit without UI
   if (isTestDepsMode) {
     console.log('Running in dependency test mode...')

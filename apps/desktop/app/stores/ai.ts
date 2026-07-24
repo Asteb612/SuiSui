@@ -98,11 +98,19 @@ export const useAiStore = defineStore('ai', {
      * Detect all auto-detectable providers (run when the settings page opens, plus
      * on manual re-detect). No background polling (spec FR-021). The BYOK provider is
      * not probed here — it is always selectable and verified on save.
+     *
+     * Ollama is probed at `ollamaBaseUrl` (the value currently in the settings field)
+     * when provided, so a user-configured remote/custom Ollama host is detected instead
+     * of always probing the localhost default.
      */
-    async detectAll() {
+    async detectAll(opts: { ollamaBaseUrl?: string | null } = {}) {
       this.isDetecting = true
       try {
-        await Promise.all(AUTO_DETECTABLE_PROVIDER_TYPES.map((t) => this.detect(t)))
+        await Promise.all(
+          AUTO_DETECTABLE_PROVIDER_TYPES.map((t) =>
+            this.detect(t, t === 'ollama' ? (opts.ollamaBaseUrl ?? this.config.baseUrl) : undefined)
+          )
+        )
       } finally {
         this.isDetecting = false
       }

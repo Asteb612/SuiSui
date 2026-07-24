@@ -30,6 +30,7 @@ import {
   buildSanitizedCodexEnv,
   extractCodexText,
 } from '../services/ai/OpenAiCodexProvider'
+import { ALL_BILLING_ENV_KEYS, stripBillingEnv } from '../services/ai/billingEnv'
 import type { AIStreamRequest } from '../services/ai/IAIProvider'
 
 const req = (input: string): AIStreamRequest => ({
@@ -60,6 +61,32 @@ describe('buildSanitizedEnv (FR-006)', () => {
     expect(env.CLAUDE_CODE_USE_BEDROCK).toBeUndefined()
     expect(env.PATH).toBe('/usr/bin')
     expect(env.HOME).toBe('/home/u')
+  })
+})
+
+describe('stripBillingEnv (FR-006 / epic #59 footgun)', () => {
+  it('deletes every billing key from the env in place, leaving the rest', () => {
+    const env: NodeJS.ProcessEnv = {
+      PATH: '/usr/bin',
+      HOME: '/home/u',
+      ANTHROPIC_API_KEY: 'sk-ant',
+      ANTHROPIC_AUTH_TOKEN: 'tok',
+      CLAUDE_CODE_USE_BEDROCK: '1',
+      CLAUDE_CODE_USE_VERTEX: '1',
+      CLAUDE_CODE_USE_FOUNDRY: '1',
+      OPENAI_API_KEY: 'sk-oai',
+      CODEX_API_KEY: 'force',
+    }
+    stripBillingEnv(env)
+    for (const key of ALL_BILLING_ENV_KEYS) expect(env[key]).toBeUndefined()
+    expect(env.PATH).toBe('/usr/bin')
+    expect(env.HOME).toBe('/home/u')
+  })
+
+  it('covers both the Claude and Codex billing keys', () => {
+    expect(ALL_BILLING_ENV_KEYS).toEqual(
+      expect.arrayContaining(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY', 'CODEX_API_KEY'])
+    )
   })
 })
 
@@ -161,11 +188,17 @@ describe('buildSanitizedCodexEnv (FR-006)', () => {
 })
 
 describe('extractCodexText', () => {
-  it('reads text from a completed agent_message item', () => {
-    expect(extractCodexText({ type: 'item.completed', item: { type: 'agent_message', text: 'Hi' } })).toBe('Hi')
+  it('reads text from a completed agent_message item, tagged as a full message', () => {
+    expect(extractCodexText({ type: 'item.completed', item: { type: 'agent_message', text: 'Hi' } })).toEqual({
+      text: 'Hi',
+      kind: 'message',
+    })
   })
-  it('reads an incremental agent_message_delta', () => {
-    expect(extractCodexText({ type: 'item.updated', delta: { type: 'agent_message_delta', text: 'x' } })).toBe('x')
+  it('reads an incremental agent_message_delta, tagged as a delta', () => {
+    expect(extractCodexText({ type: 'item.updated', delta: { type: 'agent_message_delta', text: 'x' } })).toEqual({
+      text: 'x',
+      kind: 'delta',
+    })
   })
   it('ignores non-assistant events', () => {
     expect(extractCodexText({ type: 'turn.completed' })).toBeNull()
@@ -193,7 +226,7 @@ describe('OpenAiCodexProvider — streaming with sanitized env (FR-006)', () => 
 
     const [cmd, args, opts] = spawnMock.mock.calls[0]! as [string, string[], { env: Record<string, string> }]
     expect(cmd).toBe('codex')
-    expect(args).toEqual(['exec', '--json', 'a login scenario'])
+    expect(args).toEqual(['exec', '--json', '--', 'a login scenario'])
     expect(opts.env.OPENAI_API_KEY).toBeUndefined()
     expect(opts.env.CODEX_API_KEY).toBeUndefined()
 
@@ -201,7 +234,7 @@ describe('OpenAiCodexProvider — streaming with sanitized env (FR-006)', () => 
     delete process.env.CODEX_API_KEY
   })
 
-  it('passes the model via -m when configured', async () => {
+  it('passes the model via -m and ends options with -- before the prompt', async () => {
     const child = makeFakeCodexChild()
     spawnMock.mockReturnValue(child)
     const provider = new OpenAiCodexProvider({ model: 'gpt-5-codex' })
@@ -209,7 +242,24 @@ describe('OpenAiCodexProvider — streaming with sanitized env (FR-006)', () => 
     await tick()
     child.emit('close', 0)
     await p
-    expect(spawnMock.mock.calls[0]![1]).toEqual(['exec', '--json', '-m', 'gpt-5-codex', 'x'])
+    expect(spawnMock.mock.calls[0]![1]).toEqual(['exec', '--json', '-m', 'gpt-5-codex', '--', 'x'])
+  })
+
+  it('does not duplicate output when a version streams deltas AND a final full message', async () => {
+    const child = makeFakeCodexChild()
+    spawnMock.mockReturnValue(child)
+    const provider = new OpenAiCodexProvider({ model: null })
+    const p = collect(provider.stream(req('x')))
+    await tick()
+
+    // Incremental deltas...
+    child.stdout.emit('data', JSON.stringify({ type: 'item.updated', delta: { type: 'agent_message_delta', text: 'Hello ' } }) + '\n')
+    child.stdout.emit('data', JSON.stringify({ type: 'item.updated', delta: { type: 'agent_message_delta', text: 'world' } }) + '\n')
+    // ...followed by the aggregated full message, which must be dropped.
+    child.stdout.emit('data', JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Hello world' } }) + '\n')
+    child.emit('close', 0)
+
+    expect(await p).toBe('Hello world')
   })
 
   it('kills the child and throws AbortError when the signal aborts', async () => {

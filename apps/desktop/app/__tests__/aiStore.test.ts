@@ -37,6 +37,15 @@ describe('ai store — detection gating (FR-020/FR-021)', () => {
     expect(probed).not.toContain('openai-compatible')
   })
 
+  it('detectAll probes Ollama at the provided base URL (not just localhost)', async () => {
+    statusMock.mockResolvedValue(ok)
+    const store = useAiStore()
+    await store.detectAll({ ollamaBaseUrl: 'http://10.0.0.5:11434' })
+
+    const ollamaCall = statusMock.mock.calls.find((c) => c[0]?.type === 'ollama')
+    expect(ollamaCall?.[0]?.baseUrl).toBe('http://10.0.0.5:11434')
+  })
+
   it('isSelectable: auto-detectable providers gate on detection; BYOK is always selectable', async () => {
     statusMock.mockImplementation(async (target) =>
       target?.type === 'ollama' ? ok : down

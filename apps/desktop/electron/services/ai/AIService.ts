@@ -17,6 +17,26 @@ const NOT_CONFIGURED_STATUS: AIProviderStatus = {
   detail: null,
 }
 
+/**
+ * Reject a non-http(s) base URL before it reaches `fetch` (mirrors the APP_OPEN_EXTERNAL
+ * scheme check). The stored API key is attached as a Bearer header to the configured
+ * base URL, so constraining the scheme is cheap defense-in-depth against a compromised
+ * renderer pointing it at, e.g., a `file:`/custom scheme. A `null` base URL is allowed
+ * (providers fall back to their defaults).
+ */
+function assertSafeBaseUrl(baseUrl: string | null): void {
+  if (!baseUrl) return
+  let protocol: string
+  try {
+    protocol = new URL(baseUrl).protocol
+  } catch {
+    throw new Error('Invalid base URL')
+  }
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    throw new Error(`Unsupported base URL scheme: ${protocol}`)
+  }
+}
+
 export interface AIServiceDeps {
   /** Inject a provider directly (tests use FakeAIProvider). Bypasses config-based resolution. */
   provider?: IAIProvider
@@ -50,6 +70,7 @@ export class AIService {
   }
 
   async setConfig(config: AIProviderConfig): Promise<void> {
+    assertSafeBaseUrl(config.baseUrl)
     // Never persist a secret here; hasApiKey is derived from the credentials store.
     const hasApiKey = await this.credentialsService.hasKey()
     await this.settingsService.save({ aiProvider: { ...config, hasApiKey } })
@@ -65,6 +86,7 @@ export class AIService {
    */
   async status(target?: AIStatusTarget): Promise<AIProviderStatus> {
     if (target) {
+      assertSafeBaseUrl(target.baseUrl ?? null)
       return this.buildProvider(target.type, null, target.baseUrl ?? null).status()
     }
     const provider = await this.resolveProvider()
@@ -201,6 +223,10 @@ export class AIService {
         return new OpenAiCodexProvider({ model })
       case 'claude-subscription':
         return new ClaudeSubscriptionProvider({ model })
+      default:
+        // Guards a corrupted/forward-incompatible persisted config (or a bogus IPC
+        // target) from silently returning `undefined` and throwing an opaque TypeError.
+        throw new Error(`Unknown AI provider type: ${String(type)}`)
     }
   }
 }

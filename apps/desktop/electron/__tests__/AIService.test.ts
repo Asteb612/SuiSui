@@ -229,4 +229,33 @@ describe('AIService', () => {
     expect((await settings.get()).aiProvider!.type).toBe('claude-subscription')
     vi.unstubAllGlobals()
   })
+
+  it('setConfig rejects a non-http(s) base URL and never persists it', async () => {
+    const settings = fakeSettings()
+    const saveSpy = vi.spyOn(settings, 'save')
+    const service = new AIService({ settingsService: settings, credentialsService: fakeCreds(false) })
+
+    await expect(
+      service.setConfig({ type: 'openai-compatible', model: 'x', baseUrl: 'file:///etc/passwd', hasApiKey: false })
+    ).rejects.toThrow(/scheme/i)
+    expect(saveSpy).not.toHaveBeenCalled()
+  })
+
+  it('setConfig accepts an http(s) base URL', async () => {
+    const settings = fakeSettings()
+    const service = new AIService({ settingsService: settings, credentialsService: fakeCreds(false) })
+    await service.setConfig({ type: 'openai-compatible', model: 'x', baseUrl: 'https://api.example.com/v1', hasApiKey: false })
+    expect((await settings.get()).aiProvider!.baseUrl).toBe('https://api.example.com/v1')
+  })
+
+  it('status(target) rejects a non-http(s) base URL before probing', async () => {
+    const service = new AIService({ settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+    await expect(service.status({ type: 'ollama', baseUrl: 'ftp://internal/api' })).rejects.toThrow(/scheme/i)
+  })
+
+  it('rejects an unknown/forward-incompatible persisted provider type with a clear error', async () => {
+    const badConfig = { type: 'some-future-provider', model: null, baseUrl: null, hasApiKey: false } as unknown as AIProviderConfig
+    const service = new AIService({ settingsService: fakeSettings({ aiProvider: badConfig }), credentialsService: fakeCreds(false) })
+    await expect(collect(service.stream(emptyRequest()))).rejects.toThrow(/Unknown AI provider type/)
+  })
 })

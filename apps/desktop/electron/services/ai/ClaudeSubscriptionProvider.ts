@@ -2,22 +2,10 @@ import { spawn } from 'node:child_process'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import type { AIProviderStatus } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
+import { CLAUDE_BILLING_ENV_KEYS as BILLING_ENV_KEYS } from './billingEnv'
 import type { IAIProvider, AIStreamRequest } from './IAIProvider'
 
 const logger = createLogger('ClaudeSubscriptionProvider')
-
-/**
- * Environment variables that, if present, would cause the spawned `claude` CLI to
- * bill an API account (or a cloud provider) instead of drawing from the user's
- * subscription. They MUST be absent for the subscription path (spec FR-006).
- */
-const BILLING_ENV_KEYS = [
-  'ANTHROPIC_API_KEY',
-  'ANTHROPIC_AUTH_TOKEN',
-  'CLAUDE_CODE_USE_BEDROCK',
-  'CLAUDE_CODE_USE_VERTEX',
-  'CLAUDE_CODE_USE_FOUNDRY',
-]
 
 /** Build a sanitized env (no API-billing keys) for the subscription path. */
 export function buildSanitizedEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {

@@ -1,18 +1,17 @@
 import { spawn } from 'node:child_process'
 import type { AIProviderStatus } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
+import { CODEX_BILLING_ENV_KEYS as BILLING_ENV_KEYS } from './billingEnv'
 import type { IAIProvider, AIStreamRequest } from './IAIProvider'
 
 const logger = createLogger('OpenAiCodexProvider')
 
-/**
- * Environment variables that, if present, would cause the spawned `codex` CLI to
- * bill an OpenAI API account (per-token) instead of drawing from the user's
- * ChatGPT/Codex subscription. They MUST be absent for the subscription path (spec FR-006).
- * - `OPENAI_API_KEY`: auto-discovered and silently billed.
- * - `CODEX_API_KEY`: the documented way to FORCE api-key billing for `codex exec`.
- */
-const BILLING_ENV_KEYS = ['OPENAI_API_KEY', 'CODEX_API_KEY']
+/** A text fragment extracted from a codex JSONL event, tagged by how it was carried. */
+export interface CodexTextEvent {
+  text: string
+  /** `delta`: an incremental `agent_message_delta`. `message`: a full `agent_message`. */
+  kind: 'delta' | 'message'
+}
 
 /** Build a sanitized env (no API-billing keys) for the subscription path. */
 export function buildSanitizedCodexEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -26,13 +25,15 @@ export function buildSanitizedCodexEnv(source: NodeJS.ProcessEnv = process.env):
 }
 
 /**
- * Extract assistant text from a single `codex exec --json` JSONL event.
+ * Extract assistant text from a single `codex exec --json` JSONL event, tagged with
+ * how it was carried so the caller can avoid double-counting.
  * Codex emits `thread.started → turn.started → item.completed* → turn.completed`.
  * Assistant text is carried by `item.completed` events where `item.type === 'agent_message'`
  * (full message). Some versions also stream `item.updated` with an `agent_message_delta`.
- * We yield whichever is present without depending on the exact (evolving) schema.
+ * A version that emits BOTH would otherwise stream the text twice (deltas + the final
+ * full message); `stream()` uses the `kind` tag to drop the redundant full message.
  */
-export function extractCodexText(event: unknown): string | null {
+export function extractCodexText(event: unknown): CodexTextEvent | null {
   if (typeof event !== 'object' || event === null) return null
   const e = event as {
     type?: string
@@ -42,11 +43,11 @@ export function extractCodexText(event: unknown): string | null {
   }
   // Incremental delta (newer app-server style), if surfaced.
   if (e.type === 'item.updated' && e.delta?.type === 'agent_message_delta' && typeof e.delta.text === 'string') {
-    return e.delta.text
+    return { text: e.delta.text, kind: 'delta' }
   }
   // Completed assistant message (the reliable `codex exec --json` path).
   if (e.type === 'item.completed' && e.item?.type === 'agent_message' && typeof e.item.text === 'string') {
-    return e.item.text
+    return { text: e.item.text, kind: 'message' }
   }
   return null
 }
@@ -108,7 +109,9 @@ export class OpenAiCodexProvider implements IAIProvider {
 
   async *stream(req: AIStreamRequest): AsyncIterable<string> {
     const modelArgs = this.opts.model ? ['-m', this.opts.model] : []
-    const child = spawn(this.command, ['exec', '--json', ...modelArgs, req.input], {
+    // `--` ends option parsing so a prompt that happens to start with `-` is never
+    // mistaken for a codex flag (defense-in-depth; prompts are non-flag today).
+    const child = spawn(this.command, ['exec', '--json', ...modelArgs, '--', req.input], {
       env: buildSanitizedCodexEnv(),
       windowsHide: true,
     })
@@ -127,6 +130,10 @@ export class OpenAiCodexProvider implements IAIProvider {
     let finished = false
     let error: Error | null = null
     let pending = ''
+    // Whether any incremental delta was streamed for this turn. If so, the terminal
+    // full `agent_message` is the aggregation of those deltas — drop it to avoid
+    // emitting the answer twice on codex versions that send both (see extractCodexText).
+    let sawDelta = false
 
     const wake = () => {
       if (resolveNext) {
@@ -145,11 +152,12 @@ export class OpenAiCodexProvider implements IAIProvider {
       } catch {
         return // ignore non-JSON noise
       }
-      const text = extractCodexText(parsed)
-      if (text) {
-        queue.push(text)
-        wake()
-      }
+      const evt = extractCodexText(parsed)
+      if (!evt) return
+      if (evt.kind === 'delta') sawDelta = true
+      else if (sawDelta) return // redundant full message after deltas
+      queue.push(evt.text)
+      wake()
     }
 
     child.stdout.setEncoding('utf8')
