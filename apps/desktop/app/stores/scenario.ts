@@ -190,6 +190,31 @@ export const useScenarioStore = defineStore('scenario', {
       }
     },
 
+    /**
+     * Append a step whose argument VALUES are already filled (used by the
+     * recorder, which produces ready-to-run steps). Unlike `addStep`, this
+     * preserves each arg's value instead of blanking it.
+     */
+    addRecordedStep(keyword: StepKeyword, pattern: string, args: StepArg[]) {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (current) {
+        const step: ScenarioStep = {
+          id: generateStepId(),
+          keyword,
+          pattern,
+          args: args.map((arg) => ({
+            name: arg.name,
+            type: arg.type,
+            value: arg.value,
+            ...(arg.enumValues ? { enumValues: arg.enumValues } : {}),
+            ...(arg.tableColumns ? { tableColumns: arg.tableColumns } : {}),
+          })),
+        }
+        current.steps.push(step)
+        this.isDirty = true
+      }
+    },
+
     updateStep(stepId: string, updates: Partial<ScenarioStep>) {
       const current = this.scenarios[this.activeScenarioIndex]
       if (current) {

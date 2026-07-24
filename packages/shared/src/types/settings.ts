@@ -1,6 +1,7 @@
 import type { RunConfiguration } from './runner'
 import type { AIProviderConfig } from './ai'
 import { DEFAULT_AI_PROVIDER_CONFIG } from './ai'
+import type { RecorderLocatorSettings } from './recorder'
 
 export interface AppSettings {
   workspacePath: string | null
@@ -13,6 +14,10 @@ export interface AppSettings {
   baseUrl: string | null
   runConfiguration?: RunConfiguration
   aiProvider?: AIProviderConfig
+  /** Gates the optional recorder AI stage (US6). Off by default. */
+  recorderAiEnabled?: boolean
+  /** Per-workspace recorder locator preferences. */
+  recorderLocatorSettings?: RecorderLocatorSettings
 }
 
 export const DEFAULT_RUN_CONFIGURATION: RunConfiguration = {

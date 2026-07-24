@@ -11,6 +11,8 @@ export * from './types/node'
 export * from './types/dependency'
 export * from './types/ai'
 export * from './types/step-catalog'
+export * from './types/recorder'
+export * from './recorder/locatorSelector'
 
 // Catalog (backward-compat adapter added in US1)
 export * from './catalog/adapter'

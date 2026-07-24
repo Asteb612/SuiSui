@@ -45,6 +45,7 @@ export const IPC_CHANNELS = {
   // App
   APP_GET_VERSION: 'app:getVersion',
   APP_OPEN_EXTERNAL: 'app:openExternal',
+  APP_OPEN_IN_EDITOR: 'app:openInEditor',
 
   // Node Runtime
   NODE_ENSURE_RUNTIME: 'node:ensureRuntime',
@@ -83,6 +84,24 @@ export const IPC_CHANNELS = {
   AI_CHUNK: 'ai:chunk',
   AI_DONE: 'ai:done',
   AI_ERROR: 'ai:error',
+
+  // Recorder: request/response (invoke)
+  RECORDER_START: 'recorder:start',
+  RECORDER_STOP: 'recorder:stop',
+  RECORDER_PAUSE: 'recorder:pause',
+  RECORDER_RESUME: 'recorder:resume',
+  RECORDER_PICK: 'recorder:pick',
+  RECORDER_CANCEL_PICK: 'recorder:cancelPick',
+  RECORDER_HIGHLIGHT: 'recorder:highlight',
+  RECORDER_VALIDATE_LOCATOR: 'recorder:validateLocator',
+  RECORDER_ADD_ASSERTION: 'recorder:addAssertion',
+
+  // Recorder: main -> renderer stream events (webContents.send)
+  RECORDER_ACTION: 'recorder:action',
+  RECORDER_ACTION_UPDATED: 'recorder:actionUpdated',
+  RECORDER_PICKED: 'recorder:picked',
+  RECORDER_STATUS: 'recorder:status',
+  RECORDER_ERROR: 'recorder:error',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

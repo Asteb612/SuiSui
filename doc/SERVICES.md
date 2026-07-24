@@ -495,3 +495,28 @@ class StepCatalogService {
   — so tests run over in-memory/temp-dir fixtures with no CLI (Constitution III).
 - The engine reads step files from the workspace resolved by `WorkspaceService`;
   the renderer never supplies paths.
+
+## Recorder services (`electron/services/recorder/`, feature 007-native-recorder)
+
+Main-process only, singleton + DI (Constitution IV). Serializable types live in
+`@suisui/shared/src/types/recorder.ts`.
+
+- **RecorderService** — session lifecycle + child-process management; normalizes
+  raw adapter events into `RecordedAction`s pushed over streaming IPC; runs
+  locator scoring, deterministic step matching, secret redaction, and the
+  optional AI stage. Injectable `adapter` / `matcher` / `locator` / `aiMatcher` /
+  `loadCatalogSteps` / `loadLocatorSettings`.
+- **IRecorderAdapter** seam — `PlaywrightRecorderAdapter` (real; spawns the
+  embedded-Node child driving workspace Playwright) and `FakeRecorderAdapter`
+  (tests replay NDJSON; Constitution III).
+- **LocatorService** — pure candidate scoring + generated-value detection
+  (`contracts/locator-scoring.md`).
+- **StepMatcherService** — deterministic recorded-action → generic-step matching
+  (`genericStepRecorderMap`).
+- **AssertionSuggestionService** — pure before/after page-diff → optional suggestions.
+- **RecorderAiMatcher** — flag-gated AI stage; `validateAiSuggestion` (validate +
+  confidence gate); `NullRecorderAiMatcher` default (AI off).
+- **secretDetection** — sensitive-field classification + `secretReferenceName`.
+- **recorderErrors** — `RECORDER_ERROR_INFO` message/recovery catalog (SC-008).
+- **EditorService** (`electron/services/EditorService.ts`) — opens a step's
+  source at its line (VS Code URL, OS fallback; traversal-guarded).

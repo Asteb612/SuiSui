@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -18,6 +18,10 @@ import {
   AIService,
   FakeAIProvider,
   type AICredentialsService,
+  getRecorderService,
+  RecorderService,
+  createTestRecorderAdapter,
+  getEditorService,
   FakeCommandRunner,
   setCommandRunner,
 } from '../services'
@@ -79,6 +83,10 @@ export function registerIpcHandlers(
       throw new Error(`Refusing to open URL with unsupported scheme: ${protocol}`)
     }
     await shell.openExternal(url)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.APP_OPEN_IN_EDITOR, async (_event, location: unknown) => {
+    await getEditorService().openStepLocation(validateStepLocation(location))
   })
 
   // Workspace handlers
@@ -541,5 +549,179 @@ export function registerIpcHandlers(
     aiControllers.delete(requestId)
   })
 
+  // Recorder handlers. In test mode the service is driven by a FakeRecorderAdapter
+  // so no real Playwright/Chromium/CLI launches (Constitution Principle III).
+  const recorderService = isTestMode
+    ? new RecorderService({ adapter: createTestRecorderAdapter() })
+    : getRecorderService()
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_START, async (event, options: unknown) => {
+    const opts = validateRecorderStartOptions(options)
+    const send = (channel: string, payload: unknown) => {
+      if (!event.sender.isDestroyed()) event.sender.send(channel, payload)
+    }
+    const session = await recorderService.start(opts, {
+      onAction: (a) => send(IPC_CHANNELS.RECORDER_ACTION, a),
+      onActionUpdated: (a) => send(IPC_CHANNELS.RECORDER_ACTION_UPDATED, a),
+      onPicked: (p) => send(IPC_CHANNELS.RECORDER_PICKED, p),
+      onStatus: (s) => send(IPC_CHANNELS.RECORDER_STATUS, s),
+      onError: (e) => send(IPC_CHANNELS.RECORDER_ERROR, e),
+    })
+    return { accepted: true as const, session }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_STOP, async () => recorderService.stop())
+  ipcMain.handle(IPC_CHANNELS.RECORDER_PAUSE, async () => recorderService.pause())
+  ipcMain.handle(IPC_CHANNELS.RECORDER_RESUME, async () => recorderService.resume())
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_PICK, async (_event, request: unknown) => {
+    const pickId = await recorderService.pick(validatePickRequest(request))
+    return { accepted: true as const, pickId }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_CANCEL_PICK, async () => recorderService.cancelPick())
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_HIGHLIGHT, async (_event, locator: unknown) =>
+    recorderService.highlight(validateLocatorReference(locator))
+  )
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_VALIDATE_LOCATOR, async (_event, locator: unknown) =>
+    recorderService.validateLocator(validateLocatorReference(locator))
+  )
+
+  ipcMain.handle(IPC_CHANNELS.RECORDER_ADD_ASSERTION, async (_event, request: unknown) => {
+    recorderService.addAssertion(validateAssertionRequest(request))
+  })
+
   logger.info('IPC handlers registered', { isTestMode })
+}
+
+// ---------------------------------------------------------------------------
+// Recorder IPC input validators (FR-033, FR-035). The workspace root is taken
+// from WorkspaceService, never the renderer.
+// ---------------------------------------------------------------------------
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function validateRecorderStartOptions(value: unknown): RecorderStartOptions {
+  if (value === undefined) return {}
+  if (!isRecord(value)) throw new Error('recorder.start: options must be an object')
+  const out: RecorderStartOptions = {}
+  if (value.startUrl !== undefined) {
+    if (typeof value.startUrl !== 'string') throw new Error('recorder.start: startUrl must be a string')
+    if (/^(javascript|file|data):/i.test(value.startUrl.trim())) {
+      throw new Error('recorder.start: unsupported startUrl scheme')
+    }
+    out.startUrl = value.startUrl
+  }
+  if (value.scenarioId !== undefined) {
+    if (typeof value.scenarioId !== 'string') throw new Error('recorder.start: scenarioId must be a string')
+    out.scenarioId = value.scenarioId
+  }
+  if (value.locatorSettings !== undefined) {
+    out.locatorSettings = validateLocatorSettings(value.locatorSettings)
+  }
+  return out
+}
+
+function validateLocatorSettings(value: unknown): RecorderLocatorSettings {
+  if (!isRecord(value)) throw new Error('recorder: locatorSettings must be an object')
+  const attrs = value.preferredTestIdAttributes
+  if (!Array.isArray(attrs) || attrs.some((a) => typeof a !== 'string')) {
+    throw new Error('recorder: preferredTestIdAttributes must be string[]')
+  }
+  const bool = (v: unknown, name: string): boolean => {
+    if (typeof v !== 'boolean') throw new Error(`recorder: ${name} must be a boolean`)
+    return v
+  }
+  return {
+    preferredTestIdAttributes: attrs as string[],
+    allowRoleLocators: bool(value.allowRoleLocators, 'allowRoleLocators'),
+    allowTextLocators: bool(value.allowTextLocators, 'allowTextLocators'),
+    allowCssFallback: bool(value.allowCssFallback, 'allowCssFallback'),
+  }
+}
+
+const ASSERTION_TYPES = new Set<RecordedActionType>([
+  'assertVisible',
+  'assertHidden',
+  'assertText',
+  'assertValue',
+  'assertChecked',
+  'assertEnabled',
+  'assertCount',
+  'assertUrl',
+  'assertTitle',
+])
+
+function validateAssertionRequest(value: unknown): RecorderAssertionRequest {
+  if (!isRecord(value)) throw new Error('recorder.addAssertion: request must be an object')
+  if (typeof value.type !== 'string' || !ASSERTION_TYPES.has(value.type as RecordedActionType)) {
+    throw new Error('recorder.addAssertion: invalid assertion type')
+  }
+  const out: RecorderAssertionRequest = { type: value.type as RecordedActionType }
+  if (value.target !== undefined) out.target = validateLocatorReference(value.target)
+  if (value.value !== undefined) {
+    if (typeof value.value !== 'string') throw new Error('recorder.addAssertion: value must be a string')
+    out.value = value.value
+  }
+  return out
+}
+
+function validateStepLocation(value: unknown): StepSourceLocation {
+  if (!isRecord(value)) throw new Error('openInEditor: location must be an object')
+  if (typeof value.file !== 'string' || value.file.length === 0) throw new Error('openInEditor: invalid file')
+  if (typeof value.line !== 'number' || !Number.isFinite(value.line)) throw new Error('openInEditor: invalid line')
+  const column = typeof value.column === 'number' && Number.isFinite(value.column) ? value.column : 1
+  return { file: value.file, line: value.line, column }
+}
+
+function validatePickRequest(value: unknown): PickRequest {
+  if (!isRecord(value)) throw new Error('recorder.pick: request must be an object')
+  if (value.purpose !== 'retarget' && value.purpose !== 'assert') {
+    throw new Error('recorder.pick: purpose must be "retarget" or "assert"')
+  }
+  const out: PickRequest = { purpose: value.purpose }
+  if (value.actionId !== undefined) {
+    if (typeof value.actionId !== 'string') throw new Error('recorder.pick: actionId must be a string')
+    out.actionId = value.actionId
+  }
+  return out
+}
+
+const LOCATOR_TYPES = new Set(['testId', 'role', 'label', 'placeholder', 'text', 'name', 'id', 'css'])
+
+function validateLocatorReference(value: unknown): LocatorReference {
+  if (!isRecord(value) || typeof value.type !== 'string' || !LOCATOR_TYPES.has(value.type)) {
+    throw new Error('recorder: invalid locator reference')
+  }
+  const str = (v: unknown, name: string): string => {
+    if (typeof v !== 'string' || v.length === 0) throw new Error(`recorder: locator.${name} must be a non-empty string`)
+    return v
+  }
+  switch (value.type) {
+    case 'testId':
+      return { type: 'testId', attribute: str(value.attribute, 'attribute'), value: str(value.value, 'value') }
+    case 'role':
+      return {
+        type: 'role',
+        role: str(value.role, 'role'),
+        ...(value.name !== undefined ? { name: str(value.name, 'name') } : {}),
+        ...(typeof value.exact === 'boolean' ? { exact: value.exact } : {}),
+      }
+    case 'name':
+      return { type: 'name', value: str(value.value, 'value') }
+    case 'id':
+      return { type: 'id', value: str(value.value, 'value') }
+    case 'css':
+      return { type: 'css', value: str(value.value, 'value') }
+    default:
+      return {
+        type: value.type as 'label' | 'placeholder' | 'text',
+        value: str(value.value, 'value'),
+        ...(typeof value.exact === 'boolean' ? { exact: value.exact } : {}),
+      }
+  }
 }

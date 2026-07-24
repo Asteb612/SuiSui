@@ -75,6 +75,23 @@ export const SEL = {
   runUiBtn: '[data-testid="run-ui-btn"]',
   stopRunBtn: '[data-testid="stop-run-btn"]',
 
+  // Recorder (feature 007-native-recorder)
+  recordBtn: '[data-testid="record-btn"]',
+  recordBtnEmpty: '[data-testid="record-btn-empty"]',
+  recorderPanel: '[data-testid="recorder-panel"]',
+  recorderStart: '[data-testid="recorder-start"]',
+  recorderStop: '[data-testid="recorder-stop"]',
+  recorderConfirm: '[data-testid="recorder-confirm"]',
+  recorderActions: '[data-testid="recorder-actions"]',
+  recordedAction: '[data-testid="recorded-action"]',
+  secretChip: '[data-testid="secret-chip"]',
+  pickElement: '[data-testid="pick-element"]',
+  locatorCandidate: '[data-testid="locator-candidate"]',
+  candidateReliability: '[data-testid="candidate-reliability"]',
+  assertPick: '[data-testid="assert-pick"]',
+  assertType: '[data-testid="assert-type"]',
+  assertAdd: '[data-testid="assert-add"]',
+
   // Git Clone
   gitCloneBtn: '[data-testid="git-clone-btn"]',
   gitCloneDialog: '[data-testid="git-clone-dialog"]',
