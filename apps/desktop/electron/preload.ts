@@ -48,6 +48,7 @@ const api: ElectronAPI = {
     runBatch: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_BATCH, options),
     getWorkspaceTests: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS),
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),
+    showReport: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_SHOW_REPORT),
     onRunnerLog: (callback: (line: string) => void) => {
       ipcRenderer.removeAllListeners(IPC_CHANNELS.RUNNER_LOG)
       ipcRenderer.on(IPC_CHANNELS.RUNNER_LOG, (_event: Electron.IpcRendererEvent, line: string) => callback(line))

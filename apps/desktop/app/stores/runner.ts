@@ -134,6 +134,15 @@ export const useRunnerStore = defineStore('runner', {
       })
     },
 
+    /** Open Playwright's HTML report (per-test trace/replay) for the last run. */
+    async showReport() {
+      try {
+        await window.api.runner.showReport()
+      } catch (err) {
+        this.logs.push(`Could not open the report: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    },
+
     async loadWorkspaceTests() {
       try {
         this.workspaceTests = await window.api.runner.getWorkspaceTests()
@@ -142,7 +151,7 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
-    async runBatch(mode: 'headless' | 'ui', opts: { headed?: boolean } = {}) {
+    async runBatch(mode: 'headless' | 'ui', opts: { headed?: boolean; trace?: boolean } = {}) {
       if (this.isRunning) return
 
       this.isRunning = true
@@ -166,6 +175,7 @@ export const useRunnerStore = defineStore('runner', {
           mode,
           baseUrl: this.config.baseUrl || undefined,
           ...(opts.headed ? { headed: true } : {}),
+          ...(opts.trace ? { trace: true } : {}),
         }
 
         // Pass feature paths based on active tab filter

@@ -110,19 +110,30 @@ async function handleModeChange(mode: 'read' | 'edit') {
   }
 }
 
+/**
+ * The scenario store's `currentFeaturePath` is relative to the features dir
+ * ("login.feature"), but the runner's workspace tests key features by a path
+ * that includes it ("features/login.feature"). Resolve the open feature to the
+ * exact key the runner filters on, so a run targets only that feature.
+ */
+function resolveRunFeaturePath(current: string): string {
+  const features = runnerStore.workspaceTests?.features ?? []
+  const match = features.find((f) => f.relativePath === current || f.relativePath.endsWith(`/${current}`))
+  return match?.relativePath ?? current
+}
+
 async function enterRunView() {
   activeView.value = 'runner'
+  await runnerStore.loadWorkspaceTests()
 
   // First-entry auto-select: if a feature is currently being viewed, select it
   if (!runnerStore.hasEnteredRunView) {
     runnerStore.hasEnteredRunView = true
     if (scenarioStore.currentFeaturePath) {
-      runnerStore.config.selectedFeatures = [scenarioStore.currentFeaturePath]
+      runnerStore.config.selectedFeatures = [resolveRunFeaturePath(scenarioStore.currentFeaturePath)]
       runnerStore.config.activeFilterTab = 'features'
     }
   }
-
-  await runnerStore.loadWorkspaceTests()
 }
 
 function exitRunView() {
@@ -130,21 +141,22 @@ function exitRunView() {
 }
 
 /**
- * One-click run of the feature currently open in the editor: select it, switch
- * to the runner view so results stream in, and run it in a visible (headed)
- * browser so the user can watch the scenario replay.
+ * One-click run of the feature currently open in the editor: select ONLY it,
+ * switch to the runner view, and run it in a visible (headed) browser with
+ * tracing on so the user can watch the scenario replay and review it after.
  */
 async function quickRunCurrentSpec() {
-  const featurePath = scenarioStore.currentFeaturePath
-  if (!featurePath || runnerStore.isRunning) return
+  const current = scenarioStore.currentFeaturePath
+  if (!current || runnerStore.isRunning) return
+
+  activeView.value = 'runner'
+  await runnerStore.loadWorkspaceTests()
 
   runnerStore.hasEnteredRunView = true
-  runnerStore.config.selectedFeatures = [featurePath]
+  runnerStore.config.selectedFeatures = [resolveRunFeaturePath(current)]
   runnerStore.config.activeFilterTab = 'features'
-  activeView.value = 'runner'
 
-  await runnerStore.loadWorkspaceTests()
-  await runnerStore.runBatch('headless', { headed: true })
+  await runnerStore.runBatch('headless', { headed: true, trace: true })
 }
 
 // Git availability - hide if workspace is not a git repo

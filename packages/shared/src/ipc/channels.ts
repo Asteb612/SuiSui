@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
   RUNNER_RUN_BATCH: 'runner:runBatch',
   RUNNER_GET_WORKSPACE_TESTS: 'runner:getWorkspaceTests',
   RUNNER_STOP: 'runner:stop',
+  RUNNER_SHOW_REPORT: 'runner:showReport',
   RUNNER_LOG: 'runner:log',
 
   // Settings

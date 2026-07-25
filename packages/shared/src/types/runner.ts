@@ -47,6 +47,8 @@ export interface BatchRunOptions {
   baseUrl?: string
   /** Run with a visible browser (Playwright `--headed`) so the run can be watched. */
   headed?: boolean
+  /** Force tracing on (Playwright `--trace on`) so the run can be replayed after. */
+  trace?: boolean
 }
 
 export interface BatchRunResult {

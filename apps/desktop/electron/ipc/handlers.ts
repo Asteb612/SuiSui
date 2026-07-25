@@ -315,6 +315,10 @@ export function registerIpcHandlers(
     await runnerService.stop()
   })
 
+  ipcMain.handle(IPC_CHANNELS.RUNNER_SHOW_REPORT, async () => {
+    await runnerService.showReport()
+  })
+
   // Settings handlers
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => {
     return settingsService.get()

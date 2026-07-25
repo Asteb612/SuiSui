@@ -128,6 +128,16 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
         size="small"
         @click="runnerStore.showResults = false"
       />
+      <Button
+        v-if="runnerStore.batchResult && !runnerStore.isRunning"
+        icon="pi pi-video"
+        label="Watch replay"
+        text
+        size="small"
+        title="Open the Playwright report — click a test to replay its trace"
+        data-testid="watch-replay-btn"
+        @click="runnerStore.showReport()"
+      />
     </div>
 
     <!-- No results yet -->

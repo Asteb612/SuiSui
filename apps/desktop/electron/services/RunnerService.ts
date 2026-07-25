@@ -11,7 +11,7 @@ import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
 import { getDependencyService } from './DependencyService'
 import { getNodeService } from './NodeService'
-import type { ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
@@ -99,6 +99,37 @@ export class RunnerService {
       allTags: [...allTagsSet].sort(),
       folders: [...foldersSet].sort(),
     }
+  }
+
+  /**
+   * Open Playwright's HTML report for the last run in the user's browser. With
+   * tracing on, each test links a trace viewer (a filmstrip replay of the run).
+   * Spawned detached so the report server outlives this call.
+   */
+  async showReport(): Promise<void> {
+    const workspacePath = getWorkspaceService().getPath()
+    if (!workspacePath) throw new Error('No workspace selected')
+
+    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
+    if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
+
+    const nodeExec = await getNodeService().getNodePath()
+    if (!nodeExec) throw new Error('Node.js runtime not available')
+
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
+    const pathParts = [path.dirname(nodeExec)]
+    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
+      pathParts.push(path.join(workspaceNodeModules, '.bin'))
+    }
+    if (process.env.PATH) pathParts.push(process.env.PATH)
+
+    const child = spawn(nodeExec, [playwrightCliPath, 'show-report'], {
+      cwd: workspacePath,
+      env: { ...process.env, NODE_PATH: workspaceNodeModules, PATH: pathParts.join(path.delimiter) },
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
   }
 
   private async scanFeatureFiles(
@@ -302,6 +333,11 @@ export class RunnerService {
       // Headed: show the browser so the run can be watched (replay).
       if (options.headed) {
         playwrightArgs.push('--headed')
+      }
+      // Trace: record a trace per test so the run can be replayed afterwards
+      // (the HTML report links each test's trace viewer).
+      if (options.trace) {
+        playwrightArgs.push('--trace', 'on')
       }
     }
 
