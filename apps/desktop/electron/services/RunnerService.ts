@@ -102,34 +102,69 @@ export class RunnerService {
   }
 
   /**
-   * Open Playwright's HTML report for the last run in the user's browser. With
-   * tracing on, each test links a trace viewer (a filmstrip replay of the run).
-   * Spawned detached so the report server outlives this call.
+   * Open Playwright's HTML report for the last run. `show-report` serves it but
+   * does not reliably open a browser from a detached, non-TTY spawn, so we start
+   * (or reuse) the server on a fixed port, wait until it responds, then open it
+   * ourselves via the OS. Each test in the report links a trace viewer — a
+   * filmstrip replay of the run.
    */
   async showReport(): Promise<void> {
     const workspacePath = getWorkspaceService().getPath()
     if (!workspacePath) throw new Error('No workspace selected')
 
-    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
-    if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
-
-    const nodeExec = await getNodeService().getNodePath()
-    if (!nodeExec) throw new Error('Node.js runtime not available')
-
-    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
-    const pathParts = [path.dirname(nodeExec)]
-    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
-      pathParts.push(path.join(workspaceNodeModules, '.bin'))
+    if (!fs.existsSync(path.join(workspacePath, 'playwright-report', 'index.html'))) {
+      throw new Error('No report yet — run a test first, then watch the replay.')
     }
-    if (process.env.PATH) pathParts.push(process.env.PATH)
 
-    const child = spawn(nodeExec, [playwrightCliPath, 'show-report'], {
-      cwd: workspacePath,
-      env: { ...process.env, NODE_PATH: workspaceNodeModules, PATH: pathParts.join(path.delimiter) },
-      detached: true,
-      stdio: 'ignore',
-    })
-    child.unref()
+    const host = '127.0.0.1'
+    const port = 9323
+    const url = `http://${host}:${port}`
+
+    // Reuse an already-running report server (e.g. from a previous click).
+    if (!(await this.probeUrl(url))) {
+      const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
+      if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
+
+      const nodeExec = await getNodeService().getNodePath()
+      if (!nodeExec) throw new Error('Node.js runtime not available')
+
+      const workspaceNodeModules = path.join(workspacePath, 'node_modules')
+      const pathParts = [path.dirname(nodeExec)]
+      if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
+        pathParts.push(path.join(workspaceNodeModules, '.bin'))
+      }
+      if (process.env.PATH) pathParts.push(process.env.PATH)
+
+      const child = spawn(nodeExec, [playwrightCliPath, 'show-report', '--host', host, '--port', String(port)], {
+        cwd: workspacePath,
+        env: {
+          ...process.env,
+          NODE_PATH: workspaceNodeModules,
+          PATH: pathParts.join(path.delimiter),
+          PLAYWRIGHT_HTML_OPEN: 'never', // we open it ourselves
+        },
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+
+      // Wait until the server answers (up to ~6s).
+      for (let i = 0; i < 30 && !(await this.probeUrl(url)); i++) {
+        await new Promise((r) => setTimeout(r, 200))
+      }
+    }
+
+    const { shell } = await import('electron')
+    await shell.openExternal(url)
+  }
+
+  private async probeUrl(url: string): Promise<boolean> {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(500) })
+      return res.ok
+    } catch {
+      return false
+    }
   }
 
   private async scanFeatureFiles(
