@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import type { WorkspaceVariable } from '@suisui/shared'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 
@@ -16,6 +17,7 @@ const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
 
 const baseUrl = ref('')
+const variables = ref<WorkspaceVariable[]>([])
 const saving = ref(false)
 
 /** The workspace's configured default, shown as a placeholder/hint. */
@@ -31,13 +33,24 @@ watch(
     if (!visible) return
     await runnerStore.loadConfig()
     baseUrl.value = runnerStore.config.baseUrl ?? ''
+    variables.value = await window.api.variables.get()
   }
 )
+
+function addVariable() {
+  variables.value.push({ name: '', value: '', secret: false })
+}
+
+function removeVariable(index: number) {
+  variables.value.splice(index, 1)
+}
 
 async function onSave() {
   saving.value = true
   try {
     await runnerStore.setBaseUrl(baseUrl.value.trim())
+    // De-proxy the reactive array so it can cross IPC (structured clone).
+    await window.api.variables.set(JSON.parse(JSON.stringify(variables.value)))
     emit('update:visible', false)
   } finally {
     saving.value = false
@@ -78,6 +91,82 @@ async function onSave() {
               It is passed to Playwright as <code>BASE_URL</code>.
             </template>
           </small>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-header">
+          <h4 class="group-title">
+            Variables &amp; Secrets
+          </h4>
+          <Button
+            label="Add"
+            icon="pi pi-plus"
+            text
+            size="small"
+            data-testid="settings-add-variable"
+            @click="addVariable"
+          />
+        </div>
+        <small class="hint">
+          Available to every feature file at run time. Reference one as
+          <code>${NAME}</code> in a scenario (recorded secrets already do) and it resolves
+          to its value. Secret values are encrypted on disk and never written to a .feature.
+        </small>
+        <div
+          v-if="variables.length === 0"
+          class="vars-empty"
+        >
+          No variables yet.
+        </div>
+        <div
+          v-for="(variable, index) in variables"
+          :key="index"
+          class="var-row"
+          data-testid="variable-row"
+        >
+          <InputText
+            v-model="variable.name"
+            placeholder="NAME"
+            class="var-name"
+            data-testid="variable-name"
+          />
+          <Password
+            v-if="variable.secret"
+            v-model="variable.value"
+            :feedback="false"
+            toggle-mask
+            placeholder="value"
+            input-class="w-full"
+            class="var-value"
+            data-testid="variable-value"
+          />
+          <InputText
+            v-else
+            v-model="variable.value"
+            placeholder="value"
+            class="var-value"
+            data-testid="variable-value"
+          />
+          <label
+            class="var-secret"
+            :title="'Store this value as a secret (encrypted, masked)'"
+          >
+            <Checkbox
+              v-model="variable.secret"
+              binary
+            />
+            Secret
+          </label>
+          <Button
+            icon="pi pi-trash"
+            text
+            size="small"
+            severity="danger"
+            aria-label="Remove variable"
+            data-testid="variable-remove"
+            @click="removeVariable(index)"
+          />
         </div>
       </section>
 
@@ -139,6 +228,43 @@ async function onSave() {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--text-color-secondary);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vars-empty {
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  font-style: italic;
+}
+
+.var-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.var-name {
+  flex: 0 0 34%;
+  font-family: var(--font-family-mono, monospace);
+}
+
+.var-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.var-secret {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
   color: var(--text-color-secondary);
 }
 

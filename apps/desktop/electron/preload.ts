@@ -64,6 +64,11 @@ const api: ElectronAPI = {
     reset: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_RESET),
   },
 
+  variables: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.VARIABLES_GET),
+    set: (variables) => ipcRenderer.invoke(IPC_CHANNELS.VARIABLES_SET, variables),
+  },
+
   app: {
     getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_VERSION),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, url),

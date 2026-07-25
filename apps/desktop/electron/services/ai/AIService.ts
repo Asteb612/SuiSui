@@ -108,9 +108,6 @@ export class AIService {
    * Gherkin is validated downstream before it can be accepted.
    */
   private buildPrompt(req: AIStreamRequest): string {
-    if (req.kind === 'scenario') {
-      return this.buildScenarioPrompt(req)
-    }
     if (req.kind === 'step-match') {
       return this.buildStepMatchPrompt(req)
     }
@@ -205,23 +202,6 @@ export class AIService {
       stepList || '(none provided)',
       '',
       `User action: ${req.input}`,
-    ].join('\n')
-  }
-
-  private buildScenarioPrompt(req: AIStreamRequest): string {
-    const stepList = req.context.steps
-      .map((s) => `- ${s.keyword} ${s.pattern}`)
-      .join('\n')
-    return [
-      'You are helping author a Gherkin .feature scenario for a BDD test.',
-      'Reuse the EXISTING step definitions below wherever they match the intent;',
-      'prefer them over inventing new steps. Output ONLY valid Gherkin (a Feature',
-      'with one Scenario), no explanations, no code fences.',
-      '',
-      'Existing steps:',
-      stepList || '(none provided)',
-      '',
-      `Describe-this-scenario request: ${req.input}`,
     ].join('\n')
   }
 

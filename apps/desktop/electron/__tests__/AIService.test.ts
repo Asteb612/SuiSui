@@ -36,7 +36,7 @@ function fakeCreds(hasKey: boolean): AICredentialsService {
 }
 
 const emptyRequest = (input = 'hi'): AIStreamRequest => ({
-  kind: 'scenario',
+  kind: 'failure-explain',
   input,
   context: { steps: [], scenarioText: null, targetStep: null },
 })
@@ -103,40 +103,6 @@ describe('AIService', () => {
     expect(status.available).toBe(false)
   })
 
-  it('scenario use case: prompt embeds existing steps and instructs reuse (FR-007)', async () => {
-    const provider = new FakeAIProvider({ chunks: ['Feature: X'] })
-    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
-
-    await collect(
-      service.stream({
-        kind: 'scenario',
-        input: 'a user logs in',
-        context: {
-          steps: [
-            { keyword: 'Given', pattern: 'I am logged in as {string}' } as never,
-            { keyword: 'Then', pattern: 'I should see {string}' } as never,
-          ],
-          scenarioText: null,
-          targetStep: null,
-        },
-      })
-    )
-
-    // The provider receives the BUILT prompt as `input`.
-    const builtPrompt = provider.callHistory[0]!.input
-    expect(builtPrompt).toContain('I am logged in as {string}')
-    expect(builtPrompt).toContain('I should see {string}')
-    expect(builtPrompt).toContain('a user logs in')
-    expect(builtPrompt.toLowerCase()).toContain('reuse')
-  })
-
-  it('scenario use case: stream assembles the full draft from deltas', async () => {
-    const provider = new FakeAIProvider({ chunks: ['Feature: Login\n', '  Scenario: valid\n', '    Given I am logged in\n'] })
-    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
-
-    const draft = await collect(service.stream(emptyRequest('log in')))
-    expect(draft).toBe('Feature: Login\n  Scenario: valid\n    Given I am logged in\n')
-  })
 
   it('step-match use case: prompt embeds the action, existing steps, and a NONE escape (FR-010)', async () => {
     const provider = new FakeAIProvider({ chunks: ['Given I am logged in as {string}'] })

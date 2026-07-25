@@ -44,6 +44,10 @@ export const IPC_CHANNELS = {
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
 
+  // Variables / secrets (global, injected into the test-run env)
+  VARIABLES_GET: 'variables:get',
+  VARIABLES_SET: 'variables:set',
+
   // App
   APP_GET_VERSION: 'app:getVersion',
   APP_OPEN_EXTERNAL: 'app:openExternal',

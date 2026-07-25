@@ -11,6 +11,7 @@ import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
 import { getDependencyService } from './DependencyService'
 import { getNodeService } from './NodeService'
+import { getVariablesService } from './VariablesService'
 import type { ChildProcess } from 'node:child_process'
 import http from 'node:http'
 import path from 'node:path'
@@ -301,6 +302,9 @@ export class RunnerService {
         : options.baseUrl
 
     const env: Record<string, string> = {
+      // User-defined variables/secrets first so `${NAME}` resolves; runner-critical
+      // vars below win if a variable happens to share their name.
+      ...getVariablesService().resolveEnv(),
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
       NODE_PATH: workspaceNodeModules,
       PATH: pathParts.join(path.delimiter),
@@ -546,6 +550,7 @@ export class RunnerService {
     }
 
     const env: Record<string, string> = {
+      ...getVariablesService().resolveEnv(),
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
       ...(featurePath ? { FEATURE: featurePath } : {}),
       NODE_PATH: workspaceNodeModules,

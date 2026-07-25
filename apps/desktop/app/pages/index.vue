@@ -83,7 +83,6 @@ const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
 const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
-const showAiGenerationDialog = ref(false)
 const showRecorder = ref(false)
 const showRecorderScenarioDialog = ref(false)
 const showValidationDialog = ref(false)
@@ -169,7 +168,7 @@ function toggleEditMode() {
 }
 
 onMounted(async () => {
-  // Load AI config so the "Generate with AI" entry point reflects configuration (FR-014).
+  // Load AI config so the AI entry points (explain/fix failure) reflect configuration.
   void aiStore.loadConfig()
   await workspaceStore.loadWorkspace()
   if (!isMounted.value) return
@@ -291,15 +290,6 @@ function cancelInit() {
         text
         size="small"
         @click="showHelpDialog = true"
-      />
-      <Button
-        v-if="aiStore.isConfigured && workspaceStore.hasWorkspace"
-        label="Generate with AI"
-        icon="pi pi-sparkles"
-        text
-        size="small"
-        data-testid="ai-generate-btn"
-        @click="showAiGenerationDialog = true"
       />
       <Button
         v-if="workspaceStore.hasWorkspace"
@@ -661,7 +651,6 @@ function cancelInit() {
       @open-ai-settings="() => { showSettingsDialog = false; showAiSettingsDialog = true }"
     />
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
-    <AiGenerationDialog v-model:visible="showAiGenerationDialog" />
     <RecorderPanel
       v-model:visible="showRecorder"
       :start-url="runnerStore.effectiveBaseUrl"

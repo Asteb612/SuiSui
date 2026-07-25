@@ -4,6 +4,7 @@ import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions, StepSource
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
+import type { WorkspaceVariable } from '../types/variables'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
 import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
@@ -80,6 +81,12 @@ export interface ElectronAPI {
     get: () => Promise<AppSettings>
     set: (settings: Partial<AppSettings>) => Promise<void>
     reset: () => Promise<void>
+  }
+
+  variables: {
+    /** All user-defined variables/secrets (available to every feature at run time). */
+    get: () => Promise<WorkspaceVariable[]>
+    set: (variables: WorkspaceVariable[]) => Promise<void>
   }
 
   app: {

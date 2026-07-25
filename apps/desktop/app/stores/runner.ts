@@ -134,7 +134,8 @@ export const useRunnerStore = defineStore('runner', {
     async persistConfig() {
       await window.api.settings.set({
         baseUrl: this.config.baseUrl || null,
-        runConfiguration: { ...this.config },
+        // De-proxy: nested reactive arrays can't be structured-cloned across IPC.
+        runConfiguration: JSON.parse(JSON.stringify(this.config)),
       })
     },
 

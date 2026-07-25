@@ -1,5 +1,6 @@
 export * from './CommandRunner'
 export * from './SettingsService'
+export * from './VariablesService'
 export * from './WorkspaceService'
 export * from './FeatureService'
 export * from './StepCatalogService'

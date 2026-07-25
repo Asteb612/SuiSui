@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -9,6 +9,7 @@ import {
   getValidationService,
   getRunnerService,
   getSettingsService,
+  getVariablesService,
   getNodeService,
   getDependencyService,
   getGitWorkspaceService,
@@ -332,6 +333,15 @@ export function registerIpcHandlers(
     await settingsService.reset()
   })
 
+  // Variables / secrets handlers
+  ipcMain.handle(IPC_CHANNELS.VARIABLES_GET, async () => {
+    return getVariablesService().getAll()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.VARIABLES_SET, async (_event, variables: unknown) => {
+    getVariablesService().setAll(validateVariables(variables))
+  })
+
   // Node runtime handlers
   ipcMain.handle(IPC_CHANNELS.NODE_ENSURE_RUNTIME, async () => {
     return nodeService.ensureRuntime()
@@ -445,14 +455,6 @@ export function registerIpcHandlers(
       provider: new FakeAIProvider({
         responder: (req) => {
           switch (req.kind) {
-            case 'scenario':
-              return [
-                'Feature: AI generated\n',
-                '\n',
-                '  Scenario: generated flow\n',
-                '    Given I am on the "home" page\n',
-                '    Then I should see "Welcome"\n',
-              ]
             case 'step-match': {
               const first = req.context.steps[0]
               return [first ? `${first.keyword} ${first.pattern}` : 'NONE']
@@ -463,6 +465,8 @@ export function registerIpcHandlers(
             }
             case 'failure-explain':
               return ['The target element was not found. ', 'Verify the selector and re-run the test.']
+            case 'failure-fix':
+              return ['Quote the value so it matches the step: ', "with '${PASSWORD}'"]
             default:
               return ['Fake']
           }
@@ -620,6 +624,19 @@ export function registerIpcHandlers(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** Coerce untrusted renderer input into a clean WorkspaceVariable[] (FR: typed IPC). */
+function validateVariables(value: unknown): WorkspaceVariable[] {
+  if (!Array.isArray(value)) return []
+  const out: WorkspaceVariable[] = []
+  for (const v of value) {
+    if (!isRecord(v)) continue
+    const name = typeof v.name === 'string' ? v.name : ''
+    const val = typeof v.value === 'string' ? v.value : ''
+    out.push({ name, value: val, secret: v.secret === true })
+  }
+  return out
 }
 
 /** Ensure a URL has a scheme (http for localhost, https otherwise). */
