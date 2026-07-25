@@ -7,7 +7,6 @@ import TableEditor from './TableEditor.vue'
 import TagsEditor from './TagsEditor.vue'
 import ExamplesEditor from './ExamplesEditor.vue'
 import StepAddDialog from './StepAddDialog.vue'
-import RecorderPanel from './recorder/RecorderPanel.vue'
 import { parseTableValue } from '~/utils/tableUtils'
 import { useThrottle } from '~/composables/useThrottle'
 import { stripAnchors, parseSegments as sharedParseSegments, getOutlinePlaceholder } from '@suisui/shared'
@@ -37,6 +36,7 @@ const props = withDefaults(
 
 defineEmits<{
   'toggle-edit-mode': []
+  record: []
 }>()
 
 const scenarioStore = useScenarioStore()
@@ -104,8 +104,6 @@ const showAddStepDialog = ref(false)
 const addStepTarget = ref<'scenario' | 'background'>('scenario')
 const addStepIndex = ref(0)
 
-// Recorder panel state
-const showRecorder = ref(false)
 
 // Mode helpers (using prop from parent)
 const isReadMode = computed(() => props.viewMode === 'read')
@@ -625,7 +623,7 @@ function selectScenario(index: number) {
             severity="danger"
             title="Record a scenario in the browser"
             data-testid="record-btn"
-            @click="showRecorder = true"
+            @click="$emit('record')"
           />
         </template>
       </div>
@@ -965,7 +963,7 @@ function selectScenario(index: number) {
                   severity="danger"
                   size="small"
                   data-testid="record-btn-empty"
-                  @click="showRecorder = true"
+                  @click="$emit('record')"
                 />
               </div>
             </div>
@@ -1545,8 +1543,6 @@ function selectScenario(index: number) {
       :insert-index="addStepIndex"
       @add="handleAddStep"
     />
-
-    <RecorderPanel v-model:visible="showRecorder" />
   </div>
 </template>
 

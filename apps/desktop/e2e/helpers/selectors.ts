@@ -57,6 +57,7 @@ export const SEL = {
 
   // Test runner view
   sidebarRunBtn: '[data-testid="sidebar-run-btn"]',
+  quickRunBtn: '[data-testid="quick-run-btn"]',
   backToEditorBtn: '[data-testid="back-to-editor-btn"]',
 
   // Validation
@@ -78,6 +79,7 @@ export const SEL = {
   // Recorder (feature 007-native-recorder)
   recordBtn: '[data-testid="record-btn"]',
   recordBtnEmpty: '[data-testid="record-btn-empty"]',
+  recordBtnGlobal: '[data-testid="record-btn-global"]',
   recorderPanel: '[data-testid="recorder-panel"]',
   recorderStart: '[data-testid="recorder-start"]',
   recorderStop: '[data-testid="recorder-stop"]',

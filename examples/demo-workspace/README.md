@@ -52,14 +52,17 @@ starts `server.mjs` automatically, so you don't need a separate terminal.
 
 ## 4. Try the Recorder
 
-The Recorder drives a **real browser** against a URL, so start the site first
-(the Recorder does not run `playwright test`, so it won't auto-start it):
+The Recorder drives a **real browser** against a URL, so the demo site must be
+running. If you started SuiSui with `pnpm dev` from the repo root, the site is
+**already served on `http://localhost:5173`** (dev starts it for you). Otherwise
+start it yourself:
 
 ```bash
 npm run serve     # serves http://localhost:5173
 ```
 
-Then, in SuiSui, open a scenario in edit mode and click **Record**:
+Then, in SuiSui, click the header **Record** button (beside *Generate with AI*),
+or open a scenario in edit mode and click **Record**:
 
 1. A headed browser opens on the demo site — **no Playwright Inspector, no
    in-page overlay** (SuiSui suppresses it and shows its own picker/highlight).

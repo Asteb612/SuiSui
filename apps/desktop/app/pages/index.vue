@@ -6,6 +6,7 @@ import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
+import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
@@ -80,6 +81,7 @@ const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
 const showAiSettingsDialog = ref(false)
 const showAiGenerationDialog = ref(false)
+const showRecorder = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -121,6 +123,23 @@ async function enterRunView() {
 
 function exitRunView() {
   activeView.value = 'editor'
+}
+
+/**
+ * One-click run of the feature currently open in the editor: select it, switch
+ * to the runner view so results stream in, and run it headless immediately.
+ */
+async function quickRunCurrentSpec() {
+  const featurePath = scenarioStore.currentFeaturePath
+  if (!featurePath || runnerStore.isRunning) return
+
+  runnerStore.hasEnteredRunView = true
+  runnerStore.config.selectedFeatures = [featurePath]
+  runnerStore.config.activeFilterTab = 'features'
+  activeView.value = 'runner'
+
+  await runnerStore.loadWorkspaceTests()
+  await runnerStore.runBatch('headless')
 }
 
 // Git availability - hide if workspace is not a git repo
@@ -249,6 +268,17 @@ function cancelInit() {
         size="small"
         data-testid="ai-generate-btn"
         @click="showAiGenerationDialog = true"
+      />
+      <Button
+        v-if="workspaceStore.hasWorkspace"
+        label="Record"
+        icon="pi pi-circle-fill"
+        text
+        size="small"
+        severity="danger"
+        title="Record a scenario in the browser"
+        data-testid="record-btn-global"
+        @click="showRecorder = true"
       />
       <Button
         icon="pi pi-cog"
@@ -422,6 +452,22 @@ function cancelInit() {
               <h3>{{ activeView === 'runner' ? 'Test Runner' : (scenarioStore.featureName || 'Scenario') }}</h3>
             </div>
             <div class="header-actions">
+              <!-- Quick run: run the currently open feature in one click -->
+              <Button
+                v-if="activeView === 'editor' && scenarioStore.currentFeaturePath"
+                icon="pi pi-play"
+                label="Run"
+                text
+                size="small"
+                severity="success"
+                data-testid="quick-run-btn"
+                :loading="runnerStore.isRunning"
+                :disabled="runnerStore.isRunning || (currentViewMode === 'edit' && scenarioStore.isDirty)"
+                :title="currentViewMode === 'edit' && scenarioStore.isDirty
+                  ? 'Save changes before running'
+                  : 'Run this feature'"
+                @click="quickRunCurrentSpec"
+              />
               <!-- Mode Controls -->
               <div
                 v-if="activeView === 'editor' && (scenarioStore.currentFeaturePath || scenarioStore.scenario.name)"
@@ -535,6 +581,7 @@ function cancelInit() {
               :edit-mode="editMode"
               :view-mode="currentViewMode"
               @toggle-edit-mode="toggleEditMode"
+              @record="showRecorder = true"
             />
           </div>
         </section>
@@ -579,6 +626,10 @@ function cancelInit() {
     <!-- Dialogs -->
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
     <AiGenerationDialog v-model:visible="showAiGenerationDialog" />
+    <RecorderPanel
+      v-model:visible="showRecorder"
+      :start-url="runnerStore.baseUrl"
+    />
 
     <NewScenarioDialog
       v-model:visible="showNewScenarioDialog"

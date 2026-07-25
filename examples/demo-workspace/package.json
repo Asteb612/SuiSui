@@ -6,7 +6,11 @@
   "scripts": {
     "serve": "node server.mjs",
     "test": "bddgen && playwright test",
-    "test:ui": "bddgen && playwright test --ui"
+    "test:ui": "bddgen && playwright test --ui",
+    "test:headed": "bddgen && playwright test --headed",
+    "test:debug": "bddgen && playwright test --debug",
+    "bddgen": "bddgen",
+    "bddgen:export": "bddgen export"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0",

@@ -7,7 +7,7 @@ import StepMatchSelector from './StepMatchSelector.vue'
 import LocatorCandidateSelector from './LocatorCandidateSelector.vue'
 import AssertionPicker from './AssertionPicker.vue'
 
-const props = defineProps<{ visible: boolean }>()
+const props = defineProps<{ visible: boolean; startUrl?: string }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; inserted: [count: number] }>()
 
 const recorder = useRecorderStore()
@@ -20,7 +20,7 @@ const dialogVisible = computed({
 const isActive = computed(() => recorder.status === 'recording' || recorder.status === 'paused')
 
 async function start() {
-  await recorder.startRecording({})
+  await recorder.startRecording(props.startUrl ? { startUrl: props.startUrl } : {})
 }
 
 async function togglePause() {

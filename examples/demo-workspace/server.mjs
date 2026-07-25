@@ -40,6 +40,19 @@ const server = createServer(async (req, res) => {
   }
 })
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    // The demo site is already being served (e.g. you ran `npm run serve` too).
+    // Stay alive and idle so a `concurrently -k` dev session isn't torn down.
+    console.log(`Port ${port} already in use — assuming the demo site is already running.`)
+    setInterval(() => {}, 1 << 30)
+  } else {
+    console.error(err)
+    process.exit(1)
+  }
+})
+
 server.listen(port, () => {
   console.log(`Demo site running at http://localhost:${port}`)
 })
+

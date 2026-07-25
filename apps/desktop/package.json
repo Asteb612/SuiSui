@@ -28,7 +28,8 @@
   },
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "pnpm build:deps && concurrently -k \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron:preload\" \"pnpm dev:electron\"",
+    "dev": "pnpm build:deps && concurrently -k \"pnpm dev:example\" \"pnpm dev:nuxt\" \"pnpm dev:electron:watch\" \"pnpm dev:electron:preload\" \"pnpm dev:electron\"",
+    "dev:example": "node ../../examples/demo-workspace/server.mjs",
     "dev:nuxt": "nuxt dev --port 3000",
     "dev:electron": "wait-on http://localhost:3000 dist-electron/preload.bundle.js && electron --no-sandbox .",
     "dev:electron:watch": "node scripts/cleanup-dev.js && node scripts/copy-assets.js && tsc -p electron/tsconfig.json --watch",
