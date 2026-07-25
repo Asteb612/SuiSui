@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Console — Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <strong>Acme Console</strong>
+      <nav>
+        <a href="dashboard.html" data-testid="nav-tasks">Tasks</a>
+        <button type="button" data-testid="logout">Log out</button>
+      </nav>
+    </header>
+
+    <main class="dashboard">
+      <h1 data-testid="welcome">Welcome</h1>
+      <p data-testid="user-greeting">Signed in as <span id="user">a guest</span></p>
+
+      <section aria-labelledby="add-heading">
+        <h2 id="add-heading">Add a task</h2>
+        <form id="task-form">
+          <div class="field">
+            <label for="task-title">Title</label>
+            <input
+              id="task-title"
+              name="title"
+              data-testid="task-title"
+              placeholder="What needs doing?"
+            />
+          </div>
+
+          <div class="field">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority" name="priority" data-testid="task-priority">
+              <option>Low</option>
+              <option>Medium</option>
+              <option>High</option>
+            </select>
+          </div>
+
+          <label class="checkbox">
+            <input type="checkbox" name="urgent" data-testid="task-urgent" />
+            Mark as urgent
+          </label>
+
+          <button type="submit" data-testid="add-task">Add task</button>
+        </form>
+      </section>
+
+      <section aria-labelledby="list-heading">
+        <h2 id="list-heading">Your tasks</h2>
+        <ul id="task-list" data-testid="task-list" class="tasks"></ul>
+        <p id="empty" data-testid="empty-state">No tasks yet.</p>
+      </section>
+    </main>
+
+    <script>
+      document.getElementById('user').textContent =
+        sessionStorage.getItem('demo-user') || 'a guest'
+
+      const list = document.getElementById('task-list')
+      const empty = document.getElementById('empty')
+
+      document.getElementById('task-form').addEventListener('submit', (event) => {
+        event.preventDefault()
+        const title = document.getElementById('task-title').value.trim()
+        if (!title) return
+        const priority = document.getElementById('task-priority').value
+        const urgent = document.querySelector('[name="urgent"]').checked
+
+        const item = document.createElement('li')
+        item.setAttribute('data-testid', 'task-item')
+        item.textContent = `${title} — ${priority}${urgent ? ' (urgent)' : ''}`
+        list.appendChild(item)
+
+        empty.hidden = true
+        event.target.reset()
+      })
+
+      document.querySelector('[data-testid="logout"]').addEventListener('click', () => {
+        sessionStorage.removeItem('demo-user')
+        window.location.href = 'index.html'
+      })
+    </script>
+  </body>
+</html>

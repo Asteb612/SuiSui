@@ -90,6 +90,26 @@ window.__suisuiFp = function (el) {
     autocomplete: attrs['autocomplete'] || null, classSelector: classSelector
   };
 };
+window.__suisuiCount = function (sel) { try { return document.querySelectorAll(sel).length } catch (e) { return -1 } };
+// Snapshot the target at pointerdown — BEFORE any click handler can navigate —
+// so submit buttons that redirect still keep a real, counted locator. Sent to
+// the child via the exposed binding (in flight before navigation commits).
+window.addEventListener('pointerdown', function (e) {
+  try {
+    var el = (e.composedPath && e.composedPath()[0]) || e.target;
+    var fp = window.__suisuiFp(el);
+    var counts = {};
+    if (fp) {
+      var q = function (s) { return String(s).replace(/"/g, '\\\\"'); };
+      for (var k in fp.testAttributes) counts['testId:' + k] = window.__suisuiCount('[' + k + '="' + q(fp.testAttributes[k]) + '"]');
+      if (fp.id) counts['id'] = window.__suisuiCount('[id="' + q(fp.id) + '"]');
+      if (fp.name) counts['name'] = window.__suisuiCount('[name="' + q(fp.name) + '"]');
+      if (fp.placeholder) counts['placeholder'] = window.__suisuiCount('[placeholder="' + q(fp.placeholder) + '"]');
+      if (fp.classSelector) counts['css'] = window.__suisuiCount(fp.classSelector);
+    }
+    if (window.__suisuiCapture) window.__suisuiCapture({ fp: fp, counts: counts });
+  } catch (err) {}
+}, true);
 `
 
 // --- secret classification (mirrors electron/services/recorder/secretDetection) ---
@@ -145,6 +165,24 @@ async function enrichCandidates(page, fp) {
   return out
 }
 
+/**
+ * Build candidates from a pointerdown snapshot when the live element is gone
+ * (a click that navigated). Only kinds counted in-page pre-navigation are
+ * emitted, so uniqueness stays truthful; role/label/text are dropped rather
+ * than faked, and testId/id/name (the reliable ones) survive with real counts.
+ */
+function candidatesFromSnapshot(fp, counts) {
+  return buildCandidateDescriptors(fp)
+    .map((c) => {
+      let key = null
+      if (c.kind === 'testId') key = 'testId:' + c.attribute
+      else if (c.kind === 'id' || c.kind === 'name' || c.kind === 'placeholder' || c.kind === 'css') key = c.kind
+      if (key == null || counts[key] == null) return null
+      return { ...c, matchedElements: counts[key] }
+    })
+    .filter(Boolean)
+}
+
 // --- main -------------------------------------------------------------------
 let pw
 try {
@@ -171,6 +209,8 @@ let activePage = null
 let seq = 0
 let currentSeq = -1
 let shuttingDown = false
+/** Fingerprint + queryable counts captured at the last pointerdown (pre-navigation). */
+let lastPointer = null
 
 // Serial enrichment queue so actions emit in capture order.
 let queue = Promise.resolve()
@@ -216,9 +256,16 @@ async function enrichAction(page, a, isUpdate) {
   const usedSeq = isUpdate ? currentSeq : (currentSeq = seq++)
 
   let fp = null
+  let fromSnapshot = false
   try {
     if (raw.selector) fp = await page.locator(raw.selector).first().evaluate((el) => window.__suisuiFp(el))
   } catch (e) {}
+  // The live element is gone (e.g. a click that navigated) — fall back to the
+  // pointerdown snapshot captured before the navigation.
+  if (!fp && lastPointer && lastPointer.fp) {
+    fp = lastPointer.fp
+    fromSnapshot = true
+  }
 
   const secret = isSensitive(fp)
   const action = { name: name }
@@ -235,7 +282,7 @@ async function enrichAction(page, a, isUpdate) {
   let candidates = []
   if (fp) {
     try {
-      candidates = await enrichCandidates(page, fp)
+      candidates = fromSnapshot ? candidatesFromSnapshot(fp, lastPointer.counts || {}) : await enrichCandidates(page, fp)
     } catch (e) {}
   }
 
@@ -352,6 +399,10 @@ async function main() {
     process.exit(0)
   }
 
+  // Receives each pointerdown snapshot (fingerprint + pre-navigation counts).
+  try {
+    await context.exposeBinding('__suisuiCapture', (_src, data) => { lastPointer = data })
+  } catch (e) {}
   await context.addInitScript(INJECT).catch(() => {})
   context.on('page', (page) => trackPage(page))
 

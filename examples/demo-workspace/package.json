@@ -1,0 +1,15 @@
+{
+  "name": "suisui-demo-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A self-contained SuiSui demo workspace with a local website to record and run BDD tests against.",
+  "scripts": {
+    "serve": "node server.mjs",
+    "test": "bddgen && playwright test",
+    "test:ui": "bddgen && playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "playwright-bdd": "^8.0.0"
+  }
+}

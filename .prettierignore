@@ -1,0 +1,10 @@
+**/node_modules/**
+**/dist/**
+**/dist-electron/**
+**/.nuxt/**
+**/.output/**
+**/coverage/**
+**/*-lock.json
+pnpm-lock.yaml
+# Standalone example workspaces have their own toolchain/deps.
+examples/**

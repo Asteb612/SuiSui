@@ -16,6 +16,8 @@ export default tseslint.config(
       '**/.output/**',
       '**/dist-electron/**',
       '**/coverage/**',
+      // Standalone example workspaces have their own toolchain/deps.
+      'examples/**',
     ],
   },
   {

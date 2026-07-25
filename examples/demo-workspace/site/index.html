@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Console — Sign in</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="card" aria-labelledby="heading">
+      <h1 id="heading">Acme Console</h1>
+      <p class="subtitle">Sign in to your account</p>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            data-testid="email-input"
+            autocomplete="username"
+            placeholder="you@example.com"
+          />
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            data-testid="password-input"
+            autocomplete="current-password"
+          />
+        </div>
+
+        <label class="checkbox">
+          <input type="checkbox" name="remember" data-testid="remember-me" />
+          Remember me
+        </label>
+
+        <button type="submit" data-testid="login-submit">Sign in</button>
+
+        <p id="error" class="error" role="alert" hidden>Invalid credentials</p>
+      </form>
+
+      <p class="hint">
+        Demo credentials: <code>arthur@example.com</code> / <code>secret123</code>
+      </p>
+    </main>
+
+    <script>
+      const form = document.getElementById('login-form')
+      form.addEventListener('submit', (event) => {
+        event.preventDefault()
+        const email = document.getElementById('email').value.trim()
+        const password = document.getElementById('password').value
+        const error = document.getElementById('error')
+        // Toy client-side auth so the demo is self-contained (no backend).
+        if (email && password === 'secret123') {
+          sessionStorage.setItem('demo-user', email)
+          window.location.href = 'dashboard.html'
+        } else {
+          error.hidden = false
+        }
+      })
+    </script>
+  </body>
+</html>
