@@ -399,6 +399,17 @@ describe('PatternProcessor', () => {
       expect(result).toBe('I wait 5 seconds')
     })
 
+    it('single-quote-wraps a string value containing double quotes (recorder selectors)', () => {
+      // A recorded testId selector must stay valid Gherkin, not nest double quotes.
+      const result = resolvePattern('I click on {string}', [
+        { type: 'string', value: '[data-testid="email-input"]' },
+      ])
+      expect(result).toBe(`I click on '[data-testid="email-input"]'`)
+      // It round-trips back to the exact selector.
+      const back = result.match(new RegExp(patternToRegex('I click on {string}')))
+      expect(back?.[1]?.replace(/^["']|["']$/g, '')).toBe('[data-testid="email-input"]')
+    })
+
     it('handles mixed enum and string args', () => {
       const result = resolvePattern(
         '(admin|user) fills {string}',
