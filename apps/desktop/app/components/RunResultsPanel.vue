@@ -2,7 +2,6 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
-import type { FeatureRunResult } from '@suisui/shared'
 
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
@@ -73,28 +72,8 @@ watch(
     })
   },
 )
-const expandedFeatures = ref<Set<string>>(new Set())
-
-function toggleFeature(path: string) {
-  if (expandedFeatures.value.has(path)) {
-    expandedFeatures.value.delete(path)
-  } else {
-    expandedFeatures.value.add(path)
-  }
-}
-
-function statusIcon(status: string): string {
-  switch (status) {
-    case 'passed':
-      return 'pi pi-check-circle'
-    case 'failed':
-      return 'pi pi-times-circle'
-    case 'skipped':
-      return 'pi pi-minus-circle'
-    default:
-      return 'pi pi-circle'
-  }
-}
+// Logs are noisy and hidden by default; the integrated report is the main view.
+const showLogs = ref(false)
 
 function statusClass(status: string): string {
   return `status-${status}`
@@ -104,45 +83,10 @@ function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
-
-function featureScenarioSummary(feature: FeatureRunResult): string {
-  const passed = feature.scenarioResults.filter((s) => s.status === 'passed').length
-  const failed = feature.scenarioResults.filter((s) => s.status === 'failed').length
-  const skipped = feature.scenarioResults.filter((s) => s.status === 'skipped').length
-  const parts: string[] = []
-  if (passed) parts.push(`${passed} passed`)
-  if (failed) parts.push(`${failed} failed`)
-  if (skipped) parts.push(`${skipped} skipped`)
-  return parts.join(', ')
-}
 </script>
 
 <template>
   <div class="run-results-panel">
-    <!-- In-app Playwright report (results + per-test trace replay) -->
-    <div
-      v-if="runnerStore.reportUrl"
-      class="report-view"
-      data-testid="report-view"
-    >
-      <div class="report-toolbar">
-        <Button
-          icon="pi pi-arrow-left"
-          label="Back to results"
-          text
-          size="small"
-          data-testid="close-report-btn"
-          @click="runnerStore.closeReport()"
-        />
-        <span class="report-hint">Playwright report — click a test to replay its trace</span>
-      </div>
-      <iframe
-        :src="runnerStore.reportUrl"
-        class="report-frame"
-        title="Playwright report"
-      />
-    </div>
-
     <!-- Back to Filters button -->
     <div class="results-header">
       <Button
@@ -152,15 +96,15 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
         size="small"
         @click="runnerStore.showResults = false"
       />
+      <div class="results-header-spacer" />
       <Button
-        v-if="runnerStore.batchResult && !runnerStore.isRunning"
-        icon="pi pi-video"
-        label="Watch replay"
+        v-if="runnerStore.batchResult && !runnerStore.isRunning && runnerStore.logs.length > 0"
+        :icon="showLogs ? 'pi pi-eye-slash' : 'pi pi-list'"
+        :label="showLogs ? 'Hide logs' : 'Show logs'"
         text
         size="small"
-        title="Open the Playwright report — click a test to replay its trace"
-        data-testid="watch-replay-btn"
-        @click="runnerStore.showReport()"
+        data-testid="toggle-logs-btn"
+        @click="showLogs = !showLogs"
       />
     </div>
 
@@ -274,67 +218,7 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
         >{{ explanation }}</pre>
       </div>
 
-      <!-- Feature Results List -->
-      <div class="feature-results">
-        <div
-          v-for="feature in runnerStore.batchResult.featureResults"
-          :key="feature.relativePath"
-          class="feature-item"
-        >
-          <div
-            class="feature-header"
-            @click="toggleFeature(feature.relativePath)"
-          >
-            <i
-              :class="expandedFeatures.has(feature.relativePath) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
-              class="expand-icon"
-            />
-            <i
-              :class="statusIcon(feature.status)"
-              :class-name="statusClass(feature.status)"
-            />
-            <span
-              class="feature-name"
-              :class="statusClass(feature.status)"
-            >
-              {{ feature.name || feature.relativePath }}
-            </span>
-            <span class="feature-meta">
-              {{ featureScenarioSummary(feature) }}
-              &middot; {{ formatDuration(feature.duration) }}
-            </span>
-          </div>
-
-          <!-- Expanded Scenario Results -->
-          <div
-            v-if="expandedFeatures.has(feature.relativePath)"
-            class="scenario-list"
-          >
-            <div
-              v-for="scenario in feature.scenarioResults"
-              :key="scenario.name"
-              class="scenario-item"
-            >
-              <i :class="statusIcon(scenario.status)" />
-              <span
-                class="scenario-name"
-                :class="statusClass(scenario.status)"
-              >
-                {{ scenario.name }}
-              </span>
-              <span class="scenario-duration">{{ formatDuration(scenario.duration) }}</span>
-              <div
-                v-if="scenario.error"
-                class="scenario-error"
-              >
-                {{ scenario.error }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Errors -->
+      <!-- Errors (native — e.g. bddgen failures that never reached the report) -->
       <div
         v-if="runnerStore.errors.length > 0"
         class="errors-section"
@@ -362,25 +246,54 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
         </div>
       </div>
 
-      <!-- Logs -->
-      <div
-        v-if="runnerStore.logs.length > 0"
-        class="logs-section"
-      >
-        <div class="logs-header">
-          <span class="logs-title">Logs</span>
-          <Button
-            icon="pi pi-trash"
-            label="Clear"
-            text
-            size="small"
-            @click="runnerStore.clearLogs()"
+      <!-- Integrated Playwright report + collapsible logs beside it -->
+      <div class="results-body">
+        <div
+          class="report-pane"
+          data-testid="report-pane"
+        >
+          <iframe
+            v-if="runnerStore.reportUrl"
+            :src="runnerStore.reportUrl"
+            class="report-frame"
+            title="Test report"
           />
+          <div
+            v-else-if="runnerStore.reportLoading"
+            class="report-placeholder"
+          >
+            <i class="pi pi-spin pi-spinner" />
+            <span>Preparing the report…</span>
+          </div>
+          <div
+            v-else
+            class="report-placeholder"
+          >
+            <i class="pi pi-info-circle" />
+            <span>No report for this run — open the logs to see what happened.</span>
+          </div>
         </div>
-        <pre
-          ref="logsContainer"
-          class="logs-output"
-        >{{ runnerStore.logs.join('\n') }}</pre>
+
+        <div
+          v-if="showLogs && runnerStore.logs.length > 0"
+          class="logs-pane"
+          data-testid="logs-pane"
+        >
+          <div class="logs-header">
+            <span class="logs-title">Logs</span>
+            <Button
+              icon="pi pi-trash"
+              label="Clear"
+              text
+              size="small"
+              @click="runnerStore.clearLogs()"
+            />
+          </div>
+          <pre
+            ref="logsContainer"
+            class="logs-output"
+          >{{ runnerStore.logs.join('\n') }}</pre>
+        </div>
       </div>
     </div>
   </div>
@@ -398,33 +311,55 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
   position: relative;
 }
 
-/* In-app report overlay — fills the panel */
-.report-view {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
+/* Integrated report + logs live side by side and fill the panel */
+.results-header-spacer {
+  flex: 1;
+}
+
+.results-body {
   display: flex;
-  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 0.5rem;
+}
+
+.report-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  border: 1px solid var(--p-content-border-color, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
   background: var(--p-content-background, #fff);
-}
-
-.report-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--p-content-border-color, #e5e7eb);
-}
-
-.report-hint {
-  font-size: 0.8rem;
-  color: var(--p-text-muted-color, #6b7280);
 }
 
 .report-frame {
   flex: 1;
   width: 100%;
   border: 0;
+}
+
+.report-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--p-text-muted-color, #6b7280);
+  font-size: 0.9rem;
+}
+
+.logs-pane {
+  width: 40%;
+  max-width: 520px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--p-content-border-color, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .results-content {

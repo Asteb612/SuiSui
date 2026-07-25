@@ -31,8 +31,10 @@ export const useRunnerStore = defineStore('runner', {
     // UI state (session-scoped, not persisted)
     showResults: false,
     hasEnteredRunView: false,
-    /** URL of the in-app Playwright report iframe (empty = hidden). */
+    /** URL of the in-app Playwright report iframe (empty = none). */
     reportUrl: '' as string,
+    /** True while the report server is starting (show a spinner). */
+    reportLoading: false,
   }),
 
   getters: {
@@ -138,10 +140,13 @@ export const useRunnerStore = defineStore('runner', {
 
     /** Start the report server and show it in-app (iframe). */
     async showReport() {
+      this.reportLoading = true
       try {
         this.reportUrl = await window.api.runner.showReport()
       } catch (err) {
         this.logs.push(`Could not open the report: ${err instanceof Error ? err.message : String(err)}`)
+      } finally {
+        this.reportLoading = false
       }
     },
 
@@ -164,6 +169,8 @@ export const useRunnerStore = defineStore('runner', {
       this.status = 'running'
       this.showResults = true
       this.batchResult = null
+      this.reportUrl = ''
+      this.reportLoading = false
       this.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
       this.errors = []
 
@@ -223,6 +230,9 @@ export const useRunnerStore = defineStore('runner', {
       } finally {
         window.api.runner.offRunnerLog()
         this.isRunning = false
+        // Integrate Playwright's HTML report directly in the results panel
+        // (UI mode has no report of its own).
+        if (mode !== 'ui') void this.showReport()
       }
     },
 
