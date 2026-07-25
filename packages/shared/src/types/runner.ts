@@ -45,6 +45,8 @@ export interface BatchRunOptions {
   executionMode: 'sequential' | 'parallel'
   mode: RunMode
   baseUrl?: string
+  /** Run with a visible browser (Playwright `--headed`) so the run can be watched. */
+  headed?: boolean
 }
 
 export interface BatchRunResult {

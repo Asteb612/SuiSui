@@ -299,6 +299,10 @@ export class RunnerService {
     } else {
       // JSON + HTML reporters for structured output parsing
       playwrightArgs.push('--reporter=json,html')
+      // Headed: show the browser so the run can be watched (replay).
+      if (options.headed) {
+        playwrightArgs.push('--headed')
+      }
     }
 
     if (debugRunner) {

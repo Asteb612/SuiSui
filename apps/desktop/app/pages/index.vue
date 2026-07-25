@@ -131,7 +131,8 @@ function exitRunView() {
 
 /**
  * One-click run of the feature currently open in the editor: select it, switch
- * to the runner view so results stream in, and run it headless immediately.
+ * to the runner view so results stream in, and run it in a visible (headed)
+ * browser so the user can watch the scenario replay.
  */
 async function quickRunCurrentSpec() {
   const featurePath = scenarioStore.currentFeaturePath
@@ -143,7 +144,7 @@ async function quickRunCurrentSpec() {
   activeView.value = 'runner'
 
   await runnerStore.loadWorkspaceTests()
-  await runnerStore.runBatch('headless')
+  await runnerStore.runBatch('headless', { headed: true })
 }
 
 // Git availability - hide if workspace is not a git repo
@@ -484,7 +485,7 @@ function cancelInit() {
                 :disabled="runnerStore.isRunning || (currentViewMode === 'edit' && scenarioStore.isDirty)"
                 :title="currentViewMode === 'edit' && scenarioStore.isDirty
                   ? 'Save changes before running'
-                  : 'Run this feature'"
+                  : 'Run this feature in a visible browser (watch the replay)'"
                 @click="quickRunCurrentSpec"
               />
               <!-- Mode Controls -->

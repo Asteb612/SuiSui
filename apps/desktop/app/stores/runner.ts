@@ -142,14 +142,14 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
-    async runBatch(mode: 'headless' | 'ui') {
+    async runBatch(mode: 'headless' | 'ui', opts: { headed?: boolean } = {}) {
       if (this.isRunning) return
 
       this.isRunning = true
       this.status = 'running'
       this.showResults = true
       this.batchResult = null
-      this.logs = [`Starting batch ${mode} test run...`]
+      this.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
       this.errors = []
 
       if (this.config.baseUrl) {
@@ -165,6 +165,7 @@ export const useRunnerStore = defineStore('runner', {
           executionMode: this.config.executionMode,
           mode,
           baseUrl: this.config.baseUrl || undefined,
+          ...(opts.headed ? { headed: true } : {}),
         }
 
         // Pass feature paths based on active tab filter
