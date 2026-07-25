@@ -11,7 +11,8 @@ import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
 import { getDependencyService } from './DependencyService'
 import { getNodeService } from './NodeService'
-import { spawn, type ChildProcess } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
+import http from 'node:http'
 import path from 'node:path'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
@@ -30,9 +31,29 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const REPORT_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.zip': 'application/zip',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
 export class RunnerService {
   private commandRunner: ICommandRunner
   private currentProcess: ChildProcess | null = null
+  private reportServer: http.Server | null = null
 
   constructor(commandRunner?: ICommandRunner) {
     this.commandRunner = commandRunner ?? getCommandRunner()
@@ -102,15 +123,15 @@ export class RunnerService {
   }
 
   /**
-   * Start (or reuse) Playwright's HTML report server for the last run and return
-   * its URL. The renderer embeds this in-app (an iframe in the runner view), so
-   * results — steps, errors, screenshots, and per-test trace links — show inside
-   * SuiSui instead of a separate browser page.
+   * Serve the last run's Playwright HTML report from a tiny in-process static
+   * server and return its URL. The renderer embeds it in-app (an iframe in the
+   * runner view). We serve the report folder ourselves rather than spawning
+   * `playwright show-report` so it never depends on CLI resolution, the embedded
+   * Node, or a detached child that can fail silently in the packaged app.
    */
   async showReport(): Promise<string> {
     const workspacePath = getWorkspaceService().getPath()
     if (!workspacePath) throw new Error('No workspace selected')
-
     if (!fs.existsSync(path.join(workspacePath, 'playwright-report', 'index.html'))) {
       throw new Error('No report yet — run a test first, then watch the replay.')
     }
@@ -119,48 +140,39 @@ export class RunnerService {
     const port = 9323
     const url = `http://${host}:${port}`
 
-    // Reuse an already-running report server (e.g. from a previous click).
-    if (await this.probeUrl(url)) return url
+    if (this.reportServer) return url
 
-    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
-    if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
-
-    const nodeExec = await getNodeService().getNodePath()
-    if (!nodeExec) throw new Error('Node.js runtime not available')
-
-    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
-    const pathParts = [path.dirname(nodeExec)]
-    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
-      pathParts.push(path.join(workspaceNodeModules, '.bin'))
-    }
-    if (process.env.PATH) pathParts.push(process.env.PATH)
-
-    const child = spawn(nodeExec, [playwrightCliPath, 'show-report', '--host', host, '--port', String(port)], {
-      cwd: workspacePath,
-      env: {
-        ...process.env,
-        NODE_PATH: workspaceNodeModules,
-        PATH: pathParts.join(path.delimiter),
-        PLAYWRIGHT_HTML_OPEN: 'never', // we embed it ourselves
-      },
-      detached: true,
-      stdio: 'ignore',
+    await new Promise<void>((resolve) => {
+      const server = http.createServer((req, res) => this.serveReportFile(req, res))
+      server.once('error', () => resolve()) // port already serving a report — reuse it
+      server.listen(port, host, () => {
+        this.reportServer = server
+        resolve()
+      })
     })
-    child.unref()
-
-    // Wait until the server answers (up to ~6s) so the iframe loads first try.
-    for (let i = 0; i < 30 && !(await this.probeUrl(url)); i++) {
-      await new Promise((r) => setTimeout(r, 200))
-    }
     return url
   }
 
-  private async probeUrl(url: string): Promise<boolean> {
+  /** Serve a static file from the CURRENT workspace's playwright-report/ dir. */
+  private serveReportFile(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const workspacePath = getWorkspaceService().getPath()
+    const root = workspacePath ? path.join(workspacePath, 'playwright-report') : ''
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(500) })
-      return res.ok
+      let pathname = decodeURIComponent((req.url || '/').split('?')[0])
+      if (pathname === '/' || pathname === '') pathname = '/index.html'
+      const filePath = path.normalize(path.join(root, pathname))
+      if (!root || (filePath !== root && !filePath.startsWith(root + path.sep))) {
+        res.writeHead(403).end('Forbidden')
+        return
+      }
+      const body = fs.readFileSync(filePath)
+      res.writeHead(200, {
+        'Content-Type': REPORT_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      })
+      res.end(body)
     } catch {
-      return false
+      res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found')
     }
   }
 

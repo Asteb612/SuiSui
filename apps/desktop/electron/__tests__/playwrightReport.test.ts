@@ -11,6 +11,12 @@ describe('extractFeatureRelativePath', () => {
     ).toBe('features/auth/login.feature')
   })
 
+  it('maps a spec path with no .features-gen prefix (JSON reporter form)', () => {
+    // The JSON reporter reports files relative to the bdd testDir, so the prefix
+    // is often absent — this must still yield the feature path.
+    expect(extractFeatureRelativePath('features/record.feature.spec.js')).toBe('features/record.feature')
+  })
+
   it('returns the input unchanged when it does not match', () => {
     expect(extractFeatureRelativePath('some/other/file.js')).toBe('some/other/file.js')
   })
@@ -76,6 +82,30 @@ describe('parsePlaywrightJsonReport', () => {
     expect(feature.status).toBe('failed')
     expect(feature.duration).toBe(150)
     expect(feature.scenarioResults[1].error).toBe('expected true')
+  })
+
+  it('counts a failure when the reporter omits the .features-gen prefix', () => {
+    // Real JSON from playwright-bdd: suite.file is "features/x.feature.spec.js".
+    const report = {
+      stats: { duration: 2937 },
+      suites: [
+        {
+          title: 'record.feature',
+          file: 'features/record.feature.spec.js',
+          specs: [
+            {
+              title: 'record',
+              ok: false,
+              tests: [{ results: [{ status: 'failed', duration: 75, errors: [{ message: 'Missing step' }] }] }],
+            },
+          ],
+        },
+      ],
+    }
+    const result = parsePlaywrightJsonReport(JSON.stringify(report), 'out', '', 0)
+    expect(result.status).toBe('failed')
+    expect(result.summary).toEqual({ total: 1, passed: 0, failed: 1, skipped: 0, features: 1 })
+    expect(result.featureResults[0]?.relativePath).toBe('features/record.feature')
   })
 
   it('marks a feature skipped when all scenarios are skipped', () => {
