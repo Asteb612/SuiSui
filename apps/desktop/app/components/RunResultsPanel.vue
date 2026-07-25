@@ -307,6 +307,9 @@ function formatDuration(ms: number): string {
   padding: 0.75rem;
   overflow: hidden;
   flex: 1;
+  /* Fill the runner content area so the embedded report fills the remaining
+     height and only its own content scrolls (inside the iframe), not the panel. */
+  height: 100%;
   min-height: 0;
   position: relative;
 }
