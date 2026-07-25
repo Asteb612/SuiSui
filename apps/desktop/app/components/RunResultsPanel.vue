@@ -2,15 +2,22 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
+import { useStepsStore } from '~/stores/steps'
 
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
+const stepsStore = useStepsStore()
 const logsContainer = ref<HTMLPreElement | null>(null)
 
 // --- AI failure explanation (spec FR-012) ---
 const explaining = ref(false)
 const explanation = ref('')
 const explainError = ref<string | null>(null)
+
+// --- AI failure fix (advisory suggestion, reviewed by the user) ---
+const fixing = ref(false)
+const fixSuggestion = ref('')
+const fixError = ref<string | null>(null)
 
 const hasFailures = computed(() => {
   const b = runnerStore.batchResult
@@ -58,7 +65,25 @@ async function onExplainFailure() {
   }
 }
 
-function onCancelExplain() {
+async function onFixFailure() {
+  if (!hasFailures.value || fixing.value) return
+  fixing.value = true
+  fixSuggestion.value = ''
+  fixError.value = null
+  try {
+    const result = await aiStore.generate('failure-fix', failureOutput.value, {
+      steps: stepsStore.steps,
+      scenarioText: null,
+      targetStep: null,
+    })
+    if (result.error) fixError.value = result.error
+    else fixSuggestion.value = result.text
+  } finally {
+    fixing.value = false
+  }
+}
+
+function onCancelAi() {
   aiStore.cancel()
 }
 
@@ -184,21 +209,33 @@ function formatDuration(ms: number): string {
             icon="pi pi-sparkles"
             size="small"
             outlined
-            :disabled="explaining"
+            :disabled="explaining || fixing"
             :loading="explaining"
             data-testid="ai-explain-btn"
             @click="onExplainFailure"
           />
           <Button
-            v-if="explaining"
+            :label="fixSuggestion || fixing ? 'Re-fix failure (AI)' : 'Fix failure (AI)'"
+            icon="pi pi-wrench"
+            size="small"
+            outlined
+            :disabled="explaining || fixing"
+            :loading="fixing"
+            data-testid="ai-fix-btn"
+            @click="onFixFailure"
+          />
+          <Button
+            v-if="explaining || fixing"
             label="Cancel"
             icon="pi pi-times"
             text
             size="small"
             data-testid="ai-explain-cancel"
-            @click="onCancelExplain"
+            @click="onCancelAi"
           />
         </div>
+
+        <!-- Explanation result -->
         <div
           v-if="explainError"
           class="ai-explain-error"
@@ -216,6 +253,25 @@ function formatDuration(ms: number): string {
           class="ai-explain-body"
           data-testid="ai-explain-result"
         >{{ explanation }}</pre>
+
+        <!-- Fix suggestion result -->
+        <div
+          v-if="fixError"
+          class="ai-explain-error"
+          data-testid="ai-fix-error"
+        >
+          <i class="pi pi-exclamation-triangle" /> {{ fixError }}
+        </div>
+        <pre
+          v-else-if="fixing"
+          class="ai-explain-body"
+          data-testid="ai-fix-stream"
+        >{{ aiStore.streamingDraft }}<span class="cursor">▍</span></pre>
+        <pre
+          v-else-if="fixSuggestion"
+          class="ai-explain-body"
+          data-testid="ai-fix-result"
+        >{{ fixSuggestion }}</pre>
       </div>
 
       <!-- Errors (native — e.g. bddgen failures that never reached the report) -->

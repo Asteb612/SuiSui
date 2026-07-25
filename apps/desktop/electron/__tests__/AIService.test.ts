@@ -211,6 +211,30 @@ describe('AIService', () => {
     expect(builtPrompt.toLowerCase()).toContain('plain language')
   })
 
+  it('failure-fix use case: prompt asks for a concrete fix and lists the available steps', async () => {
+    const provider = new FakeAIProvider({ chunks: ['Quote the value: ', "with '<PASSWORD>'"] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    const failureOutput = "Missing step: When I fill '[data-testid=\"pw\"]' with <PASSWORD>"
+    const suggestion = await collect(
+      service.stream({
+        kind: 'failure-fix',
+        input: failureOutput,
+        context: {
+          steps: [{ keyword: 'When', pattern: 'I fill {string} with {string}' } as never],
+          scenarioText: null,
+          targetStep: null,
+        },
+      })
+    )
+
+    expect(suggestion).toBe("Quote the value: with '<PASSWORD>'")
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain(failureOutput)
+    expect(builtPrompt).toContain('I fill {string} with {string}')
+    expect(builtPrompt.toLowerCase()).toContain('fix')
+  })
+
   it('status(target) probes a provider WITHOUT persisting config (FR-021)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [{ name: 'llama3.2' }] }) })
     vi.stubGlobal('fetch', fetchMock)

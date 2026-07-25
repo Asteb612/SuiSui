@@ -61,7 +61,7 @@ export interface AIStatusTarget {
 }
 
 /** The use case a generation request serves. */
-export type AIGenerationKind = 'scenario' | 'step-match' | 'arg-fill' | 'failure-explain'
+export type AIGenerationKind = 'scenario' | 'step-match' | 'arg-fill' | 'failure-explain' | 'failure-fix'
 
 /** Workspace context supplied to the model so drafts prefer reuse over invention. */
 export interface AIRequestContext {

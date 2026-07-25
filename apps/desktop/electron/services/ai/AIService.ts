@@ -120,7 +120,35 @@ export class AIService {
     if (req.kind === 'failure-explain') {
       return this.buildFailureExplainPrompt(req)
     }
+    if (req.kind === 'failure-fix') {
+      return this.buildFailureFixPrompt(req)
+    }
     return req.input
+  }
+
+  /**
+   * Prompt for a concrete, reviewable fix for a failed test. Advisory only — the
+   * suggestion is shown to the author, never auto-applied. When a step has no
+   * matching definition we prefer correcting the Gherkin to an EXISTING step; the
+   * available steps are provided so the model doesn't invent new ones.
+   */
+  private buildFailureFixPrompt(req: AIStreamRequest): string {
+    const stepList = req.context.steps.map((s) => `${s.keyword} ${s.pattern}`).join('\n')
+    return [
+      'A BDD (Playwright / playwright-bdd) test failed. Propose a concrete fix for the test author.',
+      'Diagnose from the failure output, then give the smallest change that makes it pass:',
+      '- If a step has no matching definition, prefer rewriting the Gherkin step to match one of',
+      '  the AVAILABLE steps below; otherwise show the step-definition code to add.',
+      '- If it is an assertion/locator/value problem, give the corrected step or value.',
+      'Show the exact change as `before → after` (or a short code block) plus one line of why.',
+      'Be concise. Do not invent selectors, values, or output that are not shown.',
+      '',
+      'Failed test output:',
+      req.input,
+      '',
+      'Available steps:',
+      stepList || '(none provided)',
+    ].join('\n')
   }
 
   /**
