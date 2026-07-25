@@ -70,8 +70,8 @@ export interface ElectronAPI {
     runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
     getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>
-    /** Open Playwright's HTML report (with per-test trace/replay) for the last run. */
-    showReport: () => Promise<void>
+    /** Start the HTML report server for the last run and return its URL (embedded in-app). */
+    showReport: () => Promise<string>
     onRunnerLog: (callback: (line: string) => void) => void
     offRunnerLog: () => void
   }

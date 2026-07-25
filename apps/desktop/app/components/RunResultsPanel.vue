@@ -119,6 +119,30 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
 
 <template>
   <div class="run-results-panel">
+    <!-- In-app Playwright report (results + per-test trace replay) -->
+    <div
+      v-if="runnerStore.reportUrl"
+      class="report-view"
+      data-testid="report-view"
+    >
+      <div class="report-toolbar">
+        <Button
+          icon="pi pi-arrow-left"
+          label="Back to results"
+          text
+          size="small"
+          data-testid="close-report-btn"
+          @click="runnerStore.closeReport()"
+        />
+        <span class="report-hint">Playwright report — click a test to replay its trace</span>
+      </div>
+      <iframe
+        :src="runnerStore.reportUrl"
+        class="report-frame"
+        title="Playwright report"
+      />
+    </div>
+
     <!-- Back to Filters button -->
     <div class="results-header">
       <Button
@@ -371,6 +395,36 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
   overflow: hidden;
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+/* In-app report overlay — fills the panel */
+.report-view {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--p-content-background, #fff);
+}
+
+.report-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--p-content-border-color, #e5e7eb);
+}
+
+.report-hint {
+  font-size: 0.8rem;
+  color: var(--p-text-muted-color, #6b7280);
+}
+
+.report-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
 }
 
 .results-content {

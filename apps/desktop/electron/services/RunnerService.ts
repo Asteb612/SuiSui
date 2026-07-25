@@ -102,13 +102,12 @@ export class RunnerService {
   }
 
   /**
-   * Open Playwright's HTML report for the last run. `show-report` serves it but
-   * does not reliably open a browser from a detached, non-TTY spawn, so we start
-   * (or reuse) the server on a fixed port, wait until it responds, then open it
-   * ourselves via the OS. Each test in the report links a trace viewer — a
-   * filmstrip replay of the run.
+   * Start (or reuse) Playwright's HTML report server for the last run and return
+   * its URL. The renderer embeds this in-app (an iframe in the runner view), so
+   * results — steps, errors, screenshots, and per-test trace links — show inside
+   * SuiSui instead of a separate browser page.
    */
-  async showReport(): Promise<void> {
+  async showReport(): Promise<string> {
     const workspacePath = getWorkspaceService().getPath()
     if (!workspacePath) throw new Error('No workspace selected')
 
@@ -121,41 +120,39 @@ export class RunnerService {
     const url = `http://${host}:${port}`
 
     // Reuse an already-running report server (e.g. from a previous click).
-    if (!(await this.probeUrl(url))) {
-      const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
-      if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
+    if (await this.probeUrl(url)) return url
 
-      const nodeExec = await getNodeService().getNodePath()
-      if (!nodeExec) throw new Error('Node.js runtime not available')
+    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
+    if (!playwrightCliPath) throw new Error('Playwright is not installed in this workspace')
 
-      const workspaceNodeModules = path.join(workspacePath, 'node_modules')
-      const pathParts = [path.dirname(nodeExec)]
-      if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
-        pathParts.push(path.join(workspaceNodeModules, '.bin'))
-      }
-      if (process.env.PATH) pathParts.push(process.env.PATH)
+    const nodeExec = await getNodeService().getNodePath()
+    if (!nodeExec) throw new Error('Node.js runtime not available')
 
-      const child = spawn(nodeExec, [playwrightCliPath, 'show-report', '--host', host, '--port', String(port)], {
-        cwd: workspacePath,
-        env: {
-          ...process.env,
-          NODE_PATH: workspaceNodeModules,
-          PATH: pathParts.join(path.delimiter),
-          PLAYWRIGHT_HTML_OPEN: 'never', // we open it ourselves
-        },
-        detached: true,
-        stdio: 'ignore',
-      })
-      child.unref()
-
-      // Wait until the server answers (up to ~6s).
-      for (let i = 0; i < 30 && !(await this.probeUrl(url)); i++) {
-        await new Promise((r) => setTimeout(r, 200))
-      }
+    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
+    const pathParts = [path.dirname(nodeExec)]
+    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
+      pathParts.push(path.join(workspaceNodeModules, '.bin'))
     }
+    if (process.env.PATH) pathParts.push(process.env.PATH)
 
-    const { shell } = await import('electron')
-    await shell.openExternal(url)
+    const child = spawn(nodeExec, [playwrightCliPath, 'show-report', '--host', host, '--port', String(port)], {
+      cwd: workspacePath,
+      env: {
+        ...process.env,
+        NODE_PATH: workspaceNodeModules,
+        PATH: pathParts.join(path.delimiter),
+        PLAYWRIGHT_HTML_OPEN: 'never', // we embed it ourselves
+      },
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+
+    // Wait until the server answers (up to ~6s) so the iframe loads first try.
+    for (let i = 0; i < 30 && !(await this.probeUrl(url)); i++) {
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    return url
   }
 
   private async probeUrl(url: string): Promise<boolean> {

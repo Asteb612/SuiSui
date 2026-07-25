@@ -31,6 +31,8 @@ export const useRunnerStore = defineStore('runner', {
     // UI state (session-scoped, not persisted)
     showResults: false,
     hasEnteredRunView: false,
+    /** URL of the in-app Playwright report iframe (empty = hidden). */
+    reportUrl: '' as string,
   }),
 
   getters: {
@@ -134,13 +136,17 @@ export const useRunnerStore = defineStore('runner', {
       })
     },
 
-    /** Open Playwright's HTML report (per-test trace/replay) for the last run. */
+    /** Start the report server and show it in-app (iframe). */
     async showReport() {
       try {
-        await window.api.runner.showReport()
+        this.reportUrl = await window.api.runner.showReport()
       } catch (err) {
         this.logs.push(`Could not open the report: ${err instanceof Error ? err.message : String(err)}`)
       }
+    },
+
+    closeReport() {
+      this.reportUrl = ''
     },
 
     async loadWorkspaceTests() {
