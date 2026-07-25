@@ -6,6 +6,7 @@ import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
+import { useRecorderStore } from '~/stores/recorder'
 import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
 
 const workspaceStore = useWorkspaceStore()
@@ -14,6 +15,7 @@ const scenarioStore = useScenarioStore()
 const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
+const recorderStore = useRecorderStore()
 const showGitClone = ref(false)
 const showBddFolderSelect = ref(false)
 const bddCandidates = ref<string[]>([])
@@ -83,6 +85,7 @@ const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
 const showAiGenerationDialog = ref(false)
 const showRecorder = ref(false)
+const showRecorderScenarioDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -223,6 +226,21 @@ function handleCreateScenario(data: { name: string; fileName: string }) {
     name: data.name,
     relativePath: data.fileName,
   })
+}
+
+/**
+ * Turn a finished recording into a brand-new scenario: create it, insert the
+ * recorded steps, save the .feature to disk, then load it so it's displayed.
+ */
+async function handleRecorderScenarioCreate(data: { name: string; fileName: string }) {
+  scenarioStore.createNew(data.name)
+  recorderStore.insertAcceptedActionsIntoScenario()
+  await scenarioStore.save(data.fileName)
+  await workspaceStore.loadFeatures()
+  const feature = workspaceStore.features.find((f) => f.relativePath === data.fileName)
+  if (feature) workspaceStore.selectFeature(feature)
+  activeView.value = 'editor'
+  await handleModeChange('read')
 }
 
 async function initializeWorkspace() {
@@ -634,6 +652,11 @@ function cancelInit() {
     <RecorderPanel
       v-model:visible="showRecorder"
       :start-url="runnerStore.effectiveBaseUrl"
+      @create-scenario="showRecorderScenarioDialog = true"
+    />
+    <NewScenarioDialog
+      v-model:visible="showRecorderScenarioDialog"
+      @create="handleRecorderScenarioCreate"
     />
 
     <NewScenarioDialog

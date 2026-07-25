@@ -2,15 +2,21 @@
 import { computed, onUnmounted } from 'vue'
 import type { StepSourceLocation } from '@suisui/shared'
 import { useRecorderStore } from '~/stores/recorder'
+import { useScenarioStore } from '~/stores/scenario'
 import RecordedActionCard from './RecordedActionCard.vue'
 import StepMatchSelector from './StepMatchSelector.vue'
 import LocatorCandidateSelector from './LocatorCandidateSelector.vue'
 import AssertionPicker from './AssertionPicker.vue'
 
 const props = defineProps<{ visible: boolean; startUrl?: string }>()
-const emit = defineEmits<{ 'update:visible': [value: boolean]; inserted: [count: number] }>()
+const emit = defineEmits<{
+  'update:visible': [value: boolean]
+  inserted: [count: number]
+  'create-scenario': []
+}>()
 
 const recorder = useRecorderStore()
+const scenario = useScenarioStore()
 
 const dialogVisible = computed({
   get: () => props.visible,
@@ -33,8 +39,14 @@ async function stop() {
 }
 
 function confirm() {
-  const count = recorder.insertAcceptedActionsIntoScenario()
-  emit('inserted', count)
+  // With a scenario already open, append to it; otherwise ask the page to create
+  // a new named scenario from the recorded steps.
+  if (scenario.currentFeaturePath) {
+    const count = recorder.insertAcceptedActionsIntoScenario()
+    emit('inserted', count)
+  } else {
+    emit('create-scenario')
+  }
   dialogVisible.value = false
 }
 
@@ -196,7 +208,7 @@ onUnmounted(() => {
         @click="dialogVisible = false"
       />
       <Button
-        label="Add to scenario"
+        :label="scenario.currentFeaturePath ? 'Add to scenario' : 'Create scenario'"
         icon="pi pi-check"
         :disabled="recorder.insertableActions.length === 0"
         data-testid="recorder-confirm"

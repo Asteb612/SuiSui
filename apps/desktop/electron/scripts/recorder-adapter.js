@@ -145,7 +145,7 @@ const INJECT_OVERLAY = `
     bar = document.createElement('div');
     bar.id = '__suisui_bar';
     bar.setAttribute('data-suisui', 'bar');
-    bar.style.cssText = 'position:fixed;z-index:2147483647;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:6px 9px;background:#0f172a;color:#fff;border-radius:10px;font:12px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:auto;user-select:none';
+    bar.style.cssText = 'position:fixed;z-index:2147483647;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:7px 11px;background:#0f172a;color:#fff;border:2px solid #3b82f6;border-radius:12px;font:12px system-ui,sans-serif;box-shadow:0 10px 28px rgba(37,99,235,.45);pointer-events:auto;user-select:none';
     var lead = document.createElement('span');
     lead.textContent = 'Assert';
     lead.style.cssText = 'font-weight:700;color:#f87171;letter-spacing:.02em';
