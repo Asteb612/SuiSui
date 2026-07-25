@@ -159,17 +159,17 @@ describe('recorder store', () => {
     const rec = useRecorderStore()
     const m = match('s-fill', 'When', 'I fill {string} with {string}', [
       { name: 'field', value: 'internal:label="Password"i', type: 'string' },
-      { name: 'value', value: '<PASSWORD>', type: 'string' },
+      { name: 'value', value: '${PASSWORD}', type: 'string' },
     ])
     m.valueArgName = 'value'
     rec.ingestAction(
-      action({ id: 'rec-3-s', seq: 3, type: 'fill', status: 'matched', secret: true, secretRef: '<PASSWORD>', match: m })
+      action({ id: 'rec-3-s', seq: 3, type: 'fill', status: 'matched', secret: true, secretRef: '${PASSWORD}', match: m })
     )
 
     rec.renameSecretRef('rec-3-s', 'login pwd')
     const a = rec.actions[0]!
-    expect(a.secretRef).toBe('<LOGIN_PWD>')
-    expect(a.match?.args[1]?.value).toBe('<LOGIN_PWD>')
+    expect(a.secretRef).toBe('${LOGIN_PWD}')
+    expect(a.match?.args[1]?.value).toBe('${LOGIN_PWD}')
   })
 
   it('accepts a suggestion (creates the assertion) and rejects another', async () => {
@@ -197,7 +197,7 @@ describe('recorder store', () => {
     useStepsStore().catalog = [LOGIN_STEP]
     const rec = useRecorderStore()
     rec.ingestAction(action({ id: 'a1', type: 'fill', status: 'matched', value: 'arthur@example.com' }))
-    rec.ingestAction(action({ id: 'a2', type: 'fill', status: 'matched', secret: true, secretRef: '<PASSWORD>' }))
+    rec.ingestAction(action({ id: 'a2', type: 'fill', status: 'matched', secret: true, secretRef: '${PASSWORD}' }))
     rec.ingestAction(action({ id: 'a3', type: 'click', status: 'matched' }))
 
     expect(rec.groupingProposal).not.toBeNull()
@@ -242,10 +242,10 @@ describe('recorder store', () => {
         type: 'fill',
         status: 'matched',
         secret: true,
-        secretRef: '<PASSWORD>',
+        secretRef: '${PASSWORD}',
         match: match('s-fill', 'When', 'I fill {string} with {string}', [
           { name: 'field', value: 'internal:label="Password"i', type: 'string' },
-          { name: 'value', value: '<PASSWORD>', type: 'string' },
+          { name: 'value', value: '${PASSWORD}', type: 'string' },
         ]),
       })
     )
@@ -270,7 +270,7 @@ describe('recorder store', () => {
       'When I click on {string}',
     ])
     // The password step commits the reference, never the typed value.
-    expect(steps[2]!.args[1]!.value).toBe('<PASSWORD>')
+    expect(steps[2]!.args[1]!.value).toBe('${PASSWORD}')
     expect(JSON.stringify(steps)).not.toContain('hunter')
   })
 

@@ -3,6 +3,16 @@ import { expect } from '@playwright/test';
 
 const { Given, When, Then } = createBdd();
 
+/**
+ * Resolve `${NAME}` references (e.g. recorded secrets like `${PASSWORD}`) from
+ * environment variables at run time, so redacted values never live in the
+ * .feature file. Set the env var (or a Test Profile) before running. Unknown
+ * references are left as-is so a missing value is obvious.
+ */
+function resolveSecrets(value: string): string {
+  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => process.env[name] ?? match);
+}
+
 // Navigation steps
 Given('I am on the {string} page', async ({ page }, pageName: string) => {
   const trimmed = pageName.trim();
@@ -37,7 +47,7 @@ When('I click on {string}', async ({ page }, element: string) => {
 });
 
 When('I fill {string} with {string}', async ({ page }, field: string, value: string) => {
-  await page.fill(field, value);
+  await page.fill(field, resolveSecrets(value));
 });
 
 When('I select {string} from {string}', async ({ page }, option: string, dropdown: string) => {
@@ -50,7 +60,7 @@ When('I wait for {int} seconds', async ({ page }, seconds: number) => {
 
 When('I fill in the form with the following data (Field, Value):', async ({ page }, table) => {
   for (const row of table.rows()) {
-    await page.fill(row[0], row[1]);
+    await page.fill(row[0], resolveSecrets(row[1]));
   }
 });
 

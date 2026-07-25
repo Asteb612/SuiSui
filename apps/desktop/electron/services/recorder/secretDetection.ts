@@ -22,8 +22,11 @@ export function isSensitiveField(fp: ElementFingerprint): boolean {
 
 /**
  * Committable placeholder for a captured secret, derived from the field's
- * human name (e.g. "Password" → `<PASSWORD>`, "API Key" → `<API_KEY>`).
- * Never contains the secret value.
+ * human name (e.g. "Password" → `${PASSWORD}`, "API Key" → `${API_KEY}`).
+ * Uses `${NAME}` (env-var syntax) — NOT `<NAME>`, which Gherkin reserves for
+ * Scenario-Outline placeholders (bddgen would treat it as an Examples column and
+ * emit it unquoted, breaking the step match). The bundled fill steps resolve
+ * `${NAME}` from `process.env` at run time. Never contains the secret value.
  */
 export function secretReferenceName(fp?: ElementFingerprint): string {
   const source = fp?.label ?? fp?.accessibleName ?? fp?.name ?? fp?.id ?? fp?.placeholder ?? 'secret'
@@ -31,5 +34,5 @@ export function secretReferenceName(fp?: ElementFingerprint): string {
     .replace(/[^A-Za-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toUpperCase()
-  return `<${snake || 'SECRET'}>`
+  return '${' + (snake || 'SECRET') + '}'
 }

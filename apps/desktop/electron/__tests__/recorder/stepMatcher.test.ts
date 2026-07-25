@@ -76,9 +76,9 @@ describe('StepMatcherService (stage-1 deterministic)', () => {
 
   it('uses the secret reference (not the value) for a secret fill', () => {
     const result = matcher.match(
-      action({ type: 'fill', secret: true, secretRef: '<LOGIN_PASSWORD>', selectedLocator: { type: 'label', value: 'Password' } })
+      action({ type: 'fill', secret: true, secretRef: '${LOGIN_PASSWORD}', selectedLocator: { type: 'label', value: 'Password' } })
     )
-    expect(result.match?.args[1]).toEqual({ name: 'value', value: '<LOGIN_PASSWORD>', type: 'string' })
+    expect(result.match?.args[1]).toEqual({ name: 'value', value: '${LOGIN_PASSWORD}', type: 'string' })
   })
 
   it('flags a gap when no catalog step exists for the action', () => {

@@ -10,7 +10,7 @@ describe('proposeLoginGrouping', () => {
   it('detects fill → secret-fill → click as a login sequence', () => {
     const actions = [
       action('a1', 'fill', { value: 'arthur@example.com' }),
-      action('a2', 'fill', { secret: true, secretRef: '<PASSWORD>' }),
+      action('a2', 'fill', { secret: true, secretRef: '${PASSWORD}' }),
       action('a3', 'click'),
     ]
     const proposal = proposeLoginGrouping(actions)

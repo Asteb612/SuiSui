@@ -316,7 +316,8 @@ in-page overlay. Key constraints:
   click an element → `t:'assert'` → `RecorderService` emits a matched assertion
   card; text/value auto-captured). Version-gated `>=1.49 <1.61` with a capability probe.
 - **Secrets are redacted in the child** — a captured value never crosses stdio/IPC
-  and is emitted as a committable reference (`<PASSWORD>` / a Test Profile name).
+  and is emitted as a committable `${PASSWORD}`-style reference (env-var syntax,
+  resolved by the bundled fill steps at run time) / a Test Profile name.
 - The pipeline (`RecorderService` → `LocatorService` → `StepMatcherService`) is
   **deterministic-first**; AI (`RecorderAiMatcher`) is behind `AppSettings.recorderAiEnabled`
   (off by default), validated, and never auto-accepted.

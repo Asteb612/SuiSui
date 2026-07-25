@@ -29,14 +29,14 @@ function toPlain<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-/** Normalize free-form user input into a committable secret reference. */
+/** Normalize free-form user input into a committable `${NAME}` secret reference. */
 function toSecretRef(input: string): string {
   const inner = input
-    .replace(/[<>]/g, '')
+    .replace(/[<>${}]/g, '')
     .replace(/[^A-Za-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .toUpperCase()
-  return `<${inner || 'SECRET'}>`
+  return '${' + (inner || 'SECRET') + '}'
 }
 
 /** Unsubscribe handles for the active session's event listeners (one session at a time). */

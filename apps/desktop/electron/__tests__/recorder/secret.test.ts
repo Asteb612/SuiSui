@@ -30,9 +30,9 @@ describe('isSensitiveField', () => {
 
 describe('secretReferenceName', () => {
   it('derives an UPPER_SNAKE reference from the field name', () => {
-    expect(secretReferenceName(fp({ label: 'Password' }))).toBe('<PASSWORD>')
-    expect(secretReferenceName(fp({ label: 'API Key' }))).toBe('<API_KEY>')
-    expect(secretReferenceName(undefined)).toBe('<SECRET>')
+    expect(secretReferenceName(fp({ label: 'Password' }))).toBe('${PASSWORD}')
+    expect(secretReferenceName(fp({ label: 'API Key' }))).toBe('${API_KEY}')
+    expect(secretReferenceName(undefined)).toBe('${SECRET}')
   })
 })
 
@@ -48,7 +48,7 @@ describe('normalizeRawAction — redaction invariant (SC-004)', () => {
     )
     expect(a.secret).toBe(true)
     expect(a.value).toBeUndefined()
-    expect(a.secretRef).toBe('<PASSWORD>')
+    expect(a.secretRef).toBe('${PASSWORD}')
     expect(a.label).toBe('Fill a protected value in the Password field')
   })
 

@@ -32,7 +32,7 @@ test.describe('Recorder: sensitive data protection', () => {
     // The password card shows a protected value + a secret chip.
     const passwordCard = window.locator(SEL.recordedAction).filter({ hasText: 'protected value' })
     await expect(passwordCard).toBeVisible()
-    await expect(passwordCard.locator(SEL.secretChip)).toContainText('<PASSWORD>')
+    await expect(passwordCard.locator(SEL.secretChip)).toContainText('${PASSWORD}')
 
     await window.locator(SEL.recorderConfirm).click()
 
@@ -41,6 +41,6 @@ test.describe('Recorder: sensitive data protection', () => {
     await expect(window.locator(SEL.saveBtn)).not.toBeVisible()
 
     const content = fs.readFileSync(path.join(workspacePath, 'features', 'login.feature'), 'utf-8')
-    expect(content).toContain('<PASSWORD>')
+    expect(content).toContain('${PASSWORD}')
   })
 })
