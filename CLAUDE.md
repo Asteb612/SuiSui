@@ -312,7 +312,9 @@ in-page overlay. Key constraints:
   is the embedded-Node child `electron/scripts/recorder-adapter.js` + its
   `PlaywrightRecorderAdapter`, behind the `IRecorderAdapter` seam. It drives the
   **workspace's** Playwright, suppresses Playwright's overlay (`x-pw-glass`), and
-  hosts SuiSui's own picker. Version-gated `>=1.49 <1.61` with a capability probe.
+  hosts SuiSui's own picker + an in-browser **assertion toolbar** (arm a type →
+  click an element → `t:'assert'` → `RecorderService` emits a matched assertion
+  card; text/value auto-captured). Version-gated `>=1.49 <1.61` with a capability probe.
 - **Secrets are redacted in the child** — a captured value never crosses stdio/IPC
   and is emitted as a committable reference (`<PASSWORD>` / a Test Profile name).
 - The pipeline (`RecorderService` → `LocatorService` → `StepMatcherService`) is

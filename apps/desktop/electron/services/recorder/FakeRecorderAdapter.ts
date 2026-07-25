@@ -1,12 +1,19 @@
 import type { RecorderStartOptions, LocatorValidationResult } from '@suisui/shared'
 import type { AdapterEventHandlers, AdapterStartInfo, IRecorderAdapter } from './IRecorderAdapter'
-import type { RawRecordedAction, RawPickedElement, RawAdapterStatus, RawAdapterError } from './types'
+import type {
+  RawRecordedAction,
+  RawPickedElement,
+  RawAdapterStatus,
+  RawAdapterError,
+  RawAssertEvent,
+} from './types'
 
 export type FakeScriptEvent =
   | { type: 'action'; action: RawRecordedAction }
   | { type: 'actionUpdated'; action: RawRecordedAction }
   | { type: 'status'; status: RawAdapterStatus }
   | { type: 'error'; error: RawAdapterError }
+  | { type: 'assert'; assert: RawAssertEvent }
 
 export interface FakeRecorderAdapterOptions {
   /** Events replayed automatically after `start()` resolves. */
@@ -108,6 +115,10 @@ export class FakeRecorderAdapter implements IRecorderAdapter {
     this.handlers?.onPicked(picked)
   }
 
+  emitAssert(assert: RawAssertEvent): void {
+    this.handlers?.onAssert?.(assert)
+  }
+
   private dispatch(ev: FakeScriptEvent): void {
     const h = this.handlers
     if (!h) return
@@ -123,6 +134,9 @@ export class FakeRecorderAdapter implements IRecorderAdapter {
         break
       case 'error':
         h.onError(ev.error)
+        break
+      case 'assert':
+        h.onAssert?.(ev.assert)
         break
     }
   }

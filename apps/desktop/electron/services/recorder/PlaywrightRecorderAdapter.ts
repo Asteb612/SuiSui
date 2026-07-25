@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import type { RecorderStartOptions, LocatorValidationResult, RecorderErrorCode } from '@suisui/shared'
 import type { AdapterEventHandlers, AdapterStartInfo, IRecorderAdapter } from './IRecorderAdapter'
-import type { RawRecordedAction, RawPickedElement } from './types'
+import type { RawRecordedAction, RawPickedElement, RawAssertEvent } from './types'
 import { getNodeService } from '../NodeService'
 import { getWorkspaceService } from '../WorkspaceService'
 import { makeRecorderError } from './recorderErrors'
@@ -163,6 +163,9 @@ export class PlaywrightRecorderAdapter implements IRecorderAdapter {
       case 'pickCancelled':
         h?.onPicked(this.toRawPicked(msg, true))
         break
+      case 'assert':
+        h?.onAssert?.(this.toRawAssert(msg))
+        break
       case 'status':
         h?.onStatus({ phase: msg.phase as never, ...(msg.url !== undefined ? { url: String(msg.url) } : {}) })
         break
@@ -209,6 +212,15 @@ export class PlaywrightRecorderAdapter implements IRecorderAdapter {
       ...(msg.fingerprint ? { fingerprint: msg.fingerprint as RawRecordedAction['fingerprint'] } : {}),
       ...(Array.isArray(msg.candidates) ? { candidates: msg.candidates as RawRecordedAction['candidates'] } : {}),
       ...(msg.secret ? { secret: true } : {}),
+    }
+  }
+
+  private toRawAssert(msg: Record<string, unknown>): RawAssertEvent {
+    return {
+      assertType: String(msg.assertType ?? 'assertVisible'),
+      ...(typeof msg.value === 'string' ? { value: msg.value } : {}),
+      ...(msg.fingerprint ? { fingerprint: msg.fingerprint as RawAssertEvent['fingerprint'] } : {}),
+      ...(Array.isArray(msg.candidates) ? { candidates: msg.candidates as RawAssertEvent['candidates'] } : {}),
     }
   }
 

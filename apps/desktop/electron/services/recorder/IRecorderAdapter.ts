@@ -4,6 +4,7 @@ import type {
   RawPickedElement,
   RawAdapterStatus,
   RawAdapterError,
+  RawAssertEvent,
 } from './types'
 
 /**
@@ -17,6 +18,8 @@ export interface AdapterEventHandlers {
   onPicked: (raw: RawPickedElement) => void
   onStatus: (status: RawAdapterStatus) => void
   onError: (error: RawAdapterError) => void
+  /** An assertion created via the in-browser overlay (optional; not all adapters emit it). */
+  onAssert?: (raw: RawAssertEvent) => void
 }
 
 /** Info resolved from the browser once a session is live. */

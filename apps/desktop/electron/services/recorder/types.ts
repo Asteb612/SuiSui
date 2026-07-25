@@ -66,6 +66,16 @@ export interface RawRecordedAction {
   code?: string
 }
 
+/** An assertion the user created via SuiSui's in-browser overlay toolbar. */
+export interface RawAssertEvent {
+  /** One of the `assert*` action type names. */
+  assertType: string
+  /** Auto-captured expected value (text/value assertions); absent otherwise. */
+  value?: string
+  fingerprint?: RawFingerprint
+  candidates?: RawCandidate[]
+}
+
 /** An element the user picked with SuiSui's own picker. */
 export interface RawPickedElement {
   pickId: string

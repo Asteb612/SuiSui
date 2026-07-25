@@ -94,6 +94,52 @@ describe('RecorderService.addAssertion (full set → generic steps)', () => {
   })
 })
 
+describe('RecorderService in-browser assertions (overlay → onAssert)', () => {
+  async function assertService() {
+    const adapter = new FakeRecorderAdapter()
+    const service = new RecorderService({
+      adapter,
+      loadCatalogSteps: async () => CATALOG,
+      loadLocatorSettings: async () => DEFAULT_RECORDER_LOCATOR_SETTINGS,
+    })
+    const emitters = spyEmitters()
+    await service.start({}, emitters)
+    return { adapter, emitters }
+  }
+
+  it('scores the picked candidates and emits a matched assertion via onAction', async () => {
+    const { adapter, emitters } = await assertService()
+    adapter.emitAssert({
+      assertType: 'assertText',
+      value: 'Welcome back',
+      fingerprint: { tagName: 'h1', testAttributes: { 'data-testid': 'welcome' }, text: 'Welcome back' },
+      candidates: [{ kind: 'testId', attribute: 'data-testid', value: 'welcome', matchedElements: 1 }],
+    })
+    const a = lastAction(emitters)
+    expect(a.type).toBe('assertText')
+    expect(a.status).toBe('matched')
+    expect(a.selectedLocator).toEqual({ type: 'testId', attribute: 'data-testid', value: 'welcome' })
+    expect(a.locatorCandidates?.length).toBeGreaterThan(0)
+    expect(a.match?.args).toEqual([
+      { name: 'selector', value: '[data-testid="welcome"]', type: 'string' },
+      { name: 'text', value: 'Welcome back', type: 'string' },
+    ])
+  })
+
+  it('assertVisible from the overlay (no value) matches the element-visible step', async () => {
+    const { adapter, emitters } = await assertService()
+    adapter.emitAssert({
+      assertType: 'assertVisible',
+      fingerprint: { tagName: 'button' },
+      candidates: [{ kind: 'testId', attribute: 'data-testid', value: 'go', matchedElements: 1 }],
+    })
+    const a = lastAction(emitters)
+    expect(a.type).toBe('assertVisible')
+    expect(a.match?.pattern).toBe('the element {string} should be visible')
+    expect(a.selectedLocator).toEqual({ type: 'testId', attribute: 'data-testid', value: 'go' })
+  })
+})
+
 describe('AssertionSuggestionService', () => {
   const svc = new AssertionSuggestionService()
 

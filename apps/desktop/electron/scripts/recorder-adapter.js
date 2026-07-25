@@ -91,6 +91,17 @@ window.__suisuiFp = function (el) {
   };
 };
 window.__suisuiCount = function (sel) { try { return document.querySelectorAll(sel).length } catch (e) { return -1 } };
+window.__suisuiCounts = function (fp) {
+  var counts = {};
+  if (!fp) return counts;
+  var q = function (s) { return String(s).replace(/"/g, '\\\\"'); };
+  for (var k in fp.testAttributes) counts['testId:' + k] = window.__suisuiCount('[' + k + '="' + q(fp.testAttributes[k]) + '"]');
+  if (fp.id) counts['id'] = window.__suisuiCount('[id="' + q(fp.id) + '"]');
+  if (fp.name) counts['name'] = window.__suisuiCount('[name="' + q(fp.name) + '"]');
+  if (fp.placeholder) counts['placeholder'] = window.__suisuiCount('[placeholder="' + q(fp.placeholder) + '"]');
+  if (fp.classSelector) counts['css'] = window.__suisuiCount(fp.classSelector);
+  return counts;
+};
 // Snapshot the target at pointerdown — BEFORE any click handler can navigate —
 // so submit buttons that redirect still keep a real, counted locator. Sent to
 // the child via the exposed binding (in flight before navigation commits).
@@ -98,18 +109,118 @@ window.addEventListener('pointerdown', function (e) {
   try {
     var el = (e.composedPath && e.composedPath()[0]) || e.target;
     var fp = window.__suisuiFp(el);
-    var counts = {};
-    if (fp) {
-      var q = function (s) { return String(s).replace(/"/g, '\\\\"'); };
-      for (var k in fp.testAttributes) counts['testId:' + k] = window.__suisuiCount('[' + k + '="' + q(fp.testAttributes[k]) + '"]');
-      if (fp.id) counts['id'] = window.__suisuiCount('[id="' + q(fp.id) + '"]');
-      if (fp.name) counts['name'] = window.__suisuiCount('[name="' + q(fp.name) + '"]');
-      if (fp.placeholder) counts['placeholder'] = window.__suisuiCount('[placeholder="' + q(fp.placeholder) + '"]');
-      if (fp.classSelector) counts['css'] = window.__suisuiCount(fp.classSelector);
-    }
-    if (window.__suisuiCapture) window.__suisuiCapture({ fp: fp, counts: counts });
+    if (window.__suisuiCapture) window.__suisuiCapture({ fp: fp, counts: window.__suisuiCounts(fp) });
   } catch (err) {}
 }, true);
+`
+
+// SuiSui's own in-browser assertion overlay (research D13) — replaces Playwright's
+// overlay so users create expects directly on the page. A floating toolbar lets
+// them arm an assertion type; the next element they click becomes the assertion.
+const INJECT_OVERLAY = `
+(function () {
+  if (window.__suisuiOverlay) return;
+  window.__suisuiOverlay = true;
+  var mode = null;   // active assert type, or null
+  var bar = null;
+  var box = null;
+  var TYPES = [['assertVisible','Visible'],['assertText','Text'],['assertValue','Value'],['assertChecked','Checked'],['assertEnabled','Enabled'],['assertHidden','Hidden']];
+
+  function setRecorderMode(m) { try { if (window.__pw_recorderSetMode) window.__pw_recorderSetMode(m); } catch (e) {} }
+  function styleBtn(b, active) {
+    b.style.cssText = 'cursor:pointer;border:1px solid ' + (active ? '#3b82f6' : '#334155') +
+      ';background:' + (active ? '#2563eb' : '#1e293b') + ';color:#fff;border-radius:6px;padding:3px 9px;font:12px system-ui,sans-serif;line-height:1.4';
+  }
+  function ensureBox() {
+    if (box && document.documentElement.contains(box)) return box;
+    box = document.createElement('div');
+    box.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #2563eb;background:rgba(37,99,235,.15);border-radius:3px;display:none;box-sizing:border-box';
+    (document.body || document.documentElement).appendChild(box);
+    return box;
+  }
+  function hint(text) { var h = bar && bar.querySelector('#__suisui_hint'); if (h) h.textContent = text || ''; }
+
+  function build() {
+    if (bar && document.documentElement.contains(bar)) return;
+    bar = document.createElement('div');
+    bar.id = '__suisui_bar';
+    bar.setAttribute('data-suisui', 'bar');
+    bar.style.cssText = 'position:fixed;z-index:2147483647;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;align-items:center;padding:6px 9px;background:#0f172a;color:#fff;border-radius:10px;font:12px system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.4);pointer-events:auto;user-select:none';
+    var lead = document.createElement('span');
+    lead.textContent = 'Assert';
+    lead.style.cssText = 'font-weight:700;color:#f87171;letter-spacing:.02em';
+    bar.appendChild(lead);
+    TYPES.forEach(function (t) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = t[1];
+      b.setAttribute('data-suisui-assert', t[0]);
+      styleBtn(b, false);
+      b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); toggle(t[0]); }, true);
+      bar.appendChild(b);
+    });
+    var h = document.createElement('span');
+    h.id = '__suisui_hint';
+    h.style.cssText = 'opacity:.75;margin-left:2px;min-width:96px';
+    bar.appendChild(h);
+    // Never record interactions with our own toolbar.
+    bar.addEventListener('mouseenter', function () { setRecorderMode('none'); }, true);
+    bar.addEventListener('mouseleave', function () { if (!mode) setRecorderMode('recording'); }, true);
+    (document.body || document.documentElement).appendChild(bar);
+  }
+
+  function toggle(type) { setMode(mode === type ? null : type); }
+  function setMode(type) {
+    mode = type;
+    if (bar) Array.prototype.forEach.call(bar.querySelectorAll('[data-suisui-assert]'), function (b) {
+      styleBtn(b, b.getAttribute('data-suisui-assert') === mode);
+    });
+    if (mode) { setRecorderMode('none'); hint('→ click an element'); }
+    else { setRecorderMode('recording'); hint(''); var b2 = ensureBox(); b2.style.display = 'none'; }
+  }
+
+  function targetOf(e) {
+    var el = (e.composedPath && e.composedPath()[0]) || e.target;
+    if (!el || el.nodeType !== 1) return null;
+    if (el.closest && el.closest('#__suisui_bar')) return null;
+    if (el === box) return null;
+    return el;
+  }
+  function onMove(e) {
+    if (!mode) return;
+    var el = targetOf(e); if (!el || !el.getBoundingClientRect) return;
+    var r = el.getBoundingClientRect(); var b2 = ensureBox();
+    b2.style.left = r.left + 'px'; b2.style.top = r.top + 'px';
+    b2.style.width = r.width + 'px'; b2.style.height = r.height + 'px'; b2.style.display = 'block';
+  }
+  function captureValue(type, el) {
+    if (type === 'assertText') return ((el.textContent || '').trim()).slice(0, 120);
+    if (type === 'assertValue') return el.value != null ? String(el.value) : '';
+    return undefined;
+  }
+  function onClick(e) {
+    if (!mode) return;
+    var el = targetOf(e); if (!el) return;
+    e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+    var chosen = mode;
+    var fp = window.__suisuiFp(el);
+    var value = captureValue(chosen, el);
+    var counts = window.__suisuiCounts(fp);
+    setMode(null);
+    try { if (window.__suisuiAssert) window.__suisuiAssert({ assertType: chosen, value: value, fp: fp, counts: counts }); } catch (err) {}
+  }
+
+  window.addEventListener('mousemove', onMove, true);
+  window.addEventListener('click', onClick, true);
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape' && mode) { e.preventDefault(); setMode(null); } }, true);
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
+  else build();
+  try {
+    var mo = new MutationObserver(function () { if (!document.getElementById('__suisui_bar')) build(); });
+    mo.observe(document.documentElement, { childList: true });
+  } catch (e) {}
+})();
 `
 
 // --- secret classification (mirrors electron/services/recorder/secretDetection) ---
@@ -378,6 +489,25 @@ async function doValidate(selector, requestId) {
   emit({ t: 'validate', requestId: requestId, unique: matched === 1, matchedElements: matched, stillMatches: matched > 0 })
 }
 
+// An assertion the user built with the in-browser overlay: the element is still
+// present (asserting doesn't navigate), so enrich candidates live; fall back to
+// the in-page counts snapshot if that fails.
+async function onAssertFromPage(data) {
+  if (!data || !data.fp) return
+  let candidates = []
+  try {
+    if (activePage) candidates = await enrichCandidates(activePage, data.fp)
+  } catch (e) {}
+  if (!candidates.length) candidates = candidatesFromSnapshot(data.fp, data.counts || {})
+  emit({
+    t: 'assert',
+    assertType: data.assertType,
+    ...(data.value !== undefined && data.value !== null ? { value: data.value } : {}),
+    fingerprint: data.fp,
+    ...(candidates.length ? { candidates: candidates } : {}),
+  })
+}
+
 async function main() {
   const vr = versionOk()
   if (!vr.ok) {
@@ -403,7 +533,12 @@ async function main() {
   try {
     await context.exposeBinding('__suisuiCapture', (_src, data) => { lastPointer = data })
   } catch (e) {}
+  // Receives an assertion the user created with the in-browser overlay toolbar.
+  try {
+    await context.exposeBinding('__suisuiAssert', (_src, data) => { onAssertFromPage(data) })
+  } catch (e) {}
   await context.addInitScript(INJECT).catch(() => {})
+  await context.addInitScript(INJECT_OVERLAY).catch(() => {})
   context.on('page', (page) => trackPage(page))
 
   let guardOk = true

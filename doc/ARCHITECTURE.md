@@ -335,8 +335,13 @@ BDD steps — never exposing Playwright's Inspector window **or its in-page over
   The renderer only uses `window.api.recorder` + the Pinia store; secrets never reach it.
 - **Overlay replacement (research D13)**: the child suppresses Playwright's overlay
   (one CSS rule on the `x-pw-glass` host) and hosts SuiSui's own hover-highlight +
-  one-shot element picker, pausing/resuming capture via `__pw_recorderSetMode`.
-  These internals are isolated in a single adapter.
+  one-shot element picker plus a floating **assertion toolbar** — the user arms an
+  assertion type (visible/hidden/text/value/checked/enabled) and the next element
+  they click becomes a matched assertion (text/value are auto-captured), created
+  directly on the page. Capture is paused via `__pw_recorderSetMode` while the
+  toolbar is used so its clicks are never recorded. The assertion crosses back as a
+  `t:'assert'` NDJSON event → `onAssert` → `RecorderService` scores it and emits a
+  normal assertion card. These internals are isolated in a single adapter.
 - **Pipeline (main)**: `RecorderService` normalizes each raw action, scores
   locators (`LocatorService`), and matches deterministically to a catalog step
   (`StepMatcherService`). AI is an **optional, flag-gated** enrichment that is

@@ -14,6 +14,7 @@ import type {
   PickRequest,
   PickPurpose,
   LocatorReference,
+  LocatorCandidate,
   LocatorValidationResult,
   ElementFingerprint,
 } from '@suisui/shared'
@@ -28,7 +29,7 @@ import { getSettingsService } from '../SettingsService'
 import { locatorToSelector, rawCandidateToLocator } from './locators'
 import { isSensitiveField, secretReferenceName } from './secretDetection'
 import { makeRecorderError } from './recorderErrors'
-import type { RawRecordedAction, RawFingerprint, RawPickedElement } from './types'
+import type { RawRecordedAction, RawFingerprint, RawPickedElement, RawAssertEvent } from './types'
 
 /** Renderer-facing emitters wired by the IPC handler to `webContents.send`. */
 export interface RecorderEmitters {
@@ -109,6 +110,7 @@ export class RecorderService {
         emitters.onError(
           makeRecorderError(e.code, { message: e.message, recovery: e.recovery, fatal: e.fatal, sessionId })
         ),
+      onAssert: (raw) => this.handleRawAssert(raw),
     }
 
     try {
@@ -162,6 +164,38 @@ export class RecorderService {
 
   /** Build, match, and emit an explicit assertion action (US4). */
   addAssertion(request: RecorderAssertionRequest): void {
+    this.requireSession()
+    this.emitAssertion(request)
+  }
+
+  /**
+   * An assertion created via the in-browser overlay toolbar (research D13): the
+   * child sends the picked element's fingerprint + candidates and the chosen
+   * assertion type; we score the candidates here and emit a matched assertion
+   * card exactly like an explicit one.
+   */
+  private handleRawAssert(raw: RawAssertEvent): void {
+    const s = this.session
+    if (!s) return
+    let target: LocatorReference | undefined
+    let candidates: LocatorCandidate[] | undefined
+    if (raw.candidates?.length) {
+      candidates = this.locator.score(raw.candidates)
+      target = candidates[0]?.locator
+    }
+    this.emitAssertion(
+      { type: raw.assertType as RecordedActionType, target, value: raw.value },
+      {
+        candidates,
+        fingerprint: raw.fingerprint ? toFingerprint(raw.fingerprint) : undefined,
+      }
+    )
+  }
+
+  private emitAssertion(
+    request: RecorderAssertionRequest,
+    extra?: { candidates?: LocatorCandidate[]; fingerprint?: ElementFingerprint }
+  ): void {
     const s = this.requireSession()
     const seq = s.actionCount
     const action: RecordedAction = {
@@ -174,6 +208,8 @@ export class RecorderService {
       label: buildAssertionLabel(request),
       status: 'draft',
       ...(request.target ? { selectedLocator: request.target } : {}),
+      ...(extra?.candidates?.length ? { locatorCandidates: extra.candidates } : {}),
+      ...(extra?.fingerprint ? { fingerprint: extra.fingerprint } : {}),
       ...(request.value !== undefined ? { value: request.value } : {}),
     }
     const matched = this.matcher.match(action)
