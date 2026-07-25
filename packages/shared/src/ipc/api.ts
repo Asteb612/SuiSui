@@ -35,6 +35,8 @@ export interface ElectronAPI {
     validate: (path: string) => Promise<WorkspaceValidation>
     init: (path: string) => Promise<WorkspaceInfo>
     detectBdd: (clonePath: string) => Promise<BddDetectionResult>
+    /** Base URL derived from the workspace's Playwright config, or null. */
+    getBaseUrl: () => Promise<string | null>
   }
 
   features: {

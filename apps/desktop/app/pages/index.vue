@@ -79,6 +79,7 @@ onUnmounted(() => {
 
 const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
+const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
 const showAiGenerationDialog = ref(false)
 const showRecorder = ref(false)
@@ -284,9 +285,9 @@ function cancelInit() {
         icon="pi pi-cog"
         text
         size="small"
-        aria-label="AI settings"
-        data-testid="ai-settings-btn"
-        @click="showAiSettingsDialog = true"
+        aria-label="Settings"
+        data-testid="settings-btn"
+        @click="showSettingsDialog = true"
       />
       <Button
         v-if="workspaceStore.hasWorkspace"
@@ -624,11 +625,15 @@ function cancelInit() {
     </footer>
 
     <!-- Dialogs -->
+    <SettingsDialog
+      v-model:visible="showSettingsDialog"
+      @open-ai-settings="() => { showSettingsDialog = false; showAiSettingsDialog = true }"
+    />
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
     <AiGenerationDialog v-model:visible="showAiGenerationDialog" />
     <RecorderPanel
       v-model:visible="showRecorder"
-      :start-url="runnerStore.baseUrl"
+      :start-url="runnerStore.effectiveBaseUrl"
     />
 
     <NewScenarioDialog

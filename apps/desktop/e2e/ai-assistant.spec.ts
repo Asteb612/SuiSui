@@ -31,12 +31,15 @@ test.describe('AI assistant (fake provider)', () => {
     // No provider yet → the "Generate with AI" entry point is absent (FR-014).
     await expect(w.locator('[data-testid="ai-generate-btn"]')).toHaveCount(0)
     // The settings gear is always available.
-    await expect(w.locator('[data-testid="ai-settings-btn"]')).toBeVisible()
+    await expect(w.locator('[data-testid="settings-btn"]')).toBeVisible()
   })
 
   test('configuring a provider enables the AI entry points', async () => {
     const w = ctx.window
-    await w.locator('[data-testid="ai-settings-btn"]').click()
+    // Settings gear → general Settings dialog → open AI provider settings.
+    await w.locator('[data-testid="settings-btn"]').click()
+    await expect(w.locator('[data-testid="settings-dialog"]')).toBeVisible()
+    await w.locator('[data-testid="settings-open-ai"]').click()
     await expect(w.locator('[data-testid="ai-settings-dialog"]')).toBeVisible()
 
     // Select the always-available BYOK provider.

@@ -111,6 +111,10 @@ export function registerIpcHandlers(
     return result
   })
 
+  ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET_BASE_URL, async () => {
+    return workspaceService.getConfiguredBaseUrl()
+  })
+
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SELECT, async () => {
     logger.info('WORKSPACE_SELECT called')
     let workspacePath: string | null = null
@@ -557,6 +561,15 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.RECORDER_START, async (event, options: unknown) => {
     const opts = validateRecorderStartOptions(options)
+    // Resolve a start URL so the browser opens on the app under test rather than
+    // about:blank: explicit option → global Base URL setting → workspace config.
+    if (!opts.startUrl || !opts.startUrl.trim()) {
+      const settingsBaseUrl = (await settingsService.load()).baseUrl
+      const resolved = settingsBaseUrl?.trim() || workspaceService.getConfiguredBaseUrl() || undefined
+      if (resolved) opts.startUrl = normalizeUrlScheme(resolved)
+    } else {
+      opts.startUrl = normalizeUrlScheme(opts.startUrl)
+    }
     const send = (channel: string, payload: unknown) => {
       if (!event.sender.isDestroyed()) event.sender.send(channel, payload)
     }
@@ -603,6 +616,14 @@ export function registerIpcHandlers(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+/** Ensure a URL has a scheme (http for localhost, https otherwise). */
+function normalizeUrlScheme(url: string): string {
+  const trimmed = url.trim()
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) return trimmed
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/.test(trimmed)
+  return `${isLocal ? 'http' : 'https'}://${trimmed}`
 }
 
 function validateRecorderStartOptions(value: unknown): RecorderStartOptions {

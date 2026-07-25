@@ -18,6 +18,8 @@ export const useRunnerStore = defineStore('runner', {
     errors: [] as RunError[],
     isRunning: false,
     baseUrl: '' as string,
+    /** Base URL derived from the workspace's Playwright config (fallback default). */
+    workspaceBaseUrl: '' as string,
 
     // Batch run state
     batchResult: null as BatchRunResult | null,
@@ -32,6 +34,14 @@ export const useRunnerStore = defineStore('runner', {
   }),
 
   getters: {
+    /**
+     * Effective Base URL: the user's setting when present, otherwise the
+     * workspace's configured default. Used by the recorder and for display.
+     */
+    effectiveBaseUrl(state): string {
+      return state.config.baseUrl?.trim() || state.workspaceBaseUrl
+    },
+
     /**
      * Compute matched features and scenarios based on current filters.
      * Exclusive tab model: only the active tab's filter applies + name filter (AND).
@@ -102,6 +112,13 @@ export const useRunnerStore = defineStore('runner', {
       if (settings.runConfiguration) {
         this.config = { ...DEFAULT_RUN_CONFIGURATION, ...settings.runConfiguration }
         this.baseUrl = this.config.baseUrl || settings.baseUrl || ''
+      }
+      // Derive a fallback Base URL from the workspace's Playwright config so the
+      // recorder/runner have a sensible default when none is set globally.
+      try {
+        this.workspaceBaseUrl = (await window.api.workspace.getBaseUrl()) ?? ''
+      } catch {
+        this.workspaceBaseUrl = ''
       }
     },
 

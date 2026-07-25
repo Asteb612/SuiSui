@@ -10,6 +10,7 @@ const api: ElectronAPI = {
     validate: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_VALIDATE, path),
     init: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_INIT, path),
     detectBdd: (clonePath) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_DETECT_BDD, clonePath),
+    getBaseUrl: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET_BASE_URL),
   },
 
   features: {

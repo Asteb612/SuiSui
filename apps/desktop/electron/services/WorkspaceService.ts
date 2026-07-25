@@ -799,6 +799,47 @@ export class WorkspaceService {
     return this.currentWorkspace?.path ?? null
   }
 
+  /**
+   * Best-effort base URL for the workspace, read from its Playwright config so
+   * the recorder and runner have a sensible default even when no global Base URL
+   * is set. Preference: a `webServer.url`, then a literal `baseURL`, then any
+   * `http(s)://localhost:<port>` literal. Returns null if none is found.
+   */
+  getConfiguredBaseUrl(workspacePath?: string): string | null {
+    const root = workspacePath ?? this.getPath()
+    if (!root) return null
+
+    const configNames = [
+      'playwright.config.ts',
+      'playwright.config.js',
+      'playwright.config.mjs',
+      'playwright.config.cts',
+      'playwright.config.mts',
+    ]
+
+    for (const name of configNames) {
+      const configPath = path.join(root, name)
+      if (!fsSync.existsSync(configPath)) continue
+      let content: string
+      try {
+        content = fsSync.readFileSync(configPath, 'utf-8')
+      } catch {
+        continue
+      }
+
+      const webServerUrl = content.match(/webServer[\s\S]{0,300}?url:\s*['"`](https?:\/\/[^'"`]+)['"`]/)
+      if (webServerUrl?.[1]) return webServerUrl[1]
+
+      const baseUrlLiteral = content.match(/baseURL[\s\S]{0,160}?['"`](https?:\/\/[^'"`]+)['"`]/)
+      if (baseUrlLiteral?.[1]) return baseUrlLiteral[1]
+
+      const localhost = content.match(/['"`](https?:\/\/localhost:\d+[^'"`]*)['"`]/)
+      if (localhost?.[1]) return localhost[1]
+    }
+
+    return null
+  }
+
   async getFeaturesDir(workspacePath?: string): Promise<string> {
     const resolvedPath = workspacePath ?? this.getPath()
     if (!resolvedPath) return 'features'
