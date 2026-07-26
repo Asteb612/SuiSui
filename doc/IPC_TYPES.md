@@ -655,3 +655,30 @@ Serializable types (`RecordedAction`, `LocatorReference`, `LocatorCandidate`,
 `packages/shared/src/types/recorder.ts`. `AppSettings` gained `recorderAiEnabled`
 
 - `recorderLocatorSettings`.
+
+## Update channels (`update:*`, feature 008-auto-update)
+
+Invoke channels: `UPDATE_CHECK`, `UPDATE_DOWNLOAD`, `UPDATE_QUIT_AND_INSTALL`,
+`UPDATE_GET_STATE`, `UPDATE_GET_PREFERENCES`, `UPDATE_SET_PREFERENCES`.
+Push (webContents.send): `UPDATE_STATE_CHANGED` — a full serializable `UpdateState`
+snapshot on every transition (the renderer replaces its state; no deltas).
+
+`api.update`:
+
+```ts
+update: {
+  check(): Promise<UpdateState>
+  download(): Promise<UpdateState>
+  quitAndInstall(): Promise<void>        // explicit user action only (FR-011)
+  getState(): Promise<UpdateState>
+  getPreferences(): Promise<UpdatePreferences>
+  setPreferences(prefs: Partial<UpdatePreferences>): Promise<UpdatePreferences>
+  onStateChanged(cb: (state: UpdateState) => void): () => void   // returns unsubscribe
+}
+```
+
+Types (`@suisui/shared`, `types/update.ts` — the SSoT, since they cross IPC):
+`UpdatePhase` (`idle|checking|up-to-date|available|downloading|downloaded|error|unsupported`),
+`UpdateInfo`, `UpdateProgress`, `UpdateError`+`UpdateErrorCode`, `UpdaterCapability`,
+`UpdatePreferences` (+`DEFAULT_UPDATE_PREFERENCES`), and `UpdateState`. `AppSettings`
+gains `updatePreferences?` and `lastSeenVersion?`.

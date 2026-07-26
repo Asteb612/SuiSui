@@ -36,6 +36,12 @@ export default defineConfig({
         'electron/services/recorder/IRecorderAdapter.ts',
         'electron/services/recorder/types.ts',
         'electron/services/ai/IAIProvider.ts',
+        // Real updater adapter — driven by electron-updater against a live release
+        // feed; exercised by a manual/opt-in smoke test, never in CI (Constitution III).
+        'electron/services/update/ElectronUpdaterAdapter.ts',
+        // Type-only seam + electron-wiring factory — no unit-testable logic.
+        'electron/services/update/IUpdaterAdapter.ts',
+        'electron/services/update/getUpdateService.ts',
       ],
       // Baseline guardrails (set just below current coverage) so PRs
       // can't silently regress. Ratchet these up as coverage improves.

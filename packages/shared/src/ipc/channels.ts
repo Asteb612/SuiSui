@@ -111,6 +111,17 @@ export const IPC_CHANNELS = {
   RECORDER_PICKED: 'recorder:picked',
   RECORDER_STATUS: 'recorder:status',
   RECORDER_ERROR: 'recorder:error',
+
+  // Auto-update: request/response (invoke)
+  UPDATE_CHECK: 'update:check',
+  UPDATE_DOWNLOAD: 'update:download',
+  UPDATE_QUIT_AND_INSTALL: 'update:quitAndInstall',
+  UPDATE_GET_STATE: 'update:getState',
+  UPDATE_GET_PREFERENCES: 'update:getPreferences',
+  UPDATE_SET_PREFERENCES: 'update:setPreferences',
+
+  // Auto-update: main -> renderer push (webContents.send)
+  UPDATE_STATE_CHANGED: 'update:stateChanged',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

@@ -3,9 +3,11 @@ import path from 'node:path'
 import { watch } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
+import { IPC_CHANNELS } from '@suisui/shared'
 import { registerIpcHandlers } from './ipc/handlers'
 import { runDepCheck, printDepCheckReport } from './utils/depChecker'
 import { stripBillingEnv } from './services/ai/billingEnv'
+import { getUpdateService } from './services'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
@@ -142,6 +144,28 @@ function setupAutoReload() {
   }
 }
 
+/**
+ * Wire the auto-updater: push every state change to all windows and, if the user
+ * opted in and this install can self-update, kick a background check on startup.
+ * Skipped in test mode (Constitution III — no real updater/network in tests).
+ * `init()` also powers the one-time "what's new" notice after a version change.
+ */
+function initAutoUpdate() {
+  if (isTestMode) return
+  const updateService = getUpdateService()
+  updateService.setEmitter((state) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.UPDATE_STATE_CHANGED, state)
+      }
+    }
+  })
+  void updateService
+    .init()
+    .then(() => updateService.checkOnStartup())
+    .catch((err) => console.warn('[AutoUpdate] init failed:', err))
+}
+
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
@@ -231,6 +255,7 @@ app.whenReady().then(() => {
   registerIpcHandlers(ipcMain, dialog, shell, { isTestMode })
   createWindow()
   setupAutoReload()
+  initAutoUpdate()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

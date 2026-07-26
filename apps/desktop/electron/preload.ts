@@ -165,6 +165,20 @@ const api: ElectronAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_ERROR, listener)
     },
   },
+
+  update: {
+    check: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_CHECK),
+    download: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD),
+    quitAndInstall: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_QUIT_AND_INSTALL),
+    getState: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_GET_STATE),
+    getPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_GET_PREFERENCES),
+    setPreferences: (prefs) => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_SET_PREFERENCES, prefs),
+    onStateChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => callback(state)
+      ipcRenderer.on(IPC_CHANNELS.UPDATE_STATE_CHANGED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATE_CHANGED, listener)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)

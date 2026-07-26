@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import type { WorkspaceVariable } from '@suisui/shared'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
+import { useUpdateStore } from '~/stores/update'
 
 const props = defineProps<{
   visible: boolean
@@ -15,6 +16,38 @@ const emit = defineEmits<{
 
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
+const updateStore = useUpdateStore()
+
+// Auto-update preferences, two-way bound to the persisted settings (FR-014).
+const autoCheck = computed({
+  get: () => updateStore.preferences?.autoCheck ?? true,
+  set: (value: boolean) => {
+    void updateStore.setPreferences({ autoCheck: value })
+  },
+})
+const autoDownload = computed({
+  get: () => updateStore.preferences?.autoDownload ?? true,
+  set: (value: boolean) => {
+    void updateStore.setPreferences({ autoDownload: value })
+  },
+})
+
+const updateStatusIcon = computed(() => {
+  if (updateStore.hasError) return 'pi pi-exclamation-triangle'
+  if (updateStore.isChecking || updateStore.isDownloading) return 'pi pi-spin pi-spinner'
+  if (updateStore.isReady || updateStore.updateAvailable) return 'pi pi-download'
+  if (updateStore.phase === 'up-to-date') return 'pi pi-check-circle ok'
+  return 'pi pi-info-circle'
+})
+
+async function checkForUpdates() {
+  await updateStore.check()
+}
+
+function openReleasesPage() {
+  const url = updateStore.capability?.manualUpdateUrl
+  if (url) void window.api.app.openExternal(url)
+}
 
 const baseUrl = ref('')
 const variables = ref<WorkspaceVariable[]>([])
@@ -31,6 +64,7 @@ watch(
   () => props.visible,
   async (visible) => {
     if (!visible) return
+    await updateStore.init()
     await runnerStore.loadConfig()
     baseUrl.value = runnerStore.config.baseUrl ?? ''
     variables.value = await window.api.variables.get()
@@ -190,6 +224,120 @@ async function onSave() {
         </div>
         <small class="hint">Optional assistant for drafting and troubleshooting tests. Credentials stay on this machine.</small>
       </section>
+
+      <section class="group">
+        <h4 class="group-title">
+          Software Updates
+        </h4>
+
+        <div
+          v-if="updateStore.justUpdatedFrom"
+          class="update-whatsnew"
+          data-testid="update-whatsnew"
+        >
+          <i class="pi pi-check-circle ok" />
+          Updated from {{ updateStore.justUpdatedFrom }} to {{ updateStore.currentVersion }}.
+        </div>
+
+        <div class="update-row">
+          <span class="update-version">
+            Current version: <code>{{ updateStore.currentVersion || '—' }}</code>
+          </span>
+          <Button
+            label="Check for updates"
+            icon="pi pi-refresh"
+            size="small"
+            outlined
+            :loading="updateStore.isChecking"
+            :disabled="updateStore.isNotifyOnly"
+            data-testid="update-check-btn"
+            @click="checkForUpdates"
+          />
+        </div>
+
+        <div
+          class="update-status"
+          :class="{ error: updateStore.hasError }"
+          data-testid="update-status"
+        >
+          <i :class="updateStatusIcon" />
+          <span>{{ updateStore.statusLabel }}</span>
+        </div>
+
+        <ProgressBar
+          v-if="updateStore.isDownloading"
+          :value="Math.round(updateStore.progress?.percent ?? 0)"
+        />
+
+        <div
+          v-if="updateStore.info?.releaseNotes && updateStore.updateAvailable"
+          class="update-notes"
+          data-testid="update-notes"
+        >
+          <div class="notes-title">
+            What's new in {{ updateStore.info?.version }}
+          </div>
+          <pre class="notes-body">{{ updateStore.info?.releaseNotes }}</pre>
+        </div>
+
+        <div
+          v-if="updateStore.phase === 'available' && !autoDownload"
+          class="update-actions"
+        >
+          <Button
+            label="Download update"
+            icon="pi pi-download"
+            size="small"
+            data-testid="update-download-btn"
+            @click="() => updateStore.download()"
+          />
+        </div>
+        <div
+          v-if="updateStore.isReady"
+          class="update-actions"
+        >
+          <Button
+            label="Restart & update"
+            icon="pi pi-refresh"
+            size="small"
+            data-testid="update-restart-settings"
+            @click="() => updateStore.quitAndInstall()"
+          />
+        </div>
+
+        <small
+          v-if="updateStore.isNotifyOnly"
+          class="hint"
+        >
+          This installation can't update itself automatically.
+          <a
+            v-if="updateStore.capability?.manualUpdateUrl"
+            href="#"
+            data-testid="update-manual-link"
+            @click.prevent="openReleasesPage"
+          >Download the latest version</a>.
+        </small>
+
+        <div class="update-toggles">
+          <label class="toggle-row">
+            <Checkbox
+              v-model="autoCheck"
+              binary
+              data-testid="update-auto-check"
+            />
+            Automatically check for updates
+          </label>
+          <label class="toggle-row">
+            <Checkbox
+              v-model="autoDownload"
+              binary
+              :disabled="!autoCheck"
+              data-testid="update-auto-download"
+            />
+            Automatically download updates when available
+          </label>
+        </div>
+      </section>
     </div>
 
     <template #footer>
@@ -310,6 +458,84 @@ async function onSave() {
 
 .ai-status .ok {
   color: var(--green-600, #16a34a);
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.update-version {
+  font-size: 0.875rem;
+}
+
+.update-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+}
+
+.update-status.error {
+  color: var(--red-600, #dc2626);
+}
+
+.update-status .ok {
+  color: var(--green-600, #16a34a);
+}
+
+.update-notes {
+  background: var(--surface-ground);
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+}
+
+.notes-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.notes-body {
+  margin: 0;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-color-secondary);
+  font-family: inherit;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+
+.update-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.update-whatsnew {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--green-700, #15803d);
+}
+
+.update-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
 }
 
 .w-full {

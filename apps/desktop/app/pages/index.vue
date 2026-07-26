@@ -340,6 +340,9 @@ function cancelInit() {
       />
     </header>
 
+    <!-- Auto-update notification (self-contained: manages its own store lifecycle) -->
+    <UpdateBanner />
+
     <!-- Main content -->
     <main class="content">
       <div
