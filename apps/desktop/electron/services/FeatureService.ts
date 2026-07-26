@@ -178,8 +178,10 @@ export class FeatureService {
 
   async moveFeature(oldPath: string, newFolderPath: string): Promise<void> {
     this.validatePath(oldPath)
-    this.validatePath(newFolderPath + '/dummy.feature')
-    
+
+    // An empty target folder means the features root. Build the destination path first,
+    // then let renameFeature validate it — validating `newFolderPath + '/dummy.feature'`
+    // would produce a leading-slash (absolute) path for the root and be wrongly rejected.
     const fileName = path.basename(oldPath)
     const newPath = newFolderPath ? `${newFolderPath}/${fileName}` : fileName
     await this.renameFeature(oldPath, newPath)

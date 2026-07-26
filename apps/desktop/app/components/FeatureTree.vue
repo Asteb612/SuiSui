@@ -81,16 +81,18 @@ const dnd = {
     const type = draggedType.value
     dnd.end()
     if (!src || !type || !isValidMove(src, type, targetFolder)) return
-    if (type === 'folder') {
-      const name = src.split('/').pop() ?? src
-      await workspaceStore.renameFolder(src, targetFolder ? `${targetFolder}/${name}` : name)
-    } else {
-      await workspaceStore.moveFeature(src, targetFolder)
+    try {
+      // Both store actions reload the tree/features on success and throw on failure.
+      if (type === 'folder') {
+        const name = src.split('/').pop() ?? src
+        await workspaceStore.renameFolder(src, targetFolder ? `${targetFolder}/${name}` : name)
+      } else {
+        await workspaceStore.moveFeature(src, targetFolder)
+      }
+      if (selectedKey.value === src) selectedKey.value = ''
+    } catch {
+      // The failure is surfaced via workspaceStore.error.
     }
-    if (workspaceStore.error) return // move failed; error is surfaced by the store
-    await workspaceStore.loadFeatureTree()
-    await workspaceStore.loadFeatures()
-    if (selectedKey.value === src) selectedKey.value = ''
   },
 }
 provide('dnd', dnd)
@@ -296,6 +298,7 @@ async function refreshTree() {
       class="root-drop-bar"
       :class="{ visible: showRootDropBar, active: isRootDropTarget }"
       data-testid="feature-tree-root-dropbar"
+      @dragenter="rootDragOver"
       @dragover="rootDragOver"
       @drop="rootDrop"
     >
@@ -457,35 +460,31 @@ async function refreshTree() {
   border-radius: 6px;
 }
 
+/* Always rendered WITH real height so Chromium registers it as a drop target from the
+   start of a drag (a zero-height / mid-drag element is not a reliable drop target).
+   Muted when idle, prominent while dragging a nested item, highlighted on hover. */
 .root-drop-bar {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   flex-shrink: 0;
-  /* Collapsed and invisible when idle — still in the DOM so it's a stable drop target. */
-  max-height: 0;
-  margin: 0 0.5rem;
-  padding: 0 0.5rem;
-  font-size: 0.8rem;
+  margin: 0.25rem 0.5rem;
+  padding: 0.45rem;
+  font-size: 0.75rem;
   color: var(--text-color-secondary);
-  border: 1px dashed transparent;
+  border: 1px dashed var(--surface-border);
   border-radius: 6px;
-  overflow: hidden;
-  opacity: 0;
-  transition: max-height 0.15s ease, opacity 0.15s ease, padding 0.15s ease, margin 0.15s ease;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .root-drop-bar.visible {
-  max-height: 3rem;
-  margin: 0.25rem 0.5rem;
-  padding: 0.5rem;
-  border-color: var(--surface-border);
-  background: var(--surface-ground);
   opacity: 1;
 }
 
 .root-drop-bar.active {
+  opacity: 1;
   color: var(--primary-color, #3b82f6);
   border-color: var(--primary-color, #3b82f6);
   background: var(--primary-50, rgba(59, 130, 246, 0.12));
