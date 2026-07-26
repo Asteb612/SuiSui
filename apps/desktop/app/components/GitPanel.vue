@@ -74,9 +74,12 @@ const branchMenuItems = computed(() => {
   return items
 })
 
-async function openBranchMenu(event: MouseEvent) {
-  await loadBranches()
+function openBranchMenu(event: MouseEvent) {
+  // Toggle synchronously so PrimeVue can position against the live event target
+  // (after an await, event.currentTarget is null → the menu jumps to the corner).
+  // Branches are (re)loaded in the background; the menu model is reactive.
   branchMenuRef.value?.toggle(event)
+  void loadBranches()
 }
 
 async function switchBranch(branch: string) {
@@ -124,6 +127,7 @@ onMounted(() => {
     void githubStore.loadCredentials(workspacePath)
   }
   void refreshWorkspaceGitStatus()
+  void loadBranches()
   statusPollTimer = setInterval(() => {
     void refreshWorkspaceGitStatus()
   }, 2000)

@@ -85,6 +85,7 @@ const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
 const showRecorder = ref(false)
 const showRecorderScenarioDialog = ref(false)
+const showStepsDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -640,7 +641,13 @@ function cancelInit() {
       <span>{{ workspaceStore.workspace?.path ?? 'No workspace' }}</span>
       <span
         v-if="stepsStore.exportedAt"
-        class="steps-info"
+        class="steps-info steps-info-clickable"
+        role="button"
+        tabindex="0"
+        title="View loaded step definitions"
+        data-testid="steps-loaded-btn"
+        @click="showStepsDialog = true"
+        @keyup.enter="showStepsDialog = true"
       >
         {{ stepsStore.steps.length }} steps loaded
       </span>
@@ -652,6 +659,7 @@ function cancelInit() {
       @open-ai-settings="() => { showSettingsDialog = false; showAiSettingsDialog = true }"
     />
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
+    <StepsListDialog v-model:visible="showStepsDialog" />
     <RecorderPanel
       v-model:visible="showRecorder"
       :start-url="runnerStore.effectiveBaseUrl"
@@ -1211,6 +1219,14 @@ function cancelInit() {
 
 .steps-info {
   color: var(--primary-color);
+}
+
+.steps-info-clickable {
+  cursor: pointer;
+}
+
+.steps-info-clickable:hover {
+  text-decoration: underline;
 }
 
 .dirty-indicator {
