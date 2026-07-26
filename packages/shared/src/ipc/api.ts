@@ -1,13 +1,26 @@
 import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../types/workspace'
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
-import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions } from '../types/step-catalog'
+import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions, StepSourceLocation } from '../types/step-catalog'
 import type { ValidationResult } from '../types/validation'
 import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
+import type { WorkspaceVariable } from '../types/variables'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
-import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
+import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult, BranchListResult } from '../types/gitWorkspace'
 import type { AIProviderConfig, AIProviderStatus, AIStatusTarget, AIGenerationRequest, AIStreamChunk, AIStreamDone, AIStreamError } from '../types/ai'
+import type {
+  RecorderStartOptions,
+  RecorderSession,
+  RecordedAction,
+  PickedElement,
+  PickRequest,
+  RecorderAssertionRequest,
+  RecorderStatus,
+  RecorderError,
+  LocatorReference,
+  LocatorValidationResult,
+} from '../types/recorder'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -23,6 +36,8 @@ export interface ElectronAPI {
     validate: (path: string) => Promise<WorkspaceValidation>
     init: (path: string) => Promise<WorkspaceInfo>
     detectBdd: (clonePath: string) => Promise<BddDetectionResult>
+    /** Base URL derived from the workspace's Playwright config, or null. */
+    getBaseUrl: () => Promise<string | null>
   }
 
   features: {
@@ -56,6 +71,11 @@ export interface ElectronAPI {
     runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
     getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>
+    /**
+     * Snapshot the last run's HTML report into the given scope ('global' or a feature
+     * path), start the report server, and return the scope's report URL (embedded in-app).
+     */
+    showReport: (scope: string) => Promise<string>
     onRunnerLog: (callback: (line: string) => void) => void
     offRunnerLog: () => void
   }
@@ -66,9 +86,17 @@ export interface ElectronAPI {
     reset: () => Promise<void>
   }
 
+  variables: {
+    /** All user-defined variables/secrets (available to every feature at run time). */
+    get: () => Promise<WorkspaceVariable[]>
+    set: (variables: WorkspaceVariable[]) => Promise<void>
+  }
+
   app: {
     getVersion: () => Promise<string>
     openExternal: (url: string) => Promise<void>
+    /** Open a step definition's source at the given file/line in the editor. */
+    openInEditor: (location: StepSourceLocation) => Promise<void>
   }
 
   node: {
@@ -88,6 +116,9 @@ export interface ElectronAPI {
     pull: (localPath: string, credentials?: GitCredentials) => Promise<PullResult>
     status: (localPath: string) => Promise<WorkspaceStatusResult>
     commitAndPush: (localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) => Promise<CommitPushResult>
+    listBranches: (localPath: string) => Promise<BranchListResult>
+    checkoutBranch: (localPath: string, branch: string) => Promise<void>
+    createBranch: (localPath: string, branch: string) => Promise<void>
   }
 
   gitCredentials: {
@@ -114,6 +145,27 @@ export interface ElectronAPI {
     onChunk: (callback: (chunk: AIStreamChunk) => void) => () => void
     onDone: (callback: (done: AIStreamDone) => void) => () => void
     onError: (callback: (err: AIStreamError) => void) => () => void
+  }
+
+  recorder: {
+    start: (options: RecorderStartOptions) => Promise<{ accepted: true; session: RecorderSession }>
+    stop: () => Promise<void>
+    pause: () => Promise<void>
+    resume: () => Promise<void>
+    /** Arm SuiSui's own element picker (replaces Playwright's overlay). */
+    pick: (request: PickRequest) => Promise<{ accepted: true; pickId: string }>
+    cancelPick: () => Promise<void>
+    highlight: (locator: LocatorReference) => Promise<void>
+    validateLocator: (locator: LocatorReference) => Promise<LocatorValidationResult>
+    /** Add an explicit assertion; it arrives back via `onAction`. */
+    addAssertion: (request: RecorderAssertionRequest) => Promise<void>
+
+    // subscriptions (return an unsubscribe fn — call on onUnmounted)
+    onAction: (callback: (action: RecordedAction) => void) => () => void
+    onActionUpdated: (callback: (action: RecordedAction) => void) => () => void
+    onPicked: (callback: (picked: PickedElement) => void) => () => void
+    onStatus: (callback: (status: RecorderStatus) => void) => () => void
+    onError: (callback: (error: RecorderError) => void) => () => void
   }
 }
 

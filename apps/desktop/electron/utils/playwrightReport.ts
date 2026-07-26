@@ -45,9 +45,14 @@ interface PlaywrightTestResult {
 }
 
 export function extractFeatureRelativePath(generatedPath: string): string {
-  // .features-gen/features/auth/login.feature.spec.js → features/auth/login.feature
-  const match = generatedPath.match(/\.features-gen\/(.+?)\.spec\.[jt]s$/)
-  return match?.[1] ?? generatedPath
+  // The JSON reporter reports spec files relative to the bdd testDir, so the
+  // `.features-gen/` prefix may be present or absent:
+  //   .features-gen/features/auth/login.feature.spec.js → features/auth/login.feature
+  //   features/auth/login.feature.spec.js               → features/auth/login.feature
+  const match = generatedPath.match(/(?:^|\/)\.features-gen\/(.+?)\.spec\.[jt]s$/)
+  if (match?.[1]) return match[1]
+  const rel = generatedPath.match(/([^/].*?)\.spec\.[jt]s$/)
+  return rel?.[1] ?? generatedPath
 }
 
 export function parsePlaywrightJsonReport(
@@ -99,7 +104,7 @@ export function parsePlaywrightJsonReport(
   }
 
   function collectFeatureSuites(suite: PlaywrightSuite): void {
-    if (suite.file?.includes('.features-gen/')) {
+    if (suite.file?.includes('.feature.spec.')) {
       const relativePath = extractFeatureRelativePath(suite.file)
       const scenarioResults: ScenarioRunResult[] = []
       collectScenarioResults(suite, scenarioResults)

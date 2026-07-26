@@ -2,11 +2,11 @@
 
 ## Prerequisites
 
-| Requirement | Version | Check Command |
-|-------------|---------|---------------|
-| Node.js | 21.0.0+ | `node --version` |
-| pnpm | 10.0.0+ | `pnpm --version` |
-| Git | Latest | `git --version` |
+| Requirement | Version | Check Command    |
+| ----------- | ------- | ---------------- |
+| Node.js     | 21.0.0+ | `node --version` |
+| pnpm        | 10.0.0+ | `pnpm --version` |
+| Git         | Latest  | `git --version`  |
 
 ## Getting Started
 
@@ -38,7 +38,10 @@ pnpm dev:nuxt
 pnpm dev:electron
 ```
 
-The app will open automatically once both processes are ready.
+The app will open automatically once both processes are ready. `pnpm dev` also
+serves the bundled demo workspace's site on `http://localhost:5173`
+(`examples/demo-workspace`), so you can open that workspace and use **Record** /
+**Run** against it immediately.
 
 ---
 
@@ -46,17 +49,17 @@ The app will open automatically once both processes are ready.
 
 ### Root Level
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start development mode (Nuxt + Electron) |
-| `pnpm build` | Build for production |
-| `pnpm test` | Run all tests |
-| `pnpm test:unit` | Run unit tests only |
-| `pnpm test:e2e` | Run E2E tests (requires build) |
-| `pnpm lint` | Run ESLint |
-| `pnpm lint:fix` | Fix linting issues |
-| `pnpm format` | Format with Prettier |
-| `pnpm typecheck` | Full TypeScript check |
+| Command          | Description                                                   |
+| ---------------- | ------------------------------------------------------------- |
+| `pnpm dev`       | Start development mode (Nuxt + Electron + demo site on :5173) |
+| `pnpm build`     | Build for production                                          |
+| `pnpm test`      | Run all tests                                                 |
+| `pnpm test:unit` | Run unit tests only                                           |
+| `pnpm test:e2e`  | Run E2E tests (requires build)                                |
+| `pnpm lint`      | Run ESLint                                                    |
+| `pnpm lint:fix`  | Fix linting issues                                            |
+| `pnpm format`    | Format with Prettier                                          |
+| `pnpm typecheck` | Full TypeScript check                                         |
 
 ### Desktop App
 
@@ -129,10 +132,11 @@ pnpm typecheck         # Type check only
 **Example: Adding a new service**
 
 1. Create service in `electron/services/NewService.ts`:
+
 ```typescript
 export class NewService {
   constructor(private commandRunner?: ICommandRunner) {
-    this.commandRunner = commandRunner ?? getCommandRunner();
+    this.commandRunner = commandRunner ?? getCommandRunner()
   }
 
   async doSomething(): Promise<SomeResult> {
@@ -140,14 +144,15 @@ export class NewService {
   }
 }
 
-let instance: NewService | null = null;
+let instance: NewService | null = null
 export function getNewService(): NewService {
-  if (!instance) instance = new NewService();
-  return instance;
+  if (!instance) instance = new NewService()
+  return instance
 }
 ```
 
 2. Add types in `packages/shared/src/types/`:
+
 ```typescript
 export interface SomeResult {
   // ...
@@ -155,6 +160,7 @@ export interface SomeResult {
 ```
 
 3. Add IPC channel:
+
 ```typescript
 // channels.ts
 NEW_DO_SOMETHING: 'new:doSomething',
@@ -166,14 +172,16 @@ new: {
 ```
 
 4. Register handler:
+
 ```typescript
 // handlers.ts
 ipcMain.handle(IPC_CHANNELS.NEW_DO_SOMETHING, async () => {
-  return getNewService().doSomething();
-});
+  return getNewService().doSomething()
+})
 ```
 
 5. Expose in preload:
+
 ```typescript
 // preload.ts
 new: {
@@ -182,24 +190,26 @@ new: {
 ```
 
 6. Create Pinia store (if needed):
+
 ```typescript
 // stores/new.ts
 export const useNewStore = defineStore('new', () => {
-  const api = useApi();
+  const api = useApi()
   // ...
-});
+})
 ```
 
 7. Write tests:
+
 ```typescript
 // __tests__/NewService.test.ts
 describe('NewService', () => {
   it('should do something', async () => {
-    const fakeRunner = new FakeCommandRunner();
-    const service = new NewService(fakeRunner);
+    const fakeRunner = new FakeCommandRunner()
+    const service = new NewService(fakeRunner)
     // ...
-  });
-});
+  })
+})
 ```
 
 ---
@@ -236,15 +246,15 @@ app/components/workspaceSelector.vue # Should be PascalCase
 
 ### Naming Conventions
 
-| Type | Convention | Example |
-|------|------------|---------|
-| Vue Component | PascalCase | `ScenarioBuilder.vue` |
-| Pinia Store | camelCase with `use` prefix | `useWorkspaceStore` |
-| Service Class | PascalCase | `WorkspaceService` |
+| Type            | Convention                  | Example               |
+| --------------- | --------------------------- | --------------------- |
+| Vue Component   | PascalCase                  | `ScenarioBuilder.vue` |
+| Pinia Store     | camelCase with `use` prefix | `useWorkspaceStore`   |
+| Service Class   | PascalCase                  | `WorkspaceService`    |
 | Service Factory | camelCase with `get` prefix | `getWorkspaceService` |
-| Type/Interface | PascalCase | `WorkspaceInfo` |
-| IPC Channel | SCREAMING_SNAKE_CASE | `WORKSPACE_GET` |
-| Constant | SCREAMING_SNAKE_CASE | `DEFAULT_SETTINGS` |
+| Type/Interface  | PascalCase                  | `WorkspaceInfo`       |
+| IPC Channel     | SCREAMING_SNAKE_CASE        | `WORKSPACE_GET`       |
+| Constant        | SCREAMING_SNAKE_CASE        | `DEFAULT_SETTINGS`    |
 
 ---
 
@@ -267,13 +277,14 @@ pnpm dev:electron --inspect
 ### IPC Communication
 
 Add logging in handlers:
+
 ```typescript
 ipcMain.handle(channel, async (...args) => {
-  console.log(`[IPC] ${channel}`, args);
-  const result = await handler(...args);
-  console.log(`[IPC] ${channel} result:`, result);
-  return result;
-});
+  console.log(`[IPC] ${channel}`, args)
+  const result = await handler(...args)
+  console.log(`[IPC] ${channel} result:`, result)
+  return result
+})
 ```
 
 ---
@@ -290,6 +301,7 @@ pnpm --filter @suisui/shared build
 ### "Cannot find window.api"
 
 The preload script is not loaded. Check:
+
 1. `webPreferences.preload` path in `main.ts`
 2. Preload script compiles without errors
 3. Context isolation is enabled
@@ -325,6 +337,7 @@ pnpm test:e2e
 ### VS Code
 
 Recommended extensions:
+
 - Vue - Official
 - TypeScript Vue Plugin (Volar)
 - ESLint
@@ -345,13 +358,13 @@ Recommended extensions:
 
 ## Hot Reload Behavior
 
-| Change Type | Reload Type | Notes |
-|-------------|-------------|-------|
-| Vue Component | HMR | Instant |
-| Pinia Store | HMR | State preserved |
-| CSS | HMR | Instant |
-| Electron Main | Full Restart | Automatic |
-| Preload Script | Full Restart | Automatic |
+| Change Type    | Reload Type    | Notes            |
+| -------------- | -------------- | ---------------- |
+| Vue Component  | HMR            | Instant          |
+| Pinia Store    | HMR            | State preserved  |
+| CSS            | HMR            | Instant          |
+| Electron Main  | Full Restart   | Automatic        |
+| Preload Script | Full Restart   | Automatic        |
 | Shared Package | Manual Rebuild | Run `pnpm build` |
 
 ---
@@ -374,14 +387,15 @@ pnpm dist
 
 The app bundles `playwright`, `playwright-bdd`, and `bddgen` for test execution. Use these commands to verify dependencies are correctly packaged:
 
-| Command | Description |
-|---------|-------------|
-| `pnpm test:deps` | Test dependencies in development mode |
-| `pnpm test:deps:build` | Test dependencies in `dist-electron/` (simulates packaged app) |
-| `pnpm test:deps:release` | Test dependencies in `release/linux-unpacked/` |
-| `pnpm test:deps:appimage` | Extract and test dependencies in the AppImage |
+| Command                   | Description                                                    |
+| ------------------------- | -------------------------------------------------------------- |
+| `pnpm test:deps`          | Test dependencies in development mode                          |
+| `pnpm test:deps:build`    | Test dependencies in `dist-electron/` (simulates packaged app) |
+| `pnpm test:deps:release`  | Test dependencies in `release/linux-unpacked/`                 |
+| `pnpm test:deps:appimage` | Extract and test dependencies in the AppImage                  |
 
 Example output:
+
 ```
 ========================================
   SuiSui Dependency Check Report

@@ -302,7 +302,40 @@ See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md), [doc/SERVICES.md](doc/SERVICES.m
 (`StepCatalogService`), [doc/IPC_TYPES.md](doc/IPC_TYPES.md) (`catalog:*`), and
 [doc/FRONTEND.md](doc/FRONTEND.md) (`useStepsStore` catalog + selector filters).
 
+## SuiSui-Native Recorder (feature 007)
+
+Records a browser session and converts interactions into editable,
+catalog-matched BDD steps — **not** the Playwright Inspector window nor its
+in-page overlay. Key constraints:
+
+- The **only** code touching Playwright's private `_enableRecorder({recorderMode:'api'})`
+  is the embedded-Node child `electron/scripts/recorder-adapter.js` + its
+  `PlaywrightRecorderAdapter`, behind the `IRecorderAdapter` seam. It drives the
+  **workspace's** Playwright, suppresses Playwright's overlay (`x-pw-glass`), and
+  hosts SuiSui's own picker + an in-browser **assertion toolbar** (arm a type →
+  click an element → `t:'assert'` → `RecorderService` emits a matched assertion
+  card; text/value auto-captured). Version-gated `>=1.49 <1.61` with a capability probe.
+- **Secrets are redacted in the child** — a captured value never crosses stdio/IPC
+  and is emitted as a committable `${PASSWORD}`-style reference (env-var syntax,
+  resolved by the bundled fill steps at run time) / a Test Profile name.
+- The pipeline (`RecorderService` → `LocatorService` → `StepMatcherService`) is
+  **deterministic-first**; AI (`RecorderAiMatcher`) is behind `AppSettings.recorderAiEnabled`
+  (off by default), validated, and never auto-accepted.
+- **Tests never launch a real browser** (Constitution III): CI uses
+  `FakeRecorderAdapter` replaying checked-in NDJSON; the real adapter has a
+  manual/opt-in harness. All serializable types live in
+  `@suisui/shared/src/types/recorder.ts`; the renderer uses `window.api.recorder`
+  - `useRecorderStore`, inserting via the `scenario` store.
+
+See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md), [doc/SERVICES.md](doc/SERVICES.md)
+(`electron/services/recorder/`), [doc/IPC_TYPES.md](doc/IPC_TYPES.md)
+(`recorder:*`), and [doc/FRONTEND.md](doc/FRONTEND.md) (`useRecorderStore` +
+recorder components).
+
 ## Active Technologies
+
+- TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22; recorder child uses the app's embedded Node 22.13.1) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x. **No new bundled dependency** — the recorder drives the **workspace's** Playwright (`>=1.49 <1.61` supported) via the app's existing embedded Node; reuses `@suisui/step-catalog` (feature 006), `RunnerService`/`NodeService` infra (feature 002), the AI provider seam (feature 005), and the `safeStorage`/`.app/` pattern (feature 003, via #98 for credentials) (007-native-recorder)
+- In-memory session state (main `RecorderService` + renderer `recorder` store). No new persisted store: secrets are redacted (never stored); provenance stays in the renderer/optional `.app/` sidecar (deferred); source locations come from the catalog (007-native-recorder)
 
 - TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; **new (main-process/engine only)**: `typescript` (Compiler API, already a dev dep) as a runtime dep of `@suisui/step-catalog`; reuses `@suisui/step-regex` pattern parsers (006-step-catalog)
 - In-memory catalog in the service; on-disk JSON cache at `<workspace>/.app/cache/step-catalog.json` (git-ignored via a written `.app/.gitignore`); provider/settings unchanged (006-step-catalog)

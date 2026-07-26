@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
-import type { FeatureRunResult } from '@suisui/shared'
+import { useStepsStore } from '~/stores/steps'
 
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
+const stepsStore = useStepsStore()
 const logsContainer = ref<HTMLPreElement | null>(null)
 
 // --- AI failure explanation (spec FR-012) ---
 const explaining = ref(false)
 const explanation = ref('')
 const explainError = ref<string | null>(null)
+
+// --- AI failure fix (advisory suggestion, reviewed by the user) ---
+const fixing = ref(false)
+const fixSuggestion = ref('')
+const fixError = ref<string | null>(null)
 
 const hasFailures = computed(() => {
   const b = runnerStore.batchResult
@@ -59,7 +65,25 @@ async function onExplainFailure() {
   }
 }
 
-function onCancelExplain() {
+async function onFixFailure() {
+  if (!hasFailures.value || fixing.value) return
+  fixing.value = true
+  fixSuggestion.value = ''
+  fixError.value = null
+  try {
+    const result = await aiStore.generate('failure-fix', failureOutput.value, {
+      steps: stepsStore.steps,
+      scenarioText: null,
+      targetStep: null,
+    })
+    if (result.error) fixError.value = result.error
+    else fixSuggestion.value = result.text
+  } finally {
+    fixing.value = false
+  }
+}
+
+function onCancelAi() {
   aiStore.cancel()
 }
 
@@ -73,27 +97,54 @@ watch(
     })
   },
 )
-const expandedFeatures = ref<Set<string>>(new Set())
+// Logs are noisy and hidden by default; the integrated report is the main view.
+const showLogs = ref(false)
 
-function toggleFeature(path: string) {
-  if (expandedFeatures.value.has(path)) {
-    expandedFeatures.value.delete(path)
-  } else {
-    expandedFeatures.value.add(path)
-  }
-}
+// --- Live run progress + elapsed timer (so a long/stuck run is visible) ---
+const elapsedMs = ref(0)
+let elapsedTimer: ReturnType<typeof setInterval> | null = null
+let runStart = 0
 
-function statusIcon(status: string): string {
-  switch (status) {
-    case 'passed':
-      return 'pi pi-check-circle'
-    case 'failed':
-      return 'pi pi-times-circle'
-    case 'skipped':
-      return 'pi pi-minus-circle'
-    default:
-      return 'pi pi-circle'
+watch(
+  () => runnerStore.isRunning,
+  (running) => {
+    if (running) {
+      runStart = Date.now()
+      elapsedMs.value = 0
+      if (elapsedTimer) clearInterval(elapsedTimer)
+      elapsedTimer = setInterval(() => {
+        elapsedMs.value = Date.now() - runStart
+      }, 500)
+    } else if (elapsedTimer) {
+      clearInterval(elapsedTimer)
+      elapsedTimer = null
+    }
+  },
+)
+onUnmounted(() => {
+  if (elapsedTimer) clearInterval(elapsedTimer)
+})
+
+const progressPct = computed(() => {
+  const p = runnerStore.progress
+  return p.total > 0 ? Math.min(100, Math.round((p.completed / p.total) * 100)) : 0
+})
+
+/** The most recent non-empty streamed line — shown as current activity. */
+const lastLogLine = computed(() => {
+  const logs = runnerStore.logs
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const l = logs[i]?.trim()
+    if (l) return l
   }
+  return ''
+})
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
 function statusClass(status: string): string {
@@ -104,29 +155,30 @@ function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
 }
-
-function featureScenarioSummary(feature: FeatureRunResult): string {
-  const passed = feature.scenarioResults.filter((s) => s.status === 'passed').length
-  const failed = feature.scenarioResults.filter((s) => s.status === 'failed').length
-  const skipped = feature.scenarioResults.filter((s) => s.status === 'skipped').length
-  const parts: string[] = []
-  if (passed) parts.push(`${passed} passed`)
-  if (failed) parts.push(`${failed} failed`)
-  if (skipped) parts.push(`${skipped} skipped`)
-  return parts.join(', ')
-}
 </script>
 
 <template>
   <div class="run-results-panel">
-    <!-- Back to Filters button -->
+    <!-- Back to Filters button (hidden for a single-spec quick-run — there are no filters to return to) -->
     <div class="results-header">
       <Button
+        v-if="!runnerStore.singleRun"
         icon="pi pi-arrow-left"
         label="Back to Filters"
         text
         size="small"
-        @click="runnerStore.showResults = false"
+        data-testid="back-to-filters-btn"
+        @click="runnerStore.showFilters()"
+      />
+      <div class="results-header-spacer" />
+      <Button
+        v-if="runnerStore.batchResult && !runnerStore.isRunning && runnerStore.logs.length > 0"
+        :icon="showLogs ? 'pi pi-eye-slash' : 'pi pi-list'"
+        :label="showLogs ? 'Hide logs' : 'Show logs'"
+        text
+        size="small"
+        data-testid="toggle-logs-btn"
+        @click="showLogs = !showLogs"
       />
     </div>
 
@@ -139,15 +191,60 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
       <span>Run tests to see results here</span>
     </div>
 
-    <!-- Running indicator -->
+    <!-- Running indicator with live progress -->
     <div
       v-else-if="runnerStore.isRunning"
       class="running-state-section"
     >
       <div class="running-state">
         <i class="pi pi-spin pi-spinner" />
-        <span>Tests are running...</span>
+        <span>Running tests…</span>
+        <span
+          class="run-elapsed"
+          data-testid="run-elapsed"
+        >{{ formatElapsed(elapsedMs) }}</span>
       </div>
+
+      <div
+        v-if="runnerStore.progress.total > 0"
+        class="run-progress"
+        data-testid="run-progress"
+      >
+        <div class="run-progress-head">
+          <span class="run-progress-count">
+            <strong>{{ runnerStore.progress.completed }}</strong> / {{ runnerStore.progress.total }} tests
+          </span>
+          <span class="run-progress-breakdown">
+            <span
+              v-if="runnerStore.progress.passed"
+              class="ok"
+            >{{ runnerStore.progress.passed }} passed</span>
+            <span
+              v-if="runnerStore.progress.failed"
+              class="fail"
+            >{{ runnerStore.progress.failed }} failed</span>
+            <span
+              v-if="runnerStore.progress.skipped"
+              class="skip"
+            >{{ runnerStore.progress.skipped }} skipped</span>
+          </span>
+        </div>
+        <div class="run-progress-bar">
+          <div
+            class="run-progress-fill"
+            :style="{ width: progressPct + '%' }"
+          />
+        </div>
+      </div>
+
+      <p
+        v-if="lastLogLine"
+        class="run-current"
+        data-testid="run-current"
+      >
+        {{ lastLogLine }}
+      </p>
+
       <pre
         v-if="runnerStore.logs.length > 0"
         ref="logsContainer"
@@ -206,21 +303,33 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
             icon="pi pi-sparkles"
             size="small"
             outlined
-            :disabled="explaining"
+            :disabled="explaining || fixing"
             :loading="explaining"
             data-testid="ai-explain-btn"
             @click="onExplainFailure"
           />
           <Button
-            v-if="explaining"
+            :label="fixSuggestion || fixing ? 'Re-fix failure (AI)' : 'Fix failure (AI)'"
+            icon="pi pi-wrench"
+            size="small"
+            outlined
+            :disabled="explaining || fixing"
+            :loading="fixing"
+            data-testid="ai-fix-btn"
+            @click="onFixFailure"
+          />
+          <Button
+            v-if="explaining || fixing"
             label="Cancel"
             icon="pi pi-times"
             text
             size="small"
             data-testid="ai-explain-cancel"
-            @click="onCancelExplain"
+            @click="onCancelAi"
           />
         </div>
+
+        <!-- Explanation result -->
         <div
           v-if="explainError"
           class="ai-explain-error"
@@ -238,69 +347,28 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
           class="ai-explain-body"
           data-testid="ai-explain-result"
         >{{ explanation }}</pre>
-      </div>
 
-      <!-- Feature Results List -->
-      <div class="feature-results">
+        <!-- Fix suggestion result -->
         <div
-          v-for="feature in runnerStore.batchResult.featureResults"
-          :key="feature.relativePath"
-          class="feature-item"
+          v-if="fixError"
+          class="ai-explain-error"
+          data-testid="ai-fix-error"
         >
-          <div
-            class="feature-header"
-            @click="toggleFeature(feature.relativePath)"
-          >
-            <i
-              :class="expandedFeatures.has(feature.relativePath) ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
-              class="expand-icon"
-            />
-            <i
-              :class="statusIcon(feature.status)"
-              :class-name="statusClass(feature.status)"
-            />
-            <span
-              class="feature-name"
-              :class="statusClass(feature.status)"
-            >
-              {{ feature.name || feature.relativePath }}
-            </span>
-            <span class="feature-meta">
-              {{ featureScenarioSummary(feature) }}
-              &middot; {{ formatDuration(feature.duration) }}
-            </span>
-          </div>
-
-          <!-- Expanded Scenario Results -->
-          <div
-            v-if="expandedFeatures.has(feature.relativePath)"
-            class="scenario-list"
-          >
-            <div
-              v-for="scenario in feature.scenarioResults"
-              :key="scenario.name"
-              class="scenario-item"
-            >
-              <i :class="statusIcon(scenario.status)" />
-              <span
-                class="scenario-name"
-                :class="statusClass(scenario.status)"
-              >
-                {{ scenario.name }}
-              </span>
-              <span class="scenario-duration">{{ formatDuration(scenario.duration) }}</span>
-              <div
-                v-if="scenario.error"
-                class="scenario-error"
-              >
-                {{ scenario.error }}
-              </div>
-            </div>
-          </div>
+          <i class="pi pi-exclamation-triangle" /> {{ fixError }}
         </div>
+        <pre
+          v-else-if="fixing"
+          class="ai-explain-body"
+          data-testid="ai-fix-stream"
+        >{{ aiStore.streamingDraft }}<span class="cursor">▍</span></pre>
+        <pre
+          v-else-if="fixSuggestion"
+          class="ai-explain-body"
+          data-testid="ai-fix-result"
+        >{{ fixSuggestion }}</pre>
       </div>
 
-      <!-- Errors -->
+      <!-- Errors (native — e.g. bddgen failures that never reached the report) -->
       <div
         v-if="runnerStore.errors.length > 0"
         class="errors-section"
@@ -328,25 +396,54 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
         </div>
       </div>
 
-      <!-- Logs -->
-      <div
-        v-if="runnerStore.logs.length > 0"
-        class="logs-section"
-      >
-        <div class="logs-header">
-          <span class="logs-title">Logs</span>
-          <Button
-            icon="pi pi-trash"
-            label="Clear"
-            text
-            size="small"
-            @click="runnerStore.clearLogs()"
+      <!-- Integrated Playwright report + collapsible logs beside it -->
+      <div class="results-body">
+        <div
+          class="report-pane"
+          data-testid="report-pane"
+        >
+          <iframe
+            v-if="runnerStore.reportUrl"
+            :src="runnerStore.reportUrl"
+            class="report-frame"
+            title="Test report"
           />
+          <div
+            v-else-if="runnerStore.reportLoading"
+            class="report-placeholder"
+          >
+            <i class="pi pi-spin pi-spinner" />
+            <span>Preparing the report…</span>
+          </div>
+          <div
+            v-else
+            class="report-placeholder"
+          >
+            <i class="pi pi-info-circle" />
+            <span>No report for this run — open the logs to see what happened.</span>
+          </div>
         </div>
-        <pre
-          ref="logsContainer"
-          class="logs-output"
-        >{{ runnerStore.logs.join('\n') }}</pre>
+
+        <div
+          v-if="showLogs && runnerStore.logs.length > 0"
+          class="logs-pane"
+          data-testid="logs-pane"
+        >
+          <div class="logs-header">
+            <span class="logs-title">Logs</span>
+            <Button
+              icon="pi pi-trash"
+              label="Clear"
+              text
+              size="small"
+              @click="runnerStore.clearLogs()"
+            />
+          </div>
+          <pre
+            ref="logsContainer"
+            class="logs-output"
+          >{{ runnerStore.logs.join('\n') }}</pre>
+        </div>
       </div>
     </div>
   </div>
@@ -360,7 +457,62 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
   padding: 0.75rem;
   overflow: hidden;
   flex: 1;
+  /* Fill the runner content area so the embedded report fills the remaining
+     height and only its own content scrolls (inside the iframe), not the panel. */
+  height: 100%;
   min-height: 0;
+  position: relative;
+}
+
+/* Integrated report + logs live side by side and fill the panel */
+.results-header-spacer {
+  flex: 1;
+}
+
+.results-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0.5rem;
+}
+
+.report-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  border: 1px solid var(--p-content-border-color, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--p-content-background, #fff);
+}
+
+.report-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+}
+
+.report-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--p-text-muted-color, #6b7280);
+  font-size: 0.9rem;
+}
+
+.logs-pane {
+  width: 40%;
+  max-width: 520px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--p-content-border-color, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .results-content {
@@ -395,6 +547,78 @@ function featureScenarioSummary(feature: FeatureRunResult): string {
   justify-content: center;
   color: var(--p-text-muted-color);
   font-size: 0.9rem;
+}
+
+/* When running, the state line is a compact header above the live progress. */
+.running-state-section .running-state {
+  padding: 0.75rem;
+  justify-content: flex-start;
+}
+
+.run-elapsed {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0 0.75rem;
+}
+
+.run-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.run-progress-count strong {
+  font-size: 1rem;
+}
+
+.run-progress-breakdown {
+  display: inline-flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.run-progress-breakdown .ok {
+  color: var(--p-green-600);
+}
+
+.run-progress-breakdown .fail {
+  color: var(--p-red-600);
+}
+
+.run-progress-breakdown .skip {
+  color: var(--p-text-muted-color);
+}
+
+.run-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--p-content-border-color, var(--surface-border, #e5e7eb));
+  overflow: hidden;
+}
+
+.run-progress-fill {
+  height: 100%;
+  background: var(--p-primary-color, #3b82f6);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.run-current {
+  margin: 0;
+  padding: 0 0.75rem;
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-bar {

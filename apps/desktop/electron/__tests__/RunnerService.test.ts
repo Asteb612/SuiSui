@@ -356,7 +356,7 @@ Feature: Shopping Cart
       expect(argsStr).not.toContain('--workers=1')
     })
 
-    it('should use --reporter=json,html for headless mode', async () => {
+    it('should use --reporter=list,json,html for headless mode (live progress + parseable JSON)', async () => {
       fakeRunner.setDefaultResponse({ code: 0, stdout: sampleJsonReport, stderr: '' })
 
       await service.runBatch({
@@ -367,7 +367,9 @@ Feature: Shopping Cart
       // bddgen is callHistory[0], playwright is callHistory[1]
       const playwrightCall = fakeRunner.callHistory[1]
       const argsStr = playwrightCall!.args.join(' ')
-      expect(argsStr).toContain('--reporter=json,html')
+      expect(argsStr).toContain('--reporter=list,json,html')
+      // JSON goes to a file so stdout stays free for the live `list` reporter.
+      expect(playwrightCall!.options?.env?.PLAYWRIGHT_JSON_OUTPUT_NAME).toBeTruthy()
     })
 
     it('should add --ui for ui mode and skip json reporter', async () => {
@@ -491,6 +493,38 @@ Feature: Shopping Cart
       // bddgen call should not have FEATURE env var
       const bddgenCall = fakeRunner.callHistory[0]
       expect(bddgenCall.options?.env?.FEATURE).toBeUndefined()
+    })
+  })
+
+  describe('showReport — last report only, named by scope', () => {
+    it('snapshots the run report by scope and keeps ONLY the last one', async () => {
+      const fsSync = await import('node:fs')
+      const reportDir = path.join(tempDir, 'playwright-report')
+      const reportsDir = path.join(tempDir, '.app', 'reports')
+      await fs.mkdir(reportDir, { recursive: true })
+
+      // Run 1 → global scope.
+      await fs.writeFile(path.join(reportDir, 'index.html'), 'GLOBAL REPORT')
+      const globalUrl = await service.showReport('global')
+      expect(globalUrl).toBe('http://127.0.0.1:9323/global/')
+      expect(fsSync.readFileSync(path.join(reportsDir, 'global', 'index.html'), 'utf-8')).toBe('GLOBAL REPORT')
+
+      // Run 2 overwrites playwright-report → a single-spec scope (path is sanitized).
+      await fs.writeFile(path.join(reportDir, 'index.html'), 'SPEC REPORT')
+      const specUrl = await service.showReport('cart/checkout.feature')
+      expect(specUrl).toBe('http://127.0.0.1:9323/cart_checkout.feature/')
+
+      // Only the last report is kept: the spec snapshot exists, global was pruned.
+      expect(fsSync.existsSync(path.join(reportsDir, 'global'))).toBe(false)
+      expect(fsSync.readFileSync(path.join(reportsDir, 'cart_checkout.feature', 'index.html'), 'utf-8')).toBe('SPEC REPORT')
+
+      // Close the static server so the test doesn't leak a handle (no-op if the port
+      // was already taken and the server was reused).
+      ;(service as unknown as { reportServer: { close(): void } | null }).reportServer?.close()
+    })
+
+    it('throws when there is no report to show for the scope', async () => {
+      await expect(service.showReport('global')).rejects.toThrow(/No report yet/)
     })
   })
 })

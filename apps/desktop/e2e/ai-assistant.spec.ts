@@ -26,26 +26,27 @@ test.describe('AI assistant (fake provider)', () => {
     await cleanupFixture(workspacePath)
   })
 
-  test('AI entry points are hidden until a provider is configured', async () => {
+  test('the settings entry point is always available', async () => {
     const w = ctx.window
-    // No provider yet → the "Generate with AI" entry point is absent (FR-014).
-    await expect(w.locator('[data-testid="ai-generate-btn"]')).toHaveCount(0)
-    // The settings gear is always available.
-    await expect(w.locator('[data-testid="ai-settings-btn"]')).toBeVisible()
+    // The settings gear (the path to AI provider config) is always available.
+    await expect(w.locator('[data-testid="settings-btn"]')).toBeVisible()
   })
 
-  test('configuring a provider enables the AI entry points', async () => {
+  test('configuring a provider from the settings dialog persists', async () => {
     const w = ctx.window
-    await w.locator('[data-testid="ai-settings-btn"]').click()
+    // Settings gear → general Settings dialog → open AI provider settings.
+    await w.locator('[data-testid="settings-btn"]').click()
+    await expect(w.locator('[data-testid="settings-dialog"]')).toBeVisible()
+    await w.locator('[data-testid="settings-open-ai"]').click()
     await expect(w.locator('[data-testid="ai-settings-dialog"]')).toBeVisible()
 
-    // Select the always-available BYOK provider.
+    // Select the always-available BYOK provider and save.
     await w.locator('[data-testid="ai-provider-select"]').click()
     await w.getByRole('option', { name: /Bring your own key/i }).click()
     await w.locator('[data-testid="ai-settings-save"]').click()
 
-    // Entry point now visible (FR-014).
-    await expect(w.locator('[data-testid="ai-generate-btn"]')).toBeVisible()
+    // Save succeeds and the dialog closes.
+    await expect(w.locator('[data-testid="ai-settings-dialog"]')).toHaveCount(0)
   })
 
   /** Ensure the builder is showing login.feature in edit mode (idempotent across tests). */
@@ -102,28 +103,5 @@ test.describe('AI assistant (fake provider)', () => {
 
     // Dialog closes (step accepted).
     await expect(w.locator('[data-testid="ai-suggestion"]')).toHaveCount(0)
-  })
-
-  test('generates a scenario from a description and inserts it (US2)', async () => {
-    const w = ctx.window
-    await w.locator('[data-testid="ai-generate-btn"]').click()
-    await expect(w.locator('[data-testid="ai-generation-dialog"]')).toBeVisible()
-
-    await w.locator('[data-testid="ai-gen-description"]').fill('a user visits the home page')
-    await w.locator('[data-testid="ai-gen-generate"]').click()
-
-    // The draft streams in, then validation runs and Accept becomes enabled.
-    const draft = w.locator('[data-testid="ai-gen-draft"]')
-    await expect(draft).toHaveValue(/Feature: AI generated/, { timeout: 15_000 })
-
-    const accept = w.locator('[data-testid="ai-gen-accept"]')
-    await expect(accept).toBeEnabled({ timeout: 15_000 })
-    await accept.click()
-
-    // The generated scenario is inserted into the builder (its name lands in the
-    // scenario-name field; the generated steps render in the builder).
-    await expect(w.locator('[data-testid="ai-generation-dialog"]')).toHaveCount(0)
-    await expect(w.getByPlaceholder('Scenario name...')).toHaveValue('generated flow')
-    await expect(w.locator(SEL.scenarioBuilder)).toContainText('I am on the')
   })
 })

@@ -10,28 +10,158 @@ import type {
 } from '@suisui/shared'
 import { DEFAULT_RUN_CONFIGURATION } from '@suisui/shared'
 
+/** The global filters runner. Per-spec quick-runs use their feature path as the scope id. */
+export const GLOBAL_SCOPE = 'global'
+
+/** Live progress derived from the Playwright `list` reporter while a run is in flight. */
+export interface RunProgress {
+  total: number
+  completed: number
+  passed: number
+  failed: number
+  skipped: number
+}
+
+function emptyProgress(): RunProgress {
+  return { total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 }
+}
+
+// The `list` reporter colorizes its output; strip SGR/CSI escapes before parsing or
+// displaying (a <pre> renders them as garbage otherwise).
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/g
+
+/** Remove ANSI escape sequences from a streamed log line. */
+export function stripAnsi(line: string): string {
+  return line.replace(ANSI_RE, '')
+}
+
+/**
+ * Update live progress from one streamed `list`-reporter line. Best-effort and
+ * degrades gracefully: unrecognized lines just don't move the counters (the raw log
+ * still shows, and the final JSON report carries the authoritative numbers).
+ */
+export function updateProgressFromLine(p: RunProgress, rawLine: string): void {
+  const line = stripAnsi(rawLine)
+  const running = line.match(/Running\s+(\d+)\s+test/i)
+  if (running) {
+    p.total = Number(running[1])
+    return
+  }
+  // A completed-test line has the "›" title separator and ends with a (duration).
+  if (/›/.test(line) && /\(\s*\d+(?:\.\d+)?\s*m?s\s*\)\s*$/.test(line)) {
+    p.completed++
+    const head = line.trimStart().charAt(0)
+    if (head === '✓' || head === '✔') p.passed++
+    else if (head === '✘' || head === '✕' || head === '✗' || head === '✖') p.failed++
+    return
+  }
+  // Skipped tests are dimmed with a leading "-" and carry no duration.
+  if (/^\s*-\s+\d+\s+.*›/.test(line)) {
+    p.completed++
+    p.skipped++
+  }
+}
+
+/**
+ * Per-scope run output. The global filters runner and each single-spec quick-run
+ * keep their OWN results/report/logs so they never clobber one another.
+ */
+interface RunScope {
+  status: RunStatus
+  logs: string[]
+  errors: RunError[]
+  batchResult: BatchRunResult | null
+  lastResult: RunResult | null
+  showResults: boolean
+  reportUrl: string
+  reportLoading: boolean
+  /** True for a single-spec quick-run (hides filter-oriented controls in the runner view). */
+  singleRun: boolean
+  /** Live per-test progress while the run is in flight. */
+  progress: RunProgress
+}
+
+function emptyScope(singleRun = false): RunScope {
+  return {
+    status: 'idle',
+    logs: [],
+    errors: [],
+    batchResult: null,
+    lastResult: null,
+    showResults: false,
+    reportUrl: '',
+    reportLoading: false,
+    singleRun,
+    progress: emptyProgress(),
+  }
+}
+
 export const useRunnerStore = defineStore('runner', {
   state: () => ({
-    status: 'idle' as RunStatus,
-    lastResult: null as RunResult | null,
-    logs: [] as string[],
-    errors: [] as RunError[],
+    // One test run at a time (a single Playwright process), so this stays global.
     isRunning: false,
     baseUrl: '' as string,
+    /** Base URL derived from the workspace's Playwright config (fallback default). */
+    workspaceBaseUrl: '' as string,
 
-    // Batch run state
-    batchResult: null as BatchRunResult | null,
     workspaceTests: null as WorkspaceTestInfo | null,
 
-    // Run configuration (filters + execution settings)
+    // Run configuration (filters + execution settings) — the GLOBAL runner's config.
     config: { ...DEFAULT_RUN_CONFIGURATION } as RunConfiguration,
 
-    // UI state (session-scoped, not persisted)
-    showResults: false,
-    hasEnteredRunView: false,
+    // Scoped run output. `activeScope` selects which scope the runner view displays:
+    // GLOBAL_SCOPE for the filters runner, or a feature path for a single-spec quick-run.
+    activeScope: GLOBAL_SCOPE as string,
+    scopes: { [GLOBAL_SCOPE]: emptyScope() } as Record<string, RunScope>,
   }),
 
   getters: {
+    /** The run output for the scope currently displayed. */
+    currentScope(state): RunScope {
+      return state.scopes[state.activeScope] ?? emptyScope(state.activeScope !== GLOBAL_SCOPE)
+    },
+
+    // Active-scope views of the run output (what components bind to).
+    status(): RunStatus {
+      return this.currentScope.status
+    },
+    logs(): string[] {
+      return this.currentScope.logs
+    },
+    errors(): RunError[] {
+      return this.currentScope.errors
+    },
+    batchResult(): BatchRunResult | null {
+      return this.currentScope.batchResult
+    },
+    lastResult(): RunResult | null {
+      return this.currentScope.lastResult
+    },
+    showResults(): boolean {
+      return this.currentScope.showResults
+    },
+    reportUrl(): string {
+      return this.currentScope.reportUrl
+    },
+    reportLoading(): boolean {
+      return this.currentScope.reportLoading
+    },
+    singleRun(): boolean {
+      return this.currentScope.singleRun
+    },
+    progress(): RunProgress {
+      return this.currentScope.progress
+    },
+
+    /**
+     * Effective Base URL: the user's setting when present, otherwise the
+     * workspace's configured default. Used by the recorder and for display.
+     */
+    effectiveBaseUrl(state): string {
+      return state.config.baseUrl?.trim() || state.workspaceBaseUrl
+    },
+
     /**
      * Compute matched features and scenarios based on current filters.
      * Exclusive tab model: only the active tab's filter applies + name filter (AND).
@@ -90,6 +220,25 @@ export const useRunnerStore = defineStore('runner', {
   },
 
   actions: {
+    /** Get (creating if needed) the run output for the active scope. */
+    ensureScope(): RunScope {
+      if (!this.scopes[this.activeScope]) {
+        this.scopes[this.activeScope] = emptyScope(this.activeScope !== GLOBAL_SCOPE)
+      }
+      return this.scopes[this.activeScope]!
+    },
+
+    /** Select which scope the runner view displays (GLOBAL_SCOPE or a feature path). */
+    setActiveScope(scope: string) {
+      this.activeScope = scope
+      this.ensureScope()
+    },
+
+    /** Leave the results view and go back to the filters (global runner only). */
+    showFilters() {
+      this.ensureScope().showResults = false
+    },
+
     async setBaseUrl(url: string) {
       this.baseUrl = url
       this.config.baseUrl = url
@@ -103,6 +252,13 @@ export const useRunnerStore = defineStore('runner', {
         this.config = { ...DEFAULT_RUN_CONFIGURATION, ...settings.runConfiguration }
         this.baseUrl = this.config.baseUrl || settings.baseUrl || ''
       }
+      // Derive a fallback Base URL from the workspace's Playwright config so the
+      // recorder/runner have a sensible default when none is set globally.
+      try {
+        this.workspaceBaseUrl = (await window.api.workspace.getBaseUrl()) ?? ''
+      } catch {
+        this.workspaceBaseUrl = ''
+      }
     },
 
     /** @deprecated Use loadConfig() instead */
@@ -113,8 +269,33 @@ export const useRunnerStore = defineStore('runner', {
     async persistConfig() {
       await window.api.settings.set({
         baseUrl: this.config.baseUrl || null,
-        runConfiguration: { ...this.config },
+        // De-proxy: nested reactive arrays can't be structured-cloned across IPC.
+        runConfiguration: JSON.parse(JSON.stringify(this.config)),
       })
+    },
+
+    /** Start the report server and show THIS scope's report in-app (iframe). */
+    async showReport(scope?: string) {
+      const scopeId = scope ?? this.activeScope
+      if (!this.scopes[scopeId]) this.scopes[scopeId] = emptyScope(scopeId !== GLOBAL_SCOPE)
+      const s = this.scopes[scopeId]!
+      s.reportLoading = true
+      try {
+        const url = await window.api.runner.showReport(scopeId)
+        // Only the last report is kept on disk (see RunnerService.showReport), so this
+        // scope now owns it; drop every other scope's now-stale report URL.
+        for (const [id, sc] of Object.entries(this.scopes)) {
+          sc.reportUrl = id === scopeId ? url : ''
+        }
+      } catch (err) {
+        s.logs.push(`Could not open the report: ${err instanceof Error ? err.message : String(err)}`)
+      } finally {
+        s.reportLoading = false
+      }
+    },
+
+    closeReport() {
+      this.ensureScope().reportUrl = ''
     },
 
     async loadWorkspaceTests() {
@@ -125,22 +306,36 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
-    async runBatch(mode: 'headless' | 'ui') {
+    async runBatch(
+      mode: 'headless' | 'ui',
+      opts: { headed?: boolean; trace?: boolean; single?: boolean; featurePaths?: string[] } = {},
+    ) {
       if (this.isRunning) return
 
+      // Bind this run's output to the active scope for its whole lifetime, so async
+      // completion writes to the right scope even if the view later changes.
+      const scope = this.activeScope
+      const s = this.ensureScope()
+
       this.isRunning = true
-      this.status = 'running'
-      this.showResults = true
-      this.batchResult = null
-      this.logs = [`Starting batch ${mode} test run...`]
-      this.errors = []
+      s.status = 'running'
+      s.showResults = true
+      s.singleRun = opts.single ?? false
+      s.batchResult = null
+      s.reportUrl = ''
+      s.reportLoading = false
+      s.progress = emptyProgress()
+      s.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
+      s.errors = []
 
       if (this.config.baseUrl) {
-        this.logs.push(`Base URL: ${this.config.baseUrl}`)
+        s.logs.push(`Base URL: ${this.config.baseUrl}`)
       }
 
       window.api.runner.onRunnerLog((line: string) => {
-        this.logs.push(line)
+        // Strip ANSI so the log panel (a <pre>) is clean; the parser strips too.
+        s.logs.push(stripAnsi(line))
+        updateProgressFromLine(s.progress, line)
       })
 
       try {
@@ -148,58 +343,67 @@ export const useRunnerStore = defineStore('runner', {
           executionMode: this.config.executionMode,
           mode,
           baseUrl: this.config.baseUrl || undefined,
+          ...(opts.headed ? { headed: true } : {}),
+          ...(opts.trace ? { trace: true } : {}),
         }
 
-        // Pass feature paths based on active tab filter
-        const matched = this.matchedTests
-        const tab = this.config.activeFilterTab
-        if (
-          (tab === 'features' && this.config.selectedFeatures.length > 0) ||
-          (tab === 'folders' && this.config.selectedFolders.length > 0)
-        ) {
-          options.featurePaths = matched.features.map((f) => f.relativePath)
-        }
-
-        // Pass tag filter only when tags tab is active
-        if (tab === 'tags' && this.config.selectedTags.length > 0) {
-          options.tags = this.config.selectedTags
-        }
-        if (this.config.nameFilter) {
-          options.nameFilter = this.config.nameFilter
+        if (opts.featurePaths && opts.featurePaths.length > 0) {
+          // Explicit targets (single-spec quick-run) — do NOT touch the global filters.
+          options.featurePaths = opts.featurePaths
+        } else {
+          // Global run: derive targets from the active filter tab.
+          const matched = this.matchedTests
+          const tab = this.config.activeFilterTab
+          if (
+            (tab === 'features' && this.config.selectedFeatures.length > 0) ||
+            (tab === 'folders' && this.config.selectedFolders.length > 0)
+          ) {
+            options.featurePaths = matched.features.map((f) => f.relativePath)
+          }
+          if (tab === 'tags' && this.config.selectedTags.length > 0) {
+            options.tags = this.config.selectedTags
+          }
+          if (this.config.nameFilter) {
+            options.nameFilter = this.config.nameFilter
+          }
         }
 
         const result = await window.api.runner.runBatch(options)
-        this.batchResult = result
-        this.status = result.status
+        s.batchResult = result
+        s.status = result.status
 
         if (result.errors.length > 0) {
-          this.errors = result.errors
+          s.errors = result.errors
         }
 
         if (result.stderr && result.errors.length === 0) {
-          this.logs.push(`[stderr] ${result.stderr}`)
+          s.logs.push(`[stderr] ${result.stderr}`)
         }
 
-        this.logs.push(
+        s.logs.push(
           `Batch run completed in ${result.duration}ms — ${result.summary.passed} passed, ${result.summary.failed} failed, ${result.summary.skipped} skipped`,
         )
       } catch (err) {
-        this.status = 'error'
-        this.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        s.status = 'error'
+        s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         window.api.runner.offRunnerLog()
         this.isRunning = false
+        // Integrate Playwright's HTML report directly in the results panel, scoped to
+        // this run (UI mode has no report of its own).
+        if (mode !== 'ui') void this.showReport(scope)
       }
     },
 
     // Legacy single-feature run methods (kept for backward compatibility)
     async runHeadless(featurePath?: string, scenarioName?: string) {
+      const s = this.ensureScope()
       this.isRunning = true
-      this.status = 'running'
-      this.logs = ['Starting headless test run...']
-      this.errors = []
+      s.status = 'running'
+      s.logs = ['Starting headless test run...']
+      s.errors = []
       if (this.baseUrl) {
-        this.logs.push(`Base URL: ${this.baseUrl}`)
+        s.logs.push(`Base URL: ${this.baseUrl}`)
       }
 
       try {
@@ -208,47 +412,48 @@ export const useRunnerStore = defineStore('runner', {
           scenarioName,
           baseUrl: this.baseUrl || undefined,
         })
-        this.lastResult = result
-        this.status = result.status
+        s.lastResult = result
+        s.status = result.status
 
         if (result.errors && result.errors.length > 0) {
-          this.errors = result.errors
-          this.logs.push('')
-          this.logs.push('=== Errors ===')
+          s.errors = result.errors
+          s.logs.push('')
+          s.logs.push('=== Errors ===')
           for (const error of result.errors) {
             let errorMsg = error.message
             if (error.file) {
               errorMsg += ` (${error.file}${error.line ? `:${error.line}` : ''})`
             }
-            this.logs.push(errorMsg)
+            s.logs.push(errorMsg)
             if (error.suggestion) {
-              this.logs.push(`  → ${error.suggestion}`)
+              s.logs.push(`  → ${error.suggestion}`)
             }
           }
         } else if (result.stdout) {
-          this.logs.push(result.stdout)
+          s.logs.push(result.stdout)
         }
 
         if (result.stderr && !result.errors?.length) {
-          this.logs.push(`[stderr] ${result.stderr}`)
+          s.logs.push(`[stderr] ${result.stderr}`)
         }
 
-        this.logs.push(`Test completed in ${result.duration}ms`)
+        s.logs.push(`Test completed in ${result.duration}ms`)
       } catch (err) {
-        this.status = 'error'
-        this.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        s.status = 'error'
+        s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         this.isRunning = false
       }
     },
 
     async runUI(featurePath?: string, scenarioName?: string) {
+      const s = this.ensureScope()
       this.isRunning = true
-      this.status = 'running'
-      this.logs = ['Starting Playwright UI...']
-      this.errors = []
+      s.status = 'running'
+      s.logs = ['Starting Playwright UI...']
+      s.errors = []
       if (this.baseUrl) {
-        this.logs.push(`Base URL: ${this.baseUrl}`)
+        s.logs.push(`Base URL: ${this.baseUrl}`)
       }
 
       try {
@@ -257,29 +462,29 @@ export const useRunnerStore = defineStore('runner', {
           scenarioName,
           baseUrl: this.baseUrl || undefined,
         })
-        this.lastResult = result
-        this.status = result.status
+        s.lastResult = result
+        s.status = result.status
 
         if (result.errors && result.errors.length > 0) {
-          this.errors = result.errors
-          this.logs.push('')
-          this.logs.push('=== Errors ===')
+          s.errors = result.errors
+          s.logs.push('')
+          s.logs.push('=== Errors ===')
           for (const error of result.errors) {
             let errorMsg = error.message
             if (error.file) {
               errorMsg += ` (${error.file}${error.line ? `:${error.line}` : ''})`
             }
-            this.logs.push(errorMsg)
+            s.logs.push(errorMsg)
             if (error.suggestion) {
-              this.logs.push(`  → ${error.suggestion}`)
+              s.logs.push(`  → ${error.suggestion}`)
             }
           }
         } else {
-          this.logs.push('Playwright UI session ended')
+          s.logs.push('Playwright UI session ended')
         }
       } catch (err) {
-        this.status = 'error'
-        this.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+        s.status = 'error'
+        s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         this.isRunning = false
       }
@@ -289,19 +494,21 @@ export const useRunnerStore = defineStore('runner', {
       try {
         await window.api.runner.stop()
         this.isRunning = false
-        this.status = 'idle'
-        this.logs.push('Test run stopped')
+        const s = this.ensureScope()
+        s.status = 'idle'
+        s.logs.push('Test run stopped')
       } catch {
         // Ignore stop errors
       }
     },
 
     clearLogs() {
-      this.logs = []
-      this.errors = []
-      this.lastResult = null
-      this.batchResult = null
-      this.status = 'idle'
+      const s = this.ensureScope()
+      s.logs = []
+      s.errors = []
+      s.lastResult = null
+      s.batchResult = null
+      s.status = 'idle'
     },
   },
 })

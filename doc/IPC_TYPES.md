@@ -631,3 +631,27 @@ The handler validates input: `getStep` requires a non-empty string id;
 Serializable types (`StepCatalogResult`, `CatalogStep`, `CatalogParameter`,
 `CatalogDiagnostic`, `GenerateCatalogOptions`, …) live in
 `packages/shared/src/types/step-catalog.ts`.
+
+## Recorder channels (`recorder:*`, feature 007-native-recorder)
+
+Streaming pattern (like the AI channels): `recorder:start` returns
+`{ accepted:true, session }` immediately, then events are pushed via
+`webContents.send`.
+
+- **Request/response (invoke)**: `recorder:start`, `stop`, `pause`, `resume`,
+  `pick`, `cancelPick`, `highlight`, `validateLocator`, `addAssertion`.
+- **Events (main→renderer)**: `recorder:action`, `actionUpdated`, `picked`,
+  `status`, `error`. Preload exposes `onXxx(cb) => unsubscribe` (per-listener
+  `removeListener`, like AI).
+- **`app:openInEditor`** — open a `StepSourceLocation` (US5).
+
+All payloads are validated in `handlers.ts` (`validateRecorderStartOptions`,
+`validatePickRequest`, `validateLocatorReference`, `validateAssertionRequest`,
+`validateStepLocation`); the workspace root comes from `WorkspaceService`, never
+the renderer; **secret values never cross IPC** (redacted in the child).
+Serializable types (`RecordedAction`, `LocatorReference`, `LocatorCandidate`,
+`StepMatch`, `PickedElement`, `RecorderAssertionRequest`, `AssertionSuggestion`,
+`RecorderStatus`, `RecorderError`, `RecorderLocatorSettings`, …) live in
+`packages/shared/src/types/recorder.ts`. `AppSettings` gained `recorderAiEnabled`
+
+- `recorderLocatorSettings`.

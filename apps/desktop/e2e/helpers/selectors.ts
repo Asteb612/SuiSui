@@ -56,8 +56,11 @@ export const SEL = {
   doneBtn: '[data-testid="done-btn"]',
 
   // Test runner view
-  sidebarRunBtn: '[data-testid="sidebar-run-btn"]',
+  runTestsBtn: '[data-testid="run-tests-btn"]',
+  quickRunBtn: '[data-testid="quick-run-btn"]',
   backToEditorBtn: '[data-testid="back-to-editor-btn"]',
+  backToFiltersBtn: '[data-testid="back-to-filters-btn"]',
+  executionSelector: '[data-testid="execution-selector"]',
 
   // Validation
   validationPanel: '[data-testid="validation-panel"]',
@@ -74,6 +77,24 @@ export const SEL = {
   runHeadlessBtn: '[data-testid="run-headless-btn"]',
   runUiBtn: '[data-testid="run-ui-btn"]',
   stopRunBtn: '[data-testid="stop-run-btn"]',
+
+  // Recorder (feature 007-native-recorder)
+  recordBtn: '[data-testid="record-btn"]',
+  recordBtnEmpty: '[data-testid="record-btn-empty"]',
+  recordBtnGlobal: '[data-testid="record-btn-global"]',
+  recorderPanel: '[data-testid="recorder-panel"]',
+  recorderStart: '[data-testid="recorder-start"]',
+  recorderStop: '[data-testid="recorder-stop"]',
+  recorderConfirm: '[data-testid="recorder-confirm"]',
+  recorderActions: '[data-testid="recorder-actions"]',
+  recordedAction: '[data-testid="recorded-action"]',
+  secretChip: '[data-testid="secret-chip"]',
+  pickElement: '[data-testid="pick-element"]',
+  locatorCandidate: '[data-testid="locator-candidate"]',
+  candidateReliability: '[data-testid="candidate-reliability"]',
+  assertPick: '[data-testid="assert-pick"]',
+  assertType: '[data-testid="assert-type"]',
+  assertAdd: '[data-testid="assert-add"]',
 
   // Git Clone
   gitCloneBtn: '[data-testid="git-clone-btn"]',

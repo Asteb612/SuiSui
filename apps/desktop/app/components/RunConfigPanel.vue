@@ -137,7 +137,11 @@ function clearAllFilters() {
             @update:model-value="(val: string | undefined) => runnerStore.setBaseUrl(val ?? '')"
           />
         </div>
-        <div class="toolbar-field">
+        <div
+          v-if="!runnerStore.singleRun"
+          class="toolbar-field"
+          data-testid="execution-selector"
+        >
           <label class="toolbar-label">Execution</label>
           <SelectButton
             :model-value="runnerStore.config.executionMode"
@@ -153,7 +157,10 @@ function clearAllFilters() {
           />
         </div>
       </div>
-      <div class="toolbar-center">
+      <div
+        v-if="!runnerStore.singleRun"
+        class="toolbar-center"
+      >
         <span
           v-if="runnerStore.workspaceTests"
           class="matched-count"
@@ -173,7 +180,21 @@ function clearAllFilters() {
         </span>
       </div>
       <div class="toolbar-right">
-        <template v-if="!runnerStore.isRunning">
+        <!-- Running: allow Stop (any run). Idle + global: the filter-based run buttons.
+             Idle + single-spec: nothing (re-run from the editor's quick-run instead). -->
+        <template v-if="runnerStore.isRunning">
+          <Button
+            icon="pi pi-stop"
+            label="Stop"
+            size="small"
+            severity="danger"
+            @click="stopRun"
+          />
+          <span class="running-indicator">
+            <i class="pi pi-spin pi-spinner" /> Running...
+          </span>
+        </template>
+        <template v-else-if="!runnerStore.singleRun">
           <Button
             icon="pi pi-play"
             label="Run Headless"
@@ -192,18 +213,6 @@ function clearAllFilters() {
             title="Run with Playwright Inspector"
             @click="runUI"
           />
-        </template>
-        <template v-else>
-          <Button
-            icon="pi pi-stop"
-            label="Stop"
-            size="small"
-            severity="danger"
-            @click="stopRun"
-          />
-          <span class="running-indicator">
-            <i class="pi pi-spin pi-spinner" /> Running...
-          </span>
         </template>
       </div>
     </div>

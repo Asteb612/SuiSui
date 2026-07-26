@@ -36,6 +36,7 @@ const props = withDefaults(
 
 defineEmits<{
   'toggle-edit-mode': []
+  record: []
 }>()
 
 const scenarioStore = useScenarioStore()
@@ -102,6 +103,7 @@ function formatErrorType(type: string): string {
 const showAddStepDialog = ref(false)
 const addStepTarget = ref<'scenario' | 'background'>('scenario')
 const addStepIndex = ref(0)
+
 
 // Mode helpers (using prop from parent)
 const isReadMode = computed(() => props.viewMode === 'read')
@@ -612,6 +614,17 @@ function selectScenario(index: number) {
             :disabled="scenarioStore.scenarios.length <= 1"
             @click="scenarioStore.removeScenario(scenarioStore.activeScenarioIndex)"
           />
+          <div class="pagination-separator" />
+          <Button
+            icon="pi pi-circle-fill"
+            label="Record"
+            text
+            size="small"
+            severity="danger"
+            title="Record a scenario in the browser"
+            data-testid="record-btn"
+            @click="$emit('record')"
+          />
         </template>
       </div>
 
@@ -934,15 +947,25 @@ function selectScenario(index: number) {
               @dragleave="handleDropZoneDragLeave"
               @drop="handleDropOnZone($event, 'scenario', 0)"
             >
-              <p>Drag steps or click + to add</p>
-              <Button
-                icon="pi pi-plus"
-                label="Add Step"
-                text
-                size="small"
-                class="add-step-btn-large"
-                @click="openAddStepDialog('scenario', 0)"
-              />
+              <p>Drag steps, click + to add, or record in the browser</p>
+              <div class="empty-actions">
+                <Button
+                  icon="pi pi-plus"
+                  label="Add Step"
+                  text
+                  size="small"
+                  class="add-step-btn-large"
+                  @click="openAddStepDialog('scenario', 0)"
+                />
+                <Button
+                  icon="pi pi-circle-fill"
+                  label="Record"
+                  severity="danger"
+                  size="small"
+                  data-testid="record-btn-empty"
+                  @click="$emit('record')"
+                />
+              </div>
             </div>
             <p v-else>
               No steps defined
@@ -2670,5 +2693,11 @@ function selectScenario(index: number) {
 .mode-run .scenario-card {
   max-width: 800px;
   margin: 0 auto;
+}
+
+.empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 </style>

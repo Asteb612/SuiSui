@@ -18,12 +18,16 @@ export interface AppContext {
  * When workspacePath is provided, the helper automatically clicks
  * "Select Existing Workspace" and waits for the workspace to load.
  */
-export async function launchApp(workspacePath?: string): Promise<AppContext> {
+export async function launchApp(
+  workspacePath?: string,
+  extraEnv?: Record<string, string>
+): Promise<AppContext> {
   const mainPath = path.resolve(__dirname, '../../dist-electron/main.js')
 
   const env: Record<string, string> = {
     ...process.env as Record<string, string>,
     APP_TEST_MODE: '1',
+    ...(extraEnv ?? {}),
   }
 
   if (workspacePath) {

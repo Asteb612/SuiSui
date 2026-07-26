@@ -1,5 +1,5 @@
-import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIStatusTarget } from '@suisui/shared'
-import { DEFAULT_AI_PROVIDER_CONFIG } from '@suisui/shared'
+import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIStatusTarget, AIReasoningEffort } from '@suisui/shared'
+import { DEFAULT_AI_PROVIDER_CONFIG, AI_REASONING_EFFORTS, DEFAULT_AI_REASONING_EFFORT } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
 import { getSettingsService, type SettingsService } from '../SettingsService'
 import { getAICredentialsService, type AICredentialsService } from './AICredentialsService'
@@ -37,6 +37,11 @@ function assertSafeBaseUrl(baseUrl: string | null): void {
   }
 }
 
+/** Coerce a possibly-missing/invalid effort to a valid value (default `medium`). */
+function normalizeEffort(effort: AIReasoningEffort | undefined): AIReasoningEffort {
+  return effort && AI_REASONING_EFFORTS.includes(effort) ? effort : DEFAULT_AI_REASONING_EFFORT
+}
+
 export interface AIServiceDeps {
   /** Inject a provider directly (tests use FakeAIProvider). Bypasses config-based resolution. */
   provider?: IAIProvider
@@ -66,15 +71,17 @@ export class AIService {
   async getConfig(): Promise<AIProviderConfig> {
     const settings = await this.settingsService.get()
     const config = settings.aiProvider ?? { ...DEFAULT_AI_PROVIDER_CONFIG }
-    return { ...config, hasApiKey: await this.credentialsService.hasKey() }
+    // Normalize effort so pre-existing configs (and any bogus value) read as `medium`.
+    return { ...config, effort: normalizeEffort(config.effort), hasApiKey: await this.credentialsService.hasKey() }
   }
 
   async setConfig(config: AIProviderConfig): Promise<void> {
     assertSafeBaseUrl(config.baseUrl)
     // Never persist a secret here; hasApiKey is derived from the credentials store.
     const hasApiKey = await this.credentialsService.hasKey()
-    await this.settingsService.save({ aiProvider: { ...config, hasApiKey } })
-    logger.info('AI provider config saved', { type: config.type, model: config.model })
+    const effort = normalizeEffort(config.effort)
+    await this.settingsService.save({ aiProvider: { ...config, effort, hasApiKey } })
+    logger.info('AI provider config saved', { type: config.type, model: config.model, effort })
   }
 
   /**
@@ -108,9 +115,6 @@ export class AIService {
    * Gherkin is validated downstream before it can be accepted.
    */
   private buildPrompt(req: AIStreamRequest): string {
-    if (req.kind === 'scenario') {
-      return this.buildScenarioPrompt(req)
-    }
     if (req.kind === 'step-match') {
       return this.buildStepMatchPrompt(req)
     }
@@ -120,7 +124,35 @@ export class AIService {
     if (req.kind === 'failure-explain') {
       return this.buildFailureExplainPrompt(req)
     }
+    if (req.kind === 'failure-fix') {
+      return this.buildFailureFixPrompt(req)
+    }
     return req.input
+  }
+
+  /**
+   * Prompt for a concrete, reviewable fix for a failed test. Advisory only — the
+   * suggestion is shown to the author, never auto-applied. When a step has no
+   * matching definition we prefer correcting the Gherkin to an EXISTING step; the
+   * available steps are provided so the model doesn't invent new ones.
+   */
+  private buildFailureFixPrompt(req: AIStreamRequest): string {
+    const stepList = req.context.steps.map((s) => `${s.keyword} ${s.pattern}`).join('\n')
+    return [
+      'A BDD (Playwright / playwright-bdd) test failed. Propose a concrete fix for the test author.',
+      'Diagnose from the failure output, then give the smallest change that makes it pass:',
+      '- If a step has no matching definition, prefer rewriting the Gherkin step to match one of',
+      '  the AVAILABLE steps below; otherwise show the step-definition code to add.',
+      '- If it is an assertion/locator/value problem, give the corrected step or value.',
+      'Show the exact change as `before → after` (or a short code block) plus one line of why.',
+      'Be concise. Do not invent selectors, values, or output that are not shown.',
+      '',
+      'Failed test output:',
+      req.input,
+      '',
+      'Available steps:',
+      stepList || '(none provided)',
+    ].join('\n')
   }
 
   /**
@@ -180,23 +212,6 @@ export class AIService {
     ].join('\n')
   }
 
-  private buildScenarioPrompt(req: AIStreamRequest): string {
-    const stepList = req.context.steps
-      .map((s) => `- ${s.keyword} ${s.pattern}`)
-      .join('\n')
-    return [
-      'You are helping author a Gherkin .feature scenario for a BDD test.',
-      'Reuse the EXISTING step definitions below wherever they match the intent;',
-      'prefer them over inventing new steps. Output ONLY valid Gherkin (a Feature',
-      'with one Scenario), no explanations, no code fences.',
-      '',
-      'Existing steps:',
-      stepList || '(none provided)',
-      '',
-      `Describe-this-scenario request: ${req.input}`,
-    ].join('\n')
-  }
-
   /**
    * Resolve the provider for the active config. Returns null when unconfigured
    * (or when a test override is injected, that override wins).
@@ -205,22 +220,31 @@ export class AIService {
     if (this.providerOverride) return this.providerOverride
     const config = await this.getConfig()
     if (!config.type) return null
-    return this.buildProvider(config.type, config.model, config.baseUrl)
+    return this.buildProvider(config.type, config.model, config.baseUrl, normalizeEffort(config.effort))
   }
 
   /**
    * Construct the concrete provider for a given type without touching persisted
    * config. Shared by `resolveProvider` (active config) and `status(target)` (probe).
+   *
+   * `effort` is the reasoning-effort hint (default `medium`). It is forwarded to the
+   * Codex CLI and to BYOK OpenAI-compatible *reasoning* models (o-series / gpt-5);
+   * providers/models without a reasoning-effort control ignore it.
    */
-  private buildProvider(type: AIProviderType, model: string | null, baseUrl: string | null): IAIProvider {
+  private buildProvider(
+    type: AIProviderType,
+    model: string | null,
+    baseUrl: string | null,
+    effort: AIReasoningEffort = DEFAULT_AI_REASONING_EFFORT,
+  ): IAIProvider {
     const getKey = () => this.credentialsService.getKey()
     switch (type) {
       case 'ollama':
         return new VercelAIProvider({ mode: 'ollama', model, baseUrl, getKey })
       case 'openai-compatible':
-        return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey })
+        return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey, effort })
       case 'openai-codex-cli':
-        return new OpenAiCodexProvider({ model })
+        return new OpenAiCodexProvider({ model, effort })
       case 'claude-subscription':
         return new ClaudeSubscriptionProvider({ model })
       default:

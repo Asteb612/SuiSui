@@ -36,7 +36,7 @@ function fakeCreds(hasKey: boolean): AICredentialsService {
 }
 
 const emptyRequest = (input = 'hi'): AIStreamRequest => ({
-  kind: 'scenario',
+  kind: 'failure-explain',
   input,
   context: { steps: [], scenarioText: null, targetStep: null },
 })
@@ -71,6 +71,26 @@ describe('AIService', () => {
     expect(result.hasApiKey).toBe(true)
   })
 
+  it('defaults reasoning effort to medium for a config that predates the field', async () => {
+    // Persisted config with no `effort` (older schema).
+    const config = { type: 'openai-codex-cli', model: null, baseUrl: null, hasApiKey: false } as AIProviderConfig
+    const service = new AIService({
+      provider: new FakeAIProvider(),
+      settingsService: fakeSettings({ aiProvider: config }),
+      credentialsService: fakeCreds(false),
+    })
+
+    expect((await service.getConfig()).effort).toBe('medium')
+  })
+
+  it('normalizes a bogus effort value to medium on save', async () => {
+    const settings = fakeSettings()
+    const service = new AIService({ provider: new FakeAIProvider(), settingsService: settings, credentialsService: fakeCreds(false) })
+    await service.setConfig({ type: 'openai-codex-cli', model: null, baseUrl: null, hasApiKey: false, effort: 'ultra' as never })
+
+    expect((await settings.get()).aiProvider!.effort).toBe('medium')
+  })
+
   it('does not persist a secret in the config', async () => {
     const settings = fakeSettings()
     const service = new AIService({ provider: new FakeAIProvider(), settingsService: settings, credentialsService: fakeCreds(true) })
@@ -103,40 +123,6 @@ describe('AIService', () => {
     expect(status.available).toBe(false)
   })
 
-  it('scenario use case: prompt embeds existing steps and instructs reuse (FR-007)', async () => {
-    const provider = new FakeAIProvider({ chunks: ['Feature: X'] })
-    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
-
-    await collect(
-      service.stream({
-        kind: 'scenario',
-        input: 'a user logs in',
-        context: {
-          steps: [
-            { keyword: 'Given', pattern: 'I am logged in as {string}' } as never,
-            { keyword: 'Then', pattern: 'I should see {string}' } as never,
-          ],
-          scenarioText: null,
-          targetStep: null,
-        },
-      })
-    )
-
-    // The provider receives the BUILT prompt as `input`.
-    const builtPrompt = provider.callHistory[0]!.input
-    expect(builtPrompt).toContain('I am logged in as {string}')
-    expect(builtPrompt).toContain('I should see {string}')
-    expect(builtPrompt).toContain('a user logs in')
-    expect(builtPrompt.toLowerCase()).toContain('reuse')
-  })
-
-  it('scenario use case: stream assembles the full draft from deltas', async () => {
-    const provider = new FakeAIProvider({ chunks: ['Feature: Login\n', '  Scenario: valid\n', '    Given I am logged in\n'] })
-    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
-
-    const draft = await collect(service.stream(emptyRequest('log in')))
-    expect(draft).toBe('Feature: Login\n  Scenario: valid\n    Given I am logged in\n')
-  })
 
   it('step-match use case: prompt embeds the action, existing steps, and a NONE escape (FR-010)', async () => {
     const provider = new FakeAIProvider({ chunks: ['Given I am logged in as {string}'] })
@@ -209,6 +195,30 @@ describe('AIService', () => {
     const builtPrompt = provider.callHistory[0]!.input
     expect(builtPrompt).toContain(failureOutput)
     expect(builtPrompt.toLowerCase()).toContain('plain language')
+  })
+
+  it('failure-fix use case: prompt asks for a concrete fix and lists the available steps', async () => {
+    const provider = new FakeAIProvider({ chunks: ['Quote the value: ', "with '<PASSWORD>'"] })
+    const service = new AIService({ provider, settingsService: fakeSettings(), credentialsService: fakeCreds(false) })
+
+    const failureOutput = "Missing step: When I fill '[data-testid=\"pw\"]' with <PASSWORD>"
+    const suggestion = await collect(
+      service.stream({
+        kind: 'failure-fix',
+        input: failureOutput,
+        context: {
+          steps: [{ keyword: 'When', pattern: 'I fill {string} with {string}' } as never],
+          scenarioText: null,
+          targetStep: null,
+        },
+      })
+    )
+
+    expect(suggestion).toBe("Quote the value: with '<PASSWORD>'")
+    const builtPrompt = provider.callHistory[0]!.input
+    expect(builtPrompt).toContain(failureOutput)
+    expect(builtPrompt).toContain('I fill {string} with {string}')
+    expect(builtPrompt.toLowerCase()).toContain('fix')
   })
 
   it('status(target) probes a provider WITHOUT persisting config (FR-021)', async () => {

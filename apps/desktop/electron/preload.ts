@@ -10,6 +10,7 @@ const api: ElectronAPI = {
     validate: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_VALIDATE, path),
     init: (path) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_INIT, path),
     detectBdd: (clonePath) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_DETECT_BDD, clonePath),
+    getBaseUrl: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACE_GET_BASE_URL),
   },
 
   features: {
@@ -47,6 +48,7 @@ const api: ElectronAPI = {
     runBatch: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_BATCH, options),
     getWorkspaceTests: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS),
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),
+    showReport: (scope: string) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_SHOW_REPORT, scope),
     onRunnerLog: (callback: (line: string) => void) => {
       ipcRenderer.removeAllListeners(IPC_CHANNELS.RUNNER_LOG)
       ipcRenderer.on(IPC_CHANNELS.RUNNER_LOG, (_event: Electron.IpcRendererEvent, line: string) => callback(line))
@@ -62,9 +64,15 @@ const api: ElectronAPI = {
     reset: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_RESET),
   },
 
+  variables: {
+    get: () => ipcRenderer.invoke(IPC_CHANNELS.VARIABLES_GET),
+    set: (variables) => ipcRenderer.invoke(IPC_CHANNELS.VARIABLES_SET, variables),
+  },
+
   app: {
     getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.APP_GET_VERSION),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_EXTERNAL, url),
+    openInEditor: (location) => ipcRenderer.invoke(IPC_CHANNELS.APP_OPEN_IN_EDITOR, location),
   },
 
   node: {
@@ -85,6 +93,9 @@ const api: ElectronAPI = {
     status: (localPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_STATUS, localPath),
     commitAndPush: (localPath, credentials, options) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, localPath, credentials, options),
+    listBranches: (localPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_LIST_BRANCHES, localPath),
+    checkoutBranch: (localPath, branch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_CHECKOUT_BRANCH, localPath, branch),
+    createBranch: (localPath, branch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_CREATE_BRANCH, localPath, branch),
   },
 
   gitCredentials: {
@@ -115,6 +126,43 @@ const api: ElectronAPI = {
       const listener = (_event: Electron.IpcRendererEvent, err: Parameters<typeof callback>[0]) => callback(err)
       ipcRenderer.on(IPC_CHANNELS.AI_ERROR, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.AI_ERROR, listener)
+    },
+  },
+
+  recorder: {
+    start: (options) => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_START, options),
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_STOP),
+    pause: () => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_PAUSE),
+    resume: () => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_RESUME),
+    pick: (request) => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_PICK, request),
+    cancelPick: () => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_CANCEL_PICK),
+    highlight: (locator) => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_HIGHLIGHT, locator),
+    validateLocator: (locator) => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_VALIDATE_LOCATOR, locator),
+    addAssertion: (request) => ipcRenderer.invoke(IPC_CHANNELS.RECORDER_ADD_ASSERTION, request),
+    onAction: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: Parameters<typeof callback>[0]) => callback(action)
+      ipcRenderer.on(IPC_CHANNELS.RECORDER_ACTION, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_ACTION, listener)
+    },
+    onActionUpdated: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, action: Parameters<typeof callback>[0]) => callback(action)
+      ipcRenderer.on(IPC_CHANNELS.RECORDER_ACTION_UPDATED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_ACTION_UPDATED, listener)
+    },
+    onPicked: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, picked: Parameters<typeof callback>[0]) => callback(picked)
+      ipcRenderer.on(IPC_CHANNELS.RECORDER_PICKED, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_PICKED, listener)
+    },
+    onStatus: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) => callback(status)
+      ipcRenderer.on(IPC_CHANNELS.RECORDER_STATUS, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_STATUS, listener)
+    },
+    onError: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, err: Parameters<typeof callback>[0]) => callback(err)
+      ipcRenderer.on(IPC_CHANNELS.RECORDER_ERROR, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RECORDER_ERROR, listener)
     },
   },
 }

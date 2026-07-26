@@ -11,7 +11,9 @@ import { getCommandRunner, type ICommandRunner } from './CommandRunner'
 import { getWorkspaceService } from './WorkspaceService'
 import { getDependencyService } from './DependencyService'
 import { getNodeService } from './NodeService'
+import { getVariablesService } from './VariablesService'
 import type { ChildProcess } from 'node:child_process'
+import http from 'node:http'
 import path from 'node:path'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
@@ -30,9 +32,44 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+const REPORT_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.zip': 'application/zip',
+  '.map': 'application/json; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
+/** Directory holding per-scope report snapshots (kept out of the user's VCS under .app/). */
+function reportsRoot(workspacePath: string): string {
+  return path.join(workspacePath, '.app', 'reports')
+}
+
+/**
+ * A filesystem- and URL-safe id for a report scope (the global runner, or a spec's
+ * feature path). Collapses anything outside [A-Za-z0-9._-] so it is a single path
+ * segment, and never empty.
+ */
+function sanitizeReportScope(scope: string): string {
+  const id = scope.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|_+$/g, '')
+  return id || 'global'
+}
+
 export class RunnerService {
   private commandRunner: ICommandRunner
   private currentProcess: ChildProcess | null = null
+  private reportServer: http.Server | null = null
 
   constructor(commandRunner?: ICommandRunner) {
     this.commandRunner = commandRunner ?? getCommandRunner()
@@ -98,6 +135,81 @@ export class RunnerService {
       features: features.sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
       allTags: [...allTagsSet].sort(),
       folders: [...foldersSet].sort(),
+    }
+  }
+
+  /**
+   * Snapshot the last run's Playwright HTML report into a per-SCOPE folder and serve
+   * it from a tiny in-process static server, returning its URL. Each scope (the global
+   * runner, or a single spec's quick-run) keeps its OWN report copy, so viewing one
+   * scope never shows another's results — Playwright overwrites `playwright-report/`
+   * on every run, so we copy it aside here, right after the run that produced it.
+   *
+   * We serve the folder ourselves rather than spawning `playwright show-report` so it
+   * never depends on CLI resolution, the embedded Node, or a detached child that can
+   * fail silently in the packaged app.
+   */
+  async showReport(scope: string): Promise<string> {
+    const workspacePath = getWorkspaceService().getPath()
+    if (!workspacePath) throw new Error('No workspace selected')
+
+    const scopeId = sanitizeReportScope(scope)
+    const src = path.join(workspacePath, 'playwright-report')
+    const root = reportsRoot(workspacePath)
+    const dest = path.join(root, scopeId)
+
+    // Snapshot the just-produced report into this scope's folder (when present). We keep
+    // only the LAST report: the whole reports dir is dropped first, so exactly one
+    // snapshot (this run's) remains, named by its scope.
+    if (fs.existsSync(path.join(src, 'index.html'))) {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.mkdirSync(root, { recursive: true })
+      fs.cpSync(src, dest, { recursive: true })
+    } else if (!fs.existsSync(path.join(dest, 'index.html'))) {
+      // No fresh report and none previously snapshotted for this scope.
+      throw new Error('No report yet — run a test first, then watch the replay.')
+    }
+
+    const host = '127.0.0.1'
+    const port = 9323
+    const url = `http://${host}:${port}/${scopeId}/`
+
+    if (this.reportServer) return url
+
+    await new Promise<void>((resolve) => {
+      const server = http.createServer((req, res) => this.serveReportFile(req, res))
+      server.once('error', () => resolve()) // port already serving a report — reuse it
+      server.listen(port, host, () => {
+        this.reportServer = server
+        resolve()
+      })
+    })
+    return url
+  }
+
+  /**
+   * Serve a static file from a per-scope report snapshot under `.app/reports/`. The URL
+   * shape is `/<scopeId>/<asset>`; a bare `/<scopeId>/` serves that scope's index.html.
+   */
+  private serveReportFile(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const workspacePath = getWorkspaceService().getPath()
+    const root = workspacePath ? reportsRoot(workspacePath) : ''
+    try {
+      let rel = decodeURIComponent((req.url || '/').split('?')[0]).replace(/^\/+/, '')
+      if (rel === '' || rel.endsWith('/')) rel += 'index.html'
+      const filePath = path.normalize(path.join(root, rel))
+      if (!root || !filePath.startsWith(root + path.sep)) {
+        res.writeHead(403).end('Forbidden')
+        return
+      }
+      const body = fs.readFileSync(filePath)
+      res.writeHead(200, {
+        'Content-Type': REPORT_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      })
+      res.end(body)
+    } catch {
+      res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found')
     }
   }
 
@@ -225,10 +337,23 @@ export class RunnerService {
         ? `https://${options.baseUrl}`
         : options.baseUrl
 
+    // Route the machine-readable JSON report to a file so stdout is free for the live
+    // `list` reporter (streamed per-test to the UI). Read back after the run.
+    const jsonReportFile = path.join(reportsRoot(workspacePath), 'last-run.json')
+    fs.mkdirSync(path.dirname(jsonReportFile), { recursive: true })
+
     const env: Record<string, string> = {
+      // User-defined variables/secrets first so `${NAME}` resolves; runner-critical
+      // vars below win if a variable happens to share their name.
+      ...getVariablesService().resolveEnv(),
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
       NODE_PATH: workspaceNodeModules,
       PATH: pathParts.join(path.delimiter),
+      PLAYWRIGHT_JSON_OUTPUT_NAME: jsonReportFile,
+      // Never let the HTML reporter auto-launch its own server/browser — SuiSui serves
+      // the report itself, and an auto-open can look like a hung run.
+      PLAYWRIGHT_HTML_OPEN: 'never',
+      PW_TEST_HTML_REPORT_OPEN: 'never',
     }
 
     logger.info('Starting batch test run', {
@@ -297,8 +422,18 @@ export class RunnerService {
     if (options.mode === 'ui') {
       playwrightArgs.push('--ui')
     } else {
-      // JSON + HTML reporters for structured output parsing
-      playwrightArgs.push('--reporter=json,html')
+      // `list` streams per-test progress to stdout live (so the UI can show real-time
+      // status); `json` (→ file) is parsed for results; `html` builds the report.
+      playwrightArgs.push('--reporter=list,json,html')
+      // Headed: show the browser so the run can be watched (replay).
+      if (options.headed) {
+        playwrightArgs.push('--headed')
+      }
+      // Trace: record a trace per test so the run can be replayed afterwards
+      // (the HTML report links each test's trace viewer).
+      if (options.trace) {
+        playwrightArgs.push('--trace', 'on')
+      }
     }
 
     if (debugRunner) {
@@ -337,8 +472,15 @@ export class RunnerService {
       }
     }
 
-    // Parse JSON reporter output
-    return parsePlaywrightJsonReport(result.stdout, result.stdout, result.stderr, duration)
+    // Parse the JSON report from its file (stdout now carries the live `list` output).
+    // Fall back to stdout for resilience if the file wasn't produced.
+    let jsonStr = ''
+    try {
+      jsonStr = fs.readFileSync(jsonReportFile, 'utf-8')
+    } catch {
+      jsonStr = result.stdout
+    }
+    return parsePlaywrightJsonReport(jsonStr, result.stdout, result.stderr, duration)
   }
 
   private buildGrepPattern(tags?: string[], nameFilter?: string): string | undefined {
@@ -462,6 +604,7 @@ export class RunnerService {
     }
 
     const env: Record<string, string> = {
+      ...getVariablesService().resolveEnv(),
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
       ...(featurePath ? { FEATURE: featurePath } : {}),
       NODE_PATH: workspaceNodeModules,

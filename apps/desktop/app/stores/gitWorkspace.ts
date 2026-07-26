@@ -13,6 +13,7 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
     isCloning: false,
     isPulling: false,
     isCommitting: false,
+    isSwitchingBranch: false,
     status: null as WorkspaceStatusResult | null,
     error: null as string | null,
   }),
@@ -82,6 +83,38 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       }
     },
 
+    async listBranches(localPath: string) {
+      return window.api.gitWorkspace.listBranches(localPath)
+    },
+
+    async checkoutBranch(localPath: string, branch: string) {
+      this.isSwitchingBranch = true
+      this.error = null
+      try {
+        await window.api.gitWorkspace.checkoutBranch(localPath, branch)
+        await this.refreshStatus(localPath)
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to switch branch'
+        throw err
+      } finally {
+        this.isSwitchingBranch = false
+      }
+    },
+
+    async createBranch(localPath: string, branch: string) {
+      this.isSwitchingBranch = true
+      this.error = null
+      try {
+        await window.api.gitWorkspace.createBranch(localPath, branch)
+        await this.refreshStatus(localPath)
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'Failed to create branch'
+        throw err
+      } finally {
+        this.isSwitchingBranch = false
+      }
+    },
+
     clear() {
       this.metadata = null
       this.status = null
@@ -89,6 +122,7 @@ export const useGitWorkspaceStore = defineStore('gitWorkspace', {
       this.isCloning = false
       this.isPulling = false
       this.isCommitting = false
+      this.isSwitchingBranch = false
     },
   },
 })

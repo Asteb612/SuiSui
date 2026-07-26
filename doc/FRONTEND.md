@@ -967,3 +967,26 @@ marker, and diagnostics badges. Filtering logic is the pure
 `app/utils/catalogFilters.ts` (`filterCatalogSteps`, `stepMaxSeverity`).
 `ScenarioBuilder.vue` renders numeric inputs for `int`/`float` parameters
 (enum → select, table → grid, string/unknown → text).
+
+## Recorder (renderer, feature 007-native-recorder)
+
+- **`useRecorderStore`** (`app/stores/recorder.ts`) — subscribes to the
+  `recorder:*` event stream (unsubscribes on stop); holds `actions`, selection,
+  `status`, `browserUrl`, `pendingAssertion`, and `suggestions`. Actions:
+  start/stop/pause/resume, `ingestAction` (upsert by id — coalesced updates
+  replace), reorder/remove/disable, `selectStepMatch`, `selectLocator` /
+  `pickForRetarget` / `highlightLocator` (re-fills the target arg on change),
+  `renameSecretRef`, assertion mode (`enterAssertMode`/`addAssertion`) +
+  suggestion accept/reject, deterministic login **grouping**
+  (`groupingProposal`/`applyGrouping`), gap **step-stub** handoff
+  (`stubRequestFor`), and `insertAcceptedActionsIntoScenario` (via the
+  `scenario` store's `addRecordedStep`). Grouping/stub logic is the pure
+  `app/utils/recorderGrouping.ts`.
+- **Components** (`app/components/recorder/`): `RecorderPanel` (dialog: controls
+  - two-pane list/detail + assertion picker + grouping banner),
+    `RecordedActionCard` (readable description, secret chip, per-action actions),
+    `StepMatchSelector` (matched step + alternatives + Open implementation + gap
+    stub), `LocatorCandidateSelector` (ranked candidates + reasons/warnings +
+    highlight + pick), `AssertionPicker` (full-set assertions + suggestions).
+    Entry point: a **Record** button in `ScenarioBuilder.vue` opening the panel
+    for the current scenario.

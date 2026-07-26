@@ -321,3 +321,34 @@ and every step/parameter records `origin`+`precision`. Lower-precedence
 - **Caching**: results are cached at `<workspace>/.app/cache/step-catalog.json`
   with a fingerprint (file mtime+hash, Playwright config, package config,
   schema+engine version); a git-ignore guard is written under `.app/`.
+
+## SuiSui-Native Recorder (feature 007-native-recorder)
+
+Records browser interactions and converts them into editable, catalog-matched
+BDD steps — never exposing Playwright's Inspector window **or its in-page overlay**.
+
+- **Process boundary**: a killable **embedded-Node child** (`electron/scripts/recorder-adapter.js`)
+  is the ONLY code touching Playwright's private `context._enableRecorder({ recorderMode:'api' })`.
+  It drives the **workspace's** Playwright (version-gated `>=1.49 <1.61` behind a
+  capability probe), streams actions as NDJSON, does its own DOM inspection, and
+  **redacts secrets at the source** — a password value never leaves the subprocess.
+  The renderer only uses `window.api.recorder` + the Pinia store; secrets never reach it.
+- **Overlay replacement (research D13)**: the child suppresses Playwright's overlay
+  (one CSS rule on the `x-pw-glass` host) and hosts SuiSui's own hover-highlight +
+  one-shot element picker plus a floating **assertion toolbar** — the user arms an
+  assertion type (visible/hidden/text/value/checked/enabled) and the next element
+  they click becomes a matched assertion (text/value are auto-captured), created
+  directly on the page. Capture is paused via `__pw_recorderSetMode` while the
+  toolbar is used so its clicks are never recorded. The assertion crosses back as a
+  `t:'assert'` NDJSON event → `onAssert` → `RecorderService` scores it and emits a
+  normal assertion card. These internals are isolated in a single adapter.
+- **Pipeline (main)**: `RecorderService` normalizes each raw action, scores
+  locators (`LocatorService`), and matches deterministically to a catalog step
+  (`StepMatcherService`). AI is an **optional, flag-gated** enrichment that is
+  validated and never auto-accepted (never a dependency of basic recording).
+- **Testability (Constitution III)**: everything sits behind `IRecorderAdapter`;
+  CI replays checked-in NDJSON via `FakeRecorderAdapter` — no real browser/CLI.
+  The real `PlaywrightRecorderAdapter` (spawns the embedded-Node child, streams
+  its NDJSON) is implemented and validated by a manual/opt-in harness, never CI.
+- **Insertion**: confirmed actions insert through the `scenario` store; the
+  `.feature` remains the source of truth (recorder metadata is never written to Gherkin).

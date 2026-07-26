@@ -28,6 +28,15 @@ export default defineConfig({
       reportsDirectory: './coverage',
       reportOnFailure: true,
       include: ['electron/services/**/*.ts', 'app/utils/**/*.ts'],
+      exclude: [
+        // Real browser adapter — driven by a manual/opt-in harness, never exercised
+        // in CI (Constitution III: tests never launch a real browser).
+        'electron/services/recorder/PlaywrightRecorderAdapter.ts',
+        // Interface / type-only modules — no executable logic to cover.
+        'electron/services/recorder/IRecorderAdapter.ts',
+        'electron/services/recorder/types.ts',
+        'electron/services/ai/IAIProvider.ts',
+      ],
       // Baseline guardrails (set just below current coverage) so PRs
       // can't silently regress. Ratchet these up as coverage improves.
       thresholds: {

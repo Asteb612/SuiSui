@@ -48,6 +48,19 @@ function isSafeExternalUrl(url: string): boolean {
  */
 function applyNavigationGuards(win: BrowserWindow): void {
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // The embedded Playwright report opens its trace viewer via window.open —
+    // keep it inside the app (a locked-down window) instead of the OS browser.
+    if (url.startsWith('http://127.0.0.1:9323')) {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1200,
+          height: 800,
+          title: 'Trace',
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+        },
+      }
+    }
     if (isSafeExternalUrl(url)) {
       void shell.openExternal(url)
     }
@@ -149,6 +162,8 @@ function registerAppProtocol() {
       "object-src 'none'",
       "base-uri 'self'",
       "frame-ancestors 'none'",
+      // Embed the local Playwright HTML report (runner "Watch replay") in-app.
+      'frame-src http://127.0.0.1:9323',
     ].join('; ')
 
   protocol.handle('app', async (request) => {

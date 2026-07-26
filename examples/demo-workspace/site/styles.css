@@ -1,0 +1,169 @@
+:root {
+  --bg: #0f172a;
+  --card: #ffffff;
+  --ink: #0f172a;
+  --muted: #64748b;
+  --brand: #2563eb;
+  --brand-ink: #ffffff;
+  --border: #e2e8f0;
+  --error: #dc2626;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: linear-gradient(160deg, #1e293b, #0f172a);
+}
+
+/* Login card */
+.card {
+  max-width: 360px;
+  margin: 12vh auto;
+  padding: 2rem;
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.subtitle {
+  margin: 0.25rem 0 1.5rem;
+  color: var(--muted);
+}
+
+.field {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input[type='email'],
+input[type='password'],
+input[type='text'],
+input:not([type]),
+select {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  margin: 0.5rem 0 1.25rem;
+}
+
+button {
+  width: 100%;
+  padding: 0.7rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+.error {
+  margin: 0.75rem 0 0;
+  color: var(--error);
+  font-weight: 600;
+}
+
+.hint {
+  margin-top: 1.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+code {
+  background: #f1f5f9;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+/* Dashboard */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.topbar nav a {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.topbar nav button {
+  width: auto;
+  padding: 0.4rem 0.8rem;
+  background: #f1f5f9;
+  color: var(--ink);
+}
+
+.dashboard {
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+  color: #e2e8f0;
+}
+
+.dashboard h1 {
+  margin-bottom: 0.25rem;
+}
+
+.dashboard section {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 12px;
+}
+
+.dashboard section button {
+  width: auto;
+  margin-top: 0.5rem;
+}
+
+.tasks {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.tasks li {
+  padding: 0.25rem 0;
+}

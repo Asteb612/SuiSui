@@ -189,10 +189,20 @@ describe('FeatureService', () => {
       await fs.mkdir(path.join(tempDir, 'features', 'auth'), { recursive: true })
       await fs.mkdir(path.join(tempDir, 'features', 'users'), { recursive: true })
       await fs.writeFile(path.join(tempDir, 'features', 'auth', 'login.feature'), 'Feature: Login')
-      
+
       await featureService.moveFeature('auth/login.feature', 'users')
-      
+
       expect(await fs.stat(path.join(tempDir, 'features', 'users', 'login.feature'))).toBeDefined()
+    })
+
+    it('should move a feature out of a folder to the root (empty target folder)', async () => {
+      await fs.mkdir(path.join(tempDir, 'features', 'auth'), { recursive: true })
+      await fs.writeFile(path.join(tempDir, 'features', 'auth', 'login.feature'), 'Feature: Login')
+
+      await featureService.moveFeature('auth/login.feature', '')
+
+      expect(await fs.stat(path.join(tempDir, 'features', 'login.feature'))).toBeDefined()
+      await expect(fs.stat(path.join(tempDir, 'features', 'auth', 'login.feature'))).rejects.toThrow()
     })
   })
 

@@ -1,0 +1,11 @@
+{
+  "default": {
+    "paths": [
+      "features/"
+    ],
+    "require": [
+      "features/steps/**/*.ts",
+      "features/steps/**/*.js"
+    ]
+  }
+}

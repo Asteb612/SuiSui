@@ -332,7 +332,7 @@ export function resolvePattern(
     if (getOutlinePlaceholder(arg.value)) {
       value = arg.value // Output raw <var> without quoting
     } else {
-      value = arg.type === 'string' ? `"${arg.value}"` : arg.value
+      value = arg.type === 'string' ? quoteGherkinString(arg.value) : arg.value
     }
     text = text.replace(placeholder, value)
   }
@@ -473,6 +473,17 @@ function escapeHtml(str: string): string {
 export function getOutlinePlaceholder(value: string): string | null {
   const match = value.match(/^<([a-zA-Z_]\w*)>$/)
   return match ? match[1]! : null
+}
+
+/**
+ * Wrap a `{string}` value in Gherkin quotes, choosing a delimiter the value does
+ * not already contain. Cucumber's `{string}` accepts both `"…"` and `'…'`, so a
+ * selector like `[data-testid="x"]` (from the recorder) stays valid Gherkin
+ * instead of nesting double quotes. Falls back to double quotes.
+ */
+export function quoteGherkinString(value: string): string {
+  if (value.includes('"') && !value.includes("'")) return `'${value}'`
+  return `"${value}"`
 }
 
 /**

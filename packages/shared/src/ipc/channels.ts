@@ -6,6 +6,7 @@ export const IPC_CHANNELS = {
   WORKSPACE_VALIDATE: 'workspace:validate',
   WORKSPACE_INIT: 'workspace:init',
   WORKSPACE_DETECT_BDD: 'workspace:detectBdd',
+  WORKSPACE_GET_BASE_URL: 'workspace:getBaseUrl',
 
   // Features
   FEATURES_LIST: 'features:list',
@@ -35,6 +36,7 @@ export const IPC_CHANNELS = {
   RUNNER_RUN_BATCH: 'runner:runBatch',
   RUNNER_GET_WORKSPACE_TESTS: 'runner:getWorkspaceTests',
   RUNNER_STOP: 'runner:stop',
+  RUNNER_SHOW_REPORT: 'runner:showReport',
   RUNNER_LOG: 'runner:log',
 
   // Settings
@@ -42,9 +44,14 @@ export const IPC_CHANNELS = {
   SETTINGS_SET: 'settings:set',
   SETTINGS_RESET: 'settings:reset',
 
+  // Variables / secrets (global, injected into the test-run env)
+  VARIABLES_GET: 'variables:get',
+  VARIABLES_SET: 'variables:set',
+
   // App
   APP_GET_VERSION: 'app:getVersion',
   APP_OPEN_EXTERNAL: 'app:openExternal',
+  APP_OPEN_IN_EDITOR: 'app:openInEditor',
 
   // Node Runtime
   NODE_ENSURE_RUNTIME: 'node:ensureRuntime',
@@ -61,6 +68,9 @@ export const IPC_CHANNELS = {
   GIT_WS_PULL: 'gitws:pull',
   GIT_WS_STATUS: 'gitws:status',
   GIT_WS_COMMIT_PUSH: 'gitws:commitPush',
+  GIT_WS_LIST_BRANCHES: 'gitws:listBranches',
+  GIT_WS_CHECKOUT_BRANCH: 'gitws:checkoutBranch',
+  GIT_WS_CREATE_BRANCH: 'gitws:createBranch',
 
   // Git Credentials
   GIT_CRED_SAVE: 'git:credSave',
@@ -83,6 +93,24 @@ export const IPC_CHANNELS = {
   AI_CHUNK: 'ai:chunk',
   AI_DONE: 'ai:done',
   AI_ERROR: 'ai:error',
+
+  // Recorder: request/response (invoke)
+  RECORDER_START: 'recorder:start',
+  RECORDER_STOP: 'recorder:stop',
+  RECORDER_PAUSE: 'recorder:pause',
+  RECORDER_RESUME: 'recorder:resume',
+  RECORDER_PICK: 'recorder:pick',
+  RECORDER_CANCEL_PICK: 'recorder:cancelPick',
+  RECORDER_HIGHLIGHT: 'recorder:highlight',
+  RECORDER_VALIDATE_LOCATOR: 'recorder:validateLocator',
+  RECORDER_ADD_ASSERTION: 'recorder:addAssertion',
+
+  // Recorder: main -> renderer stream events (webContents.send)
+  RECORDER_ACTION: 'recorder:action',
+  RECORDER_ACTION_UPDATED: 'recorder:actionUpdated',
+  RECORDER_PICKED: 'recorder:picked',
+  RECORDER_STATUS: 'recorder:status',
+  RECORDER_ERROR: 'recorder:error',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

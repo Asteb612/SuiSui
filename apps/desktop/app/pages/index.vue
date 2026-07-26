@@ -4,8 +4,10 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
-import { useRunnerStore } from '~/stores/runner'
+import { useRunnerStore, GLOBAL_SCOPE } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
+import { useRecorderStore } from '~/stores/recorder'
+import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
@@ -13,6 +15,7 @@ const scenarioStore = useScenarioStore()
 const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
+const recorderStore = useRecorderStore()
 const showGitClone = ref(false)
 const showBddFolderSelect = ref(false)
 const bddCandidates = ref<string[]>([])
@@ -78,8 +81,11 @@ onUnmounted(() => {
 
 const showNewScenarioDialog = ref(false)
 const showHelpDialog = ref(false)
+const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
-const showAiGenerationDialog = ref(false)
+const showRecorder = ref(false)
+const showRecorderScenarioDialog = ref(false)
+const showStepsDialog = ref(false)
 const showValidationDialog = ref(false)
 const showInitDialog = computed(() => workspaceStore.needsInit)
 const editMode = ref<'scenario' | 'background'>('scenario')
@@ -104,23 +110,54 @@ async function handleModeChange(mode: 'read' | 'edit') {
   }
 }
 
+/**
+ * The scenario store's `currentFeaturePath` is relative to the features dir
+ * ("login.feature"), but the runner's workspace tests key features by a path
+ * that includes it ("features/login.feature"). Resolve the open feature to the
+ * exact key the runner filters on, so a run targets only that feature.
+ */
+function resolveRunFeaturePath(current: string): string {
+  const features = runnerStore.workspaceTests?.features ?? []
+  const match = features.find((f) => f.relativePath === current || f.relativePath.endsWith(`/${current}`))
+  return match?.relativePath ?? current
+}
+
 async function enterRunView() {
   activeView.value = 'runner'
-
-  // First-entry auto-select: if a feature is currently being viewed, select it
-  if (!runnerStore.hasEnteredRunView) {
-    runnerStore.hasEnteredRunView = true
-    if (scenarioStore.currentFeaturePath) {
-      runnerStore.config.selectedFeatures = [scenarioStore.currentFeaturePath]
-      runnerStore.config.activeFilterTab = 'features'
-    }
-  }
-
+  // "Run Tests" always opens the GLOBAL runner (its own scope + filters), independent
+  // of whichever spec is open in the editor.
+  runnerStore.setActiveScope(GLOBAL_SCOPE)
   await runnerStore.loadWorkspaceTests()
 }
 
 function exitRunView() {
   activeView.value = 'editor'
+}
+
+/**
+ * One-click run of the feature currently open in the editor: run ONLY it in its own
+ * scope (so its results/report never mix with the global runner's), switch to the
+ * runner view, and run it in a visible (headed) browser with tracing on so the user
+ * can watch the scenario replay and review it after.
+ */
+async function quickRunCurrentSpec() {
+  const current = scenarioStore.currentFeaturePath
+  if (!current || runnerStore.isRunning) return
+
+  activeView.value = 'runner'
+  // Load first so the feature path resolves to the workspace's canonical relativePath
+  // (e.g. 'features/login.feature'); the runner maps that to its generated spec.
+  await runnerStore.loadWorkspaceTests()
+  const target = resolveRunFeaturePath(current)
+
+  // Scope this run to the spec file — does NOT touch the global runner's filters.
+  runnerStore.setActiveScope(target)
+  await runnerStore.runBatch('headless', {
+    headed: true,
+    trace: true,
+    single: true,
+    featurePaths: [target],
+  })
 }
 
 // Git availability - hide if workspace is not a git repo
@@ -133,7 +170,7 @@ function toggleEditMode() {
 }
 
 onMounted(async () => {
-  // Load AI config so the "Generate with AI" entry point reflects configuration (FR-014).
+  // Load AI config so the AI entry points (explain/fix failure) reflect configuration.
   void aiStore.loadConfig()
   await workspaceStore.loadWorkspace()
   if (!isMounted.value) return
@@ -205,6 +242,21 @@ function handleCreateScenario(data: { name: string; fileName: string }) {
   })
 }
 
+/**
+ * Turn a finished recording into a brand-new scenario: create it, insert the
+ * recorded steps, save the .feature to disk, then load it so it's displayed.
+ */
+async function handleRecorderScenarioCreate(data: { name: string; fileName: string }) {
+  scenarioStore.createNew(data.name)
+  recorderStore.insertAcceptedActionsIntoScenario()
+  await scenarioStore.save(data.fileName)
+  await workspaceStore.loadFeatures()
+  const feature = workspaceStore.features.find((f) => f.relativePath === data.fileName)
+  if (feature) workspaceStore.selectFeature(feature)
+  activeView.value = 'editor'
+  await handleModeChange('read')
+}
+
 async function initializeWorkspace() {
   await workspaceStore.initWorkspace()
   if (!isMounted.value) return
@@ -242,21 +294,34 @@ function cancelInit() {
         @click="showHelpDialog = true"
       />
       <Button
-        v-if="aiStore.isConfigured && workspaceStore.hasWorkspace"
-        label="Generate with AI"
-        icon="pi pi-sparkles"
+        v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
+        label="Run Tests"
+        icon="pi pi-play"
         text
         size="small"
-        data-testid="ai-generate-btn"
-        @click="showAiGenerationDialog = true"
+        severity="success"
+        title="Open the test runner"
+        data-testid="run-tests-btn"
+        @click="enterRunView"
+      />
+      <Button
+        v-if="workspaceStore.hasWorkspace"
+        label="Record"
+        icon="pi pi-circle-fill"
+        text
+        size="small"
+        severity="danger"
+        title="Record a scenario in the browser"
+        data-testid="record-btn-global"
+        @click="showRecorder = true"
       />
       <Button
         icon="pi pi-cog"
         text
         size="small"
-        aria-label="AI settings"
-        data-testid="ai-settings-btn"
-        @click="showAiSettingsDialog = true"
+        aria-label="Settings"
+        data-testid="settings-btn"
+        @click="showSettingsDialog = true"
       />
       <Button
         v-if="workspaceStore.hasWorkspace"
@@ -383,17 +448,6 @@ function cancelInit() {
             <FeatureTree />
           </div>
           <GitPanel v-if="isGitAvailable" />
-          <div class="sidebar-run-button">
-            <Button
-              icon="pi pi-play"
-              label="Run Tests"
-              severity="success"
-              size="small"
-              class="w-full"
-              data-testid="sidebar-run-btn"
-              @click="enterRunView"
-            />
-          </div>
         </aside>
 
         <!-- Center: Scenario Builder -->
@@ -422,6 +476,22 @@ function cancelInit() {
               <h3>{{ activeView === 'runner' ? 'Test Runner' : (scenarioStore.featureName || 'Scenario') }}</h3>
             </div>
             <div class="header-actions">
+              <!-- Quick run: run the currently open feature in one click -->
+              <Button
+                v-if="activeView === 'editor' && scenarioStore.currentFeaturePath"
+                icon="pi pi-play"
+                label="Run"
+                text
+                size="small"
+                severity="success"
+                data-testid="quick-run-btn"
+                :loading="runnerStore.isRunning"
+                :disabled="runnerStore.isRunning || (currentViewMode === 'edit' && scenarioStore.isDirty)"
+                :title="currentViewMode === 'edit' && scenarioStore.isDirty
+                  ? 'Save changes before running'
+                  : 'Run this feature in a visible browser (watch the replay)'"
+                @click="quickRunCurrentSpec"
+              />
               <!-- Mode Controls -->
               <div
                 v-if="activeView === 'editor' && (scenarioStore.currentFeaturePath || scenarioStore.scenario.name)"
@@ -535,6 +605,7 @@ function cancelInit() {
               :edit-mode="editMode"
               :view-mode="currentViewMode"
               @toggle-edit-mode="toggleEditMode"
+              @record="showRecorder = true"
             />
           </div>
         </section>
@@ -570,15 +641,34 @@ function cancelInit() {
       <span>{{ workspaceStore.workspace?.path ?? 'No workspace' }}</span>
       <span
         v-if="stepsStore.exportedAt"
-        class="steps-info"
+        class="steps-info steps-info-clickable"
+        role="button"
+        tabindex="0"
+        title="View loaded step definitions"
+        data-testid="steps-loaded-btn"
+        @click="showStepsDialog = true"
+        @keyup.enter="showStepsDialog = true"
       >
         {{ stepsStore.steps.length }} steps loaded
       </span>
     </footer>
 
     <!-- Dialogs -->
+    <SettingsDialog
+      v-model:visible="showSettingsDialog"
+      @open-ai-settings="() => { showSettingsDialog = false; showAiSettingsDialog = true }"
+    />
     <AiSettingsDialog v-model:visible="showAiSettingsDialog" />
-    <AiGenerationDialog v-model:visible="showAiGenerationDialog" />
+    <StepsListDialog v-model:visible="showStepsDialog" />
+    <RecorderPanel
+      v-model:visible="showRecorder"
+      :start-url="runnerStore.effectiveBaseUrl"
+      @create-scenario="showRecorderScenarioDialog = true"
+    />
+    <NewScenarioDialog
+      v-model:visible="showRecorderScenarioDialog"
+      @create="handleRecorderScenarioCreate"
+    />
 
     <NewScenarioDialog
       v-model:visible="showNewScenarioDialog"
@@ -1091,16 +1181,6 @@ function cancelInit() {
   flex-direction: column;
 }
 
-.sidebar-run-button {
-  padding: 0.75rem;
-  border-top: 1px solid var(--surface-border);
-  flex-shrink: 0;
-}
-
-.sidebar-run-button :deep(.p-button) {
-  justify-content: center;
-}
-
 .right-panel .panel-content {
   padding: 1rem;
 }
@@ -1139,6 +1219,14 @@ function cancelInit() {
 
 .steps-info {
   color: var(--primary-color);
+}
+
+.steps-info-clickable {
+  cursor: pointer;
+}
+
+.steps-info-clickable:hover {
+  text-decoration: underline;
 }
 
 .dirty-indicator {

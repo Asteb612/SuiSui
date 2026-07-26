@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { AIProviderType } from '@suisui/shared'
+import type { AIProviderType, AIReasoningEffort } from '@suisui/shared'
+import { DEFAULT_AI_REASONING_EFFORT } from '@suisui/shared'
 import { useAiStore } from '~/stores/ai'
 
 const props = defineProps<{
@@ -41,11 +42,38 @@ const type = ref<AIProviderType | null>(null)
 const model = ref('')
 const baseUrl = ref('')
 const apiKey = ref('')
+const effort = ref<AIReasoningEffort>(DEFAULT_AI_REASONING_EFFORT)
 const hasStoredKey = ref(false)
 const saving = ref(false)
 
+const EFFORT_OPTIONS: Array<{ label: string; value: AIReasoningEffort }> = [
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High', value: 'high' },
+]
+
 const needsBaseUrl = computed(() => type.value === 'ollama' || type.value === 'openai-compatible')
 const needsKey = computed(() => type.value === 'openai-compatible')
+
+/**
+ * Suggested models per provider. Shown as an editable dropdown so users can still
+ * type an unlisted model (endpoints and local Ollama installs vary). For Ollama the
+ * authoritative list is whatever the local server reports (`status.models`), which
+ * is merged in front of these suggestions after a Test connection.
+ */
+const CURATED_MODELS: Record<AIProviderType, string[]> = {
+  ollama: ['llama3.2', 'llama3.1', 'qwen2.5-coder', 'mistral', 'gemma3', 'deepseek-r1'],
+  'openai-compatible': ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini', 'gpt-5', 'gpt-5-mini'],
+  'openai-codex-cli': ['gpt-5-codex', 'gpt-5', 'o4-mini', 'gpt-4.1'],
+  'claude-subscription': ['sonnet', 'opus', 'haiku'],
+}
+
+/** Model dropdown options for the selected provider (detected Ollama models first). */
+const modelOptions = computed<string[]>(() => {
+  if (!type.value) return []
+  const detected = type.value === 'ollama' ? (aiStore.status?.models ?? []) : []
+  return Array.from(new Set([...detected, ...CURATED_MODELS[type.value]]))
+})
 
 watch(
   () => props.visible,
@@ -55,6 +83,7 @@ watch(
     type.value = aiStore.config.type
     model.value = aiStore.config.model ?? ''
     baseUrl.value = aiStore.config.baseUrl ?? (aiStore.config.type === 'ollama' ? 'http://127.0.0.1:11434' : '')
+    effort.value = aiStore.config.effort ?? DEFAULT_AI_REASONING_EFFORT
     hasStoredKey.value = aiStore.config.hasApiKey
     apiKey.value = ''
     aiStore.status = null
@@ -71,6 +100,9 @@ function onRedetect() {
 
 watch(type, (next) => {
   if (next === 'ollama' && !baseUrl.value) baseUrl.value = 'http://127.0.0.1:11434'
+  // Preselect a sensible default model when switching to a provider and none is set
+  // yet (never clobbers a model loaded from config or typed by the user).
+  if (next && !model.value) model.value = CURATED_MODELS[next][0] ?? ''
 })
 
 async function onTestConnection() {
@@ -93,6 +125,7 @@ async function persist() {
     type: type.value,
     model: model.value.trim() || null,
     baseUrl: needsBaseUrl.value ? baseUrl.value.trim() || null : null,
+    effort: effort.value,
     hasApiKey: hasStoredKey.value,
   })
 }
@@ -205,20 +238,38 @@ function onDisable() {
       >
         <label for="ai-model">Model</label>
         <Select
-          v-if="aiStore.status?.models?.length"
           id="ai-model"
           v-model="model"
-          :options="aiStore.status.models"
+          :options="modelOptions"
           editable
+          placeholder="Select or type a model"
           class="w-full"
+          data-testid="ai-model-select"
         />
-        <InputText
-          v-else
-          id="ai-model"
-          v-model="model"
-          placeholder="e.g., llama3.2"
+        <small class="hint">
+          Suggested models for this provider. You can type any other model name.
+          <template v-if="type === 'ollama'">Run Test connection to list models installed locally.</template>
+        </small>
+      </div>
+
+      <div
+        v-if="type"
+        class="field"
+      >
+        <label for="ai-effort">Reasoning effort</label>
+        <Select
+          id="ai-effort"
+          v-model="effort"
+          :options="EFFORT_OPTIONS"
+          option-label="label"
+          option-value="value"
           class="w-full"
+          data-testid="ai-effort-select"
         />
+        <small class="hint">
+          Applied to the Codex CLI and to reasoning models on a bring-your-own-key
+          endpoint (o-series, GPT-5). Other providers and non-reasoning models ignore it.
+        </small>
       </div>
 
       <div
