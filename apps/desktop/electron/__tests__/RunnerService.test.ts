@@ -494,27 +494,27 @@ Feature: Shopping Cart
     })
   })
 
-  describe('showReport — per-scope report snapshots', () => {
-    it('snapshots each run report into its own scope folder and keeps them isolated', async () => {
+  describe('showReport — last report only, named by scope', () => {
+    it('snapshots the run report by scope and keeps ONLY the last one', async () => {
       const fsSync = await import('node:fs')
       const reportDir = path.join(tempDir, 'playwright-report')
+      const reportsDir = path.join(tempDir, '.app', 'reports')
       await fs.mkdir(reportDir, { recursive: true })
 
       // Run 1 → global scope.
       await fs.writeFile(path.join(reportDir, 'index.html'), 'GLOBAL REPORT')
       const globalUrl = await service.showReport('global')
       expect(globalUrl).toBe('http://127.0.0.1:9323/global/')
+      expect(fsSync.readFileSync(path.join(reportsDir, 'global', 'index.html'), 'utf-8')).toBe('GLOBAL REPORT')
 
       // Run 2 overwrites playwright-report → a single-spec scope (path is sanitized).
       await fs.writeFile(path.join(reportDir, 'index.html'), 'SPEC REPORT')
       const specUrl = await service.showReport('cart/checkout.feature')
       expect(specUrl).toBe('http://127.0.0.1:9323/cart_checkout.feature/')
 
-      // Each scope kept its own snapshot — the spec run did not clobber global's report.
-      const read = (scope: string) =>
-        fsSync.readFileSync(path.join(tempDir, '.app', 'reports', scope, 'index.html'), 'utf-8')
-      expect(read('global')).toBe('GLOBAL REPORT')
-      expect(read('cart_checkout.feature')).toBe('SPEC REPORT')
+      // Only the last report is kept: the spec snapshot exists, global was pruned.
+      expect(fsSync.existsSync(path.join(reportsDir, 'global'))).toBe(false)
+      expect(fsSync.readFileSync(path.join(reportsDir, 'cart_checkout.feature', 'index.html'), 'utf-8')).toBe('SPEC REPORT')
 
       // Close the static server so the test doesn't leak a handle (no-op if the port
       // was already taken and the server was reused).

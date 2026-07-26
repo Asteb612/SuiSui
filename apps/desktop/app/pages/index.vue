@@ -143,12 +143,14 @@ async function quickRunCurrentSpec() {
   const current = scenarioStore.currentFeaturePath
   if (!current || runnerStore.isRunning) return
 
-  const target = resolveRunFeaturePath(current)
   activeView.value = 'runner'
+  // Load first so the feature path resolves to the workspace's canonical relativePath
+  // (e.g. 'features/login.feature'); the runner maps that to its generated spec.
+  await runnerStore.loadWorkspaceTests()
+  const target = resolveRunFeaturePath(current)
+
   // Scope this run to the spec file — does NOT touch the global runner's filters.
   runnerStore.setActiveScope(target)
-  await runnerStore.loadWorkspaceTests()
-
   await runnerStore.runBatch('headless', {
     headed: true,
     trace: true,

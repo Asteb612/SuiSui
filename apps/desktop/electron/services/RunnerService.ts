@@ -155,12 +155,15 @@ export class RunnerService {
 
     const scopeId = sanitizeReportScope(scope)
     const src = path.join(workspacePath, 'playwright-report')
-    const dest = path.join(reportsRoot(workspacePath), scopeId)
+    const root = reportsRoot(workspacePath)
+    const dest = path.join(root, scopeId)
 
-    // Snapshot the just-produced report into this scope's folder (when present).
+    // Snapshot the just-produced report into this scope's folder (when present). We keep
+    // only the LAST report: the whole reports dir is dropped first, so exactly one
+    // snapshot (this run's) remains, named by its scope.
     if (fs.existsSync(path.join(src, 'index.html'))) {
-      fs.rmSync(dest, { recursive: true, force: true })
-      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.mkdirSync(root, { recursive: true })
       fs.cpSync(src, dest, { recursive: true })
     } else if (!fs.existsSync(path.join(dest, 'index.html'))) {
       // No fresh report and none previously snapshotted for this scope.

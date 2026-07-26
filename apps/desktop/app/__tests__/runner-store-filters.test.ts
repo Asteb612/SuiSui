@@ -265,7 +265,7 @@ describe('Runner Store - scoped run state', () => {
     expect(store.config.selectedFeatures).toEqual(['a.feature'])
   })
 
-  it('scopes the report URL to the run that produced it', async () => {
+  it('keeps only the last report — a newer run clears the prior scope’s report URL', async () => {
     runner.runBatch.mockResolvedValue(fakeBatch(true))
     runner.showReport.mockImplementation((scope: string) =>
       Promise.resolve(`http://127.0.0.1:9323/${scope}/`),
@@ -276,8 +276,9 @@ describe('Runner Store - scoped run state', () => {
     store.setActiveScope('login.feature')
     await store.runBatch('headless', { single: true, featurePaths: ['login.feature'] })
 
+    // The spec run produced the last report; global's report URL was cleared.
     expect(store.reportUrl).toBe('http://127.0.0.1:9323/login.feature/')
     store.setActiveScope('global')
-    expect(store.reportUrl).toBe('http://127.0.0.1:9323/global/')
+    expect(store.reportUrl).toBe('')
   })
 })

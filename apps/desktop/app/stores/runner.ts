@@ -225,7 +225,12 @@ export const useRunnerStore = defineStore('runner', {
       const s = this.scopes[scopeId]!
       s.reportLoading = true
       try {
-        s.reportUrl = await window.api.runner.showReport(scopeId)
+        const url = await window.api.runner.showReport(scopeId)
+        // Only the last report is kept on disk (see RunnerService.showReport), so this
+        // scope now owns it; drop every other scope's now-stale report URL.
+        for (const [id, sc] of Object.entries(this.scopes)) {
+          sc.reportUrl = id === scopeId ? url : ''
+        }
       } catch (err) {
         s.logs.push(`Could not open the report: ${err instanceof Error ? err.message : String(err)}`)
       } finally {
