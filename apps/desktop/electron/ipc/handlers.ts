@@ -297,15 +297,28 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
-    const onOutput = (_stream: 'stdout' | 'stderr', data: string) => {
-      const lines = data.split('\n')
-      for (const line of lines) {
-        if (line.length > 0) {
-          event.sender.send(IPC_CHANNELS.RUNNER_LOG, line)
-        }
+    // Buffer across chunks so each RUNNER_LOG is a COMPLETE line — the live `list`
+    // reporter is parsed for progress in the renderer, so split lines must not leak.
+    let buf = ''
+    const emit = (line: string) => {
+      const clean = line.replace(/\r$/, '')
+      if (clean.length > 0 && !event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.RUNNER_LOG, clean)
       }
     }
-    return runnerService.runBatch(options, onOutput)
+    const onOutput = (_stream: 'stdout' | 'stderr', data: string) => {
+      buf += data
+      let nl: number
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        emit(buf.slice(0, nl))
+        buf = buf.slice(nl + 1)
+      }
+    }
+    try {
+      return await runnerService.runBatch(options, onOutput)
+    } finally {
+      emit(buf) // flush any trailing partial line
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS, async () => {

@@ -356,7 +356,7 @@ Feature: Shopping Cart
       expect(argsStr).not.toContain('--workers=1')
     })
 
-    it('should use --reporter=json,html for headless mode', async () => {
+    it('should use --reporter=list,json,html for headless mode (live progress + parseable JSON)', async () => {
       fakeRunner.setDefaultResponse({ code: 0, stdout: sampleJsonReport, stderr: '' })
 
       await service.runBatch({
@@ -367,7 +367,9 @@ Feature: Shopping Cart
       // bddgen is callHistory[0], playwright is callHistory[1]
       const playwrightCall = fakeRunner.callHistory[1]
       const argsStr = playwrightCall!.args.join(' ')
-      expect(argsStr).toContain('--reporter=json,html')
+      expect(argsStr).toContain('--reporter=list,json,html')
+      // JSON goes to a file so stdout stays free for the live `list` reporter.
+      expect(playwrightCall!.options?.env?.PLAYWRIGHT_JSON_OUTPUT_NAME).toBeTruthy()
     })
 
     it('should add --ui for ui mode and skip json reporter', async () => {

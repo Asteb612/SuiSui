@@ -13,6 +13,45 @@ import { DEFAULT_RUN_CONFIGURATION } from '@suisui/shared'
 /** The global filters runner. Per-spec quick-runs use their feature path as the scope id. */
 export const GLOBAL_SCOPE = 'global'
 
+/** Live progress derived from the Playwright `list` reporter while a run is in flight. */
+export interface RunProgress {
+  total: number
+  completed: number
+  passed: number
+  failed: number
+  skipped: number
+}
+
+function emptyProgress(): RunProgress {
+  return { total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 }
+}
+
+/**
+ * Update live progress from one streamed `list`-reporter line. Best-effort and
+ * degrades gracefully: unrecognized lines just don't move the counters (the raw log
+ * still shows, and the final JSON report carries the authoritative numbers).
+ */
+export function updateProgressFromLine(p: RunProgress, line: string): void {
+  const running = line.match(/Running\s+(\d+)\s+test/i)
+  if (running) {
+    p.total = Number(running[1])
+    return
+  }
+  // A completed-test line has the "›" title separator and ends with a (duration).
+  if (/›/.test(line) && /\(\s*\d+(?:\.\d+)?\s*m?s\s*\)\s*$/.test(line)) {
+    p.completed++
+    const head = line.trimStart().charAt(0)
+    if (head === '✓' || head === '✔') p.passed++
+    else if (head === '✘' || head === '✕' || head === '✗' || head === '✖') p.failed++
+    return
+  }
+  // Skipped tests are dimmed with a leading "-" and carry no duration.
+  if (/^\s*-\s+\d+\s+.*›/.test(line)) {
+    p.completed++
+    p.skipped++
+  }
+}
+
 /**
  * Per-scope run output. The global filters runner and each single-spec quick-run
  * keep their OWN results/report/logs so they never clobber one another.
@@ -28,6 +67,8 @@ interface RunScope {
   reportLoading: boolean
   /** True for a single-spec quick-run (hides filter-oriented controls in the runner view). */
   singleRun: boolean
+  /** Live per-test progress while the run is in flight. */
+  progress: RunProgress
 }
 
 function emptyScope(singleRun = false): RunScope {
@@ -41,6 +82,7 @@ function emptyScope(singleRun = false): RunScope {
     reportUrl: '',
     reportLoading: false,
     singleRun,
+    progress: emptyProgress(),
   }
 }
 
@@ -96,6 +138,9 @@ export const useRunnerStore = defineStore('runner', {
     },
     singleRun(): boolean {
       return this.currentScope.singleRun
+    },
+    progress(): RunProgress {
+      return this.currentScope.progress
     },
 
     /**
@@ -268,6 +313,7 @@ export const useRunnerStore = defineStore('runner', {
       s.batchResult = null
       s.reportUrl = ''
       s.reportLoading = false
+      s.progress = emptyProgress()
       s.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
       s.errors = []
 
@@ -277,6 +323,7 @@ export const useRunnerStore = defineStore('runner', {
 
       window.api.runner.onRunnerLog((line: string) => {
         s.logs.push(line)
+        updateProgressFromLine(s.progress, line)
       })
 
       try {

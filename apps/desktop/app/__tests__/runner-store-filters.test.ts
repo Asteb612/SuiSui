@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
-import { useRunnerStore } from '../stores/runner'
+import { useRunnerStore, updateProgressFromLine } from '../stores/runner'
 import type { WorkspaceTestInfo, BatchRunResult } from '@suisui/shared'
 
 // Mock window.api
@@ -280,5 +280,34 @@ describe('Runner Store - scoped run state', () => {
     expect(store.reportUrl).toBe('http://127.0.0.1:9323/login.feature/')
     store.setActiveScope('global')
     expect(store.reportUrl).toBe('')
+  })
+})
+
+describe('updateProgressFromLine — live `list` reporter parsing', () => {
+  const fresh = () => ({ total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 })
+
+  it('reads the total from the "Running N tests" header', () => {
+    const p = fresh()
+    updateProgressFromLine(p, 'Running 12 tests using 1 worker')
+    expect(p.total).toBe(12)
+  })
+
+  it('counts passed and failed completion lines by their glyph', () => {
+    const p = fresh()
+    updateProgressFromLine(p, '  ✓  1 [chromium] › features/login.feature:3:1 › Login › Valid login (523ms)')
+    updateProgressFromLine(p, '  ✘  2 [chromium] › features/login.feature:8:1 › Login › Invalid login (1.2s)')
+    expect(p).toMatchObject({ completed: 2, passed: 1, failed: 1 })
+  })
+
+  it('counts skipped tests (leading "-", no duration)', () => {
+    const p = fresh()
+    updateProgressFromLine(p, '  -  3 [chromium] › features/cart.feature:2:1 › Cart › pending')
+    expect(p).toMatchObject({ completed: 1, skipped: 1 })
+  })
+
+  it('ignores unrelated output without moving the counters', () => {
+    const p = fresh()
+    updateProgressFromLine(p, 'Some framework log line without a test result')
+    expect(p).toEqual(fresh())
   })
 })

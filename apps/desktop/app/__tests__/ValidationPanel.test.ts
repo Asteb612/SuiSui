@@ -41,6 +41,7 @@ function createWrapper(overrides: {
                   reportUrl: '',
                   reportLoading: false,
                   singleRun: false,
+                  progress: { total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 },
                   ...overrides.runner,
                 },
               },

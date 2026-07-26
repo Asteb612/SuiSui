@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useStepsStore } from '~/stores/steps'
@@ -100,6 +100,53 @@ watch(
 // Logs are noisy and hidden by default; the integrated report is the main view.
 const showLogs = ref(false)
 
+// --- Live run progress + elapsed timer (so a long/stuck run is visible) ---
+const elapsedMs = ref(0)
+let elapsedTimer: ReturnType<typeof setInterval> | null = null
+let runStart = 0
+
+watch(
+  () => runnerStore.isRunning,
+  (running) => {
+    if (running) {
+      runStart = Date.now()
+      elapsedMs.value = 0
+      if (elapsedTimer) clearInterval(elapsedTimer)
+      elapsedTimer = setInterval(() => {
+        elapsedMs.value = Date.now() - runStart
+      }, 500)
+    } else if (elapsedTimer) {
+      clearInterval(elapsedTimer)
+      elapsedTimer = null
+    }
+  },
+)
+onUnmounted(() => {
+  if (elapsedTimer) clearInterval(elapsedTimer)
+})
+
+const progressPct = computed(() => {
+  const p = runnerStore.progress
+  return p.total > 0 ? Math.min(100, Math.round((p.completed / p.total) * 100)) : 0
+})
+
+/** The most recent non-empty streamed line — shown as current activity. */
+const lastLogLine = computed(() => {
+  const logs = runnerStore.logs
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const l = logs[i]?.trim()
+    if (l) return l
+  }
+  return ''
+})
+
+function formatElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return m > 0 ? `${m}m ${s}s` : `${s}s`
+}
+
 function statusClass(status: string): string {
   return `status-${status}`
 }
@@ -144,15 +191,60 @@ function formatDuration(ms: number): string {
       <span>Run tests to see results here</span>
     </div>
 
-    <!-- Running indicator -->
+    <!-- Running indicator with live progress -->
     <div
       v-else-if="runnerStore.isRunning"
       class="running-state-section"
     >
       <div class="running-state">
         <i class="pi pi-spin pi-spinner" />
-        <span>Tests are running...</span>
+        <span>Running tests…</span>
+        <span
+          class="run-elapsed"
+          data-testid="run-elapsed"
+        >{{ formatElapsed(elapsedMs) }}</span>
       </div>
+
+      <div
+        v-if="runnerStore.progress.total > 0"
+        class="run-progress"
+        data-testid="run-progress"
+      >
+        <div class="run-progress-head">
+          <span class="run-progress-count">
+            <strong>{{ runnerStore.progress.completed }}</strong> / {{ runnerStore.progress.total }} tests
+          </span>
+          <span class="run-progress-breakdown">
+            <span
+              v-if="runnerStore.progress.passed"
+              class="ok"
+            >{{ runnerStore.progress.passed }} passed</span>
+            <span
+              v-if="runnerStore.progress.failed"
+              class="fail"
+            >{{ runnerStore.progress.failed }} failed</span>
+            <span
+              v-if="runnerStore.progress.skipped"
+              class="skip"
+            >{{ runnerStore.progress.skipped }} skipped</span>
+          </span>
+        </div>
+        <div class="run-progress-bar">
+          <div
+            class="run-progress-fill"
+            :style="{ width: progressPct + '%' }"
+          />
+        </div>
+      </div>
+
+      <p
+        v-if="lastLogLine"
+        class="run-current"
+        data-testid="run-current"
+      >
+        {{ lastLogLine }}
+      </p>
+
       <pre
         v-if="runnerStore.logs.length > 0"
         ref="logsContainer"
@@ -455,6 +547,78 @@ function formatDuration(ms: number): string {
   justify-content: center;
   color: var(--p-text-muted-color);
   font-size: 0.9rem;
+}
+
+/* When running, the state line is a compact header above the live progress. */
+.running-state-section .running-state {
+  padding: 0.75rem;
+  justify-content: flex-start;
+}
+
+.run-elapsed {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0 0.75rem;
+}
+
+.run-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.run-progress-count strong {
+  font-size: 1rem;
+}
+
+.run-progress-breakdown {
+  display: inline-flex;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.run-progress-breakdown .ok {
+  color: var(--p-green-600);
+}
+
+.run-progress-breakdown .fail {
+  color: var(--p-red-600);
+}
+
+.run-progress-breakdown .skip {
+  color: var(--p-text-muted-color);
+}
+
+.run-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--p-content-border-color, var(--surface-border, #e5e7eb));
+  overflow: hidden;
+}
+
+.run-progress-fill {
+  height: 100%;
+  background: var(--p-primary-color, #3b82f6);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.run-current {
+  margin: 0;
+  padding: 0 0.75rem;
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.78rem;
+  color: var(--p-text-muted-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-bar {

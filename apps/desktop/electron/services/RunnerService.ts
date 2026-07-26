@@ -337,6 +337,11 @@ export class RunnerService {
         ? `https://${options.baseUrl}`
         : options.baseUrl
 
+    // Route the machine-readable JSON report to a file so stdout is free for the live
+    // `list` reporter (streamed per-test to the UI). Read back after the run.
+    const jsonReportFile = path.join(reportsRoot(workspacePath), 'last-run.json')
+    fs.mkdirSync(path.dirname(jsonReportFile), { recursive: true })
+
     const env: Record<string, string> = {
       // User-defined variables/secrets first so `${NAME}` resolves; runner-critical
       // vars below win if a variable happens to share their name.
@@ -344,6 +349,11 @@ export class RunnerService {
       ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
       NODE_PATH: workspaceNodeModules,
       PATH: pathParts.join(path.delimiter),
+      PLAYWRIGHT_JSON_OUTPUT_NAME: jsonReportFile,
+      // Never let the HTML reporter auto-launch its own server/browser — SuiSui serves
+      // the report itself, and an auto-open can look like a hung run.
+      PLAYWRIGHT_HTML_OPEN: 'never',
+      PW_TEST_HTML_REPORT_OPEN: 'never',
     }
 
     logger.info('Starting batch test run', {
@@ -412,8 +422,9 @@ export class RunnerService {
     if (options.mode === 'ui') {
       playwrightArgs.push('--ui')
     } else {
-      // JSON + HTML reporters for structured output parsing
-      playwrightArgs.push('--reporter=json,html')
+      // `list` streams per-test progress to stdout live (so the UI can show real-time
+      // status); `json` (→ file) is parsed for results; `html` builds the report.
+      playwrightArgs.push('--reporter=list,json,html')
       // Headed: show the browser so the run can be watched (replay).
       if (options.headed) {
         playwrightArgs.push('--headed')
@@ -461,8 +472,15 @@ export class RunnerService {
       }
     }
 
-    // Parse JSON reporter output
-    return parsePlaywrightJsonReport(result.stdout, result.stdout, result.stderr, duration)
+    // Parse the JSON report from its file (stdout now carries the live `list` output).
+    // Fall back to stdout for resilience if the file wasn't produced.
+    let jsonStr = ''
+    try {
+      jsonStr = fs.readFileSync(jsonReportFile, 'utf-8')
+    } catch {
+      jsonStr = result.stdout
+    }
+    return parsePlaywrightJsonReport(jsonStr, result.stdout, result.stderr, duration)
   }
 
   private buildGrepPattern(tags?: string[], nameFilter?: string): string | undefined {
