@@ -103,6 +103,8 @@ const showRootDropBar = computed(() => !!draggedPath.value && parentOf(draggedPa
 function rootDragOver(e: DragEvent) {
   if (!dnd.canDrop('')) return
   e.preventDefault()
+  // Required for Chromium to accept the drop (matches the folder-row dragover).
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
   dropTargetPath.value = ''
 }
 function rootDrop(e: DragEvent) {
@@ -253,19 +255,6 @@ async function refreshTree() {
       </div>
     </div>
 
-    <!-- Always in the DOM (a mid-drag insertion is an unreliable drop target); expands
-         into a reachable "move to root" target while a nested item is being dragged. -->
-    <div
-      class="root-drop-bar"
-      :class="{ visible: showRootDropBar, active: isRootDropTarget }"
-      data-testid="feature-tree-root-dropbar"
-      @dragover="rootDragOver"
-      @drop="rootDrop"
-    >
-      <i class="pi pi-arrow-up" />
-      <span>Move to workspace root</span>
-    </div>
-
     <div
       v-if="treeData.length === 0"
       class="empty-state"
@@ -299,6 +288,19 @@ async function refreshTree() {
           @new-folder="(n) => openNewFolderDialog((n ?? node).relativePath)"
         />
       </div>
+    </div>
+
+    <!-- Always in the DOM (a mid-drag insertion is an unreliable drop target); sits at
+         the bottom of the list and expands into a "move to root" target during a drag. -->
+    <div
+      class="root-drop-bar"
+      :class="{ visible: showRootDropBar, active: isRootDropTarget }"
+      data-testid="feature-tree-root-dropbar"
+      @dragover="rootDragOver"
+      @drop="rootDrop"
+    >
+      <i class="pi pi-arrow-down" />
+      <span>Move to workspace root</span>
     </div>
 
     <!-- Dialogs -->
@@ -460,6 +462,7 @@ async function refreshTree() {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+  flex-shrink: 0;
   /* Collapsed and invisible when idle — still in the DOM so it's a stable drop target. */
   max-height: 0;
   margin: 0 0.5rem;
