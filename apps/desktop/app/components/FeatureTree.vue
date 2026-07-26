@@ -46,6 +46,79 @@ provide('selectedKey', selectedKey)
 provide('toggleExpanded', toggleExpanded)
 provide('onNodeSelect', onNodeSelect)
 
+// --- Drag & drop: move files/folders between folders ---
+const draggedPath = ref<string | null>(null)
+const draggedType = ref<'file' | 'folder' | null>(null)
+const dropTargetPath = ref<string | null>(null)
+
+function parentOf(p: string): string {
+  return p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
+}
+
+/** A move is valid unless it targets the item's current folder, itself, or its own descendant. */
+function isValidMove(src: string, type: 'file' | 'folder', targetFolder: string): boolean {
+  if (type === 'folder' && (targetFolder === src || targetFolder.startsWith(src + '/'))) return false
+  return parentOf(src) !== targetFolder
+}
+
+const dnd = {
+  draggedPath,
+  dropTargetPath,
+  canDrop(targetFolder: string): boolean {
+    return !!draggedPath.value && !!draggedType.value && isValidMove(draggedPath.value, draggedType.value, targetFolder)
+  },
+  start(node: FeatureTreeNode) {
+    draggedPath.value = node.relativePath
+    draggedType.value = node.type
+  },
+  end() {
+    draggedPath.value = null
+    draggedType.value = null
+    dropTargetPath.value = null
+  },
+  async drop(targetFolder: string) {
+    const src = draggedPath.value
+    const type = draggedType.value
+    dnd.end()
+    if (!src || !type || !isValidMove(src, type, targetFolder)) return
+    if (type === 'folder') {
+      const name = src.split('/').pop() ?? src
+      await workspaceStore.renameFolder(src, targetFolder ? `${targetFolder}/${name}` : name)
+    } else {
+      await workspaceStore.moveFeature(src, targetFolder)
+    }
+    if (workspaceStore.error) return // move failed; error is surfaced by the store
+    await workspaceStore.loadFeatureTree()
+    await workspaceStore.loadFeatures()
+    if (selectedKey.value === src) selectedKey.value = ''
+  },
+}
+provide('dnd', dnd)
+
+// Move to the features root. An explicit bar (shown while dragging a nested item) makes
+// this reachable; the empty tree area is also a target.
+const isRootDropTarget = computed(() => !!draggedPath.value && dropTargetPath.value === '')
+const showRootDropBar = computed(() => !!draggedPath.value && parentOf(draggedPath.value) !== '')
+
+function rootDragOver(e: DragEvent) {
+  if (!dnd.canDrop('')) return
+  e.preventDefault()
+  dropTargetPath.value = ''
+}
+function rootDrop(e: DragEvent) {
+  if (!dnd.canDrop('')) return
+  e.preventDefault()
+  void dnd.drop('')
+}
+// On the wrapper, only treat genuine empty-space events as root drops — a bubbled event
+// from a child row would otherwise steal the folder's highlight and hijack the drop.
+function onWrapperDragOver(e: DragEvent) {
+  if (e.target === e.currentTarget) rootDragOver(e)
+}
+function onWrapperDrop(e: DragEvent) {
+  if (e.target === e.currentTarget) rootDrop(e)
+}
+
 function openNewFolderDialog(parentPath?: string) {
   newFolderName.value = ''
   newFolderParent.value = parentPath || ''
@@ -180,6 +253,19 @@ async function refreshTree() {
       </div>
     </div>
 
+    <!-- Always in the DOM (a mid-drag insertion is an unreliable drop target); expands
+         into a reachable "move to root" target while a nested item is being dragged. -->
+    <div
+      class="root-drop-bar"
+      :class="{ visible: showRootDropBar, active: isRootDropTarget }"
+      data-testid="feature-tree-root-dropbar"
+      @dragover="rootDragOver"
+      @drop="rootDrop"
+    >
+      <i class="pi pi-arrow-up" />
+      <span>Move to workspace root</span>
+    </div>
+
     <div
       v-if="treeData.length === 0"
       class="empty-state"
@@ -191,6 +277,10 @@ async function refreshTree() {
     <div
       v-else
       class="tree-wrapper"
+      :class="{ 'root-drop-target': isRootDropTarget }"
+      data-testid="feature-tree-root-dropzone"
+      @dragover="onWrapperDragOver"
+      @drop="onWrapperDrop"
     >
       <div
         v-for="node in treeData"
@@ -356,6 +446,46 @@ async function refreshTree() {
   flex: 1;
   overflow-y: auto;
   padding: 0.5rem;
+}
+
+/* Dropping on empty tree space moves the item to the features root. */
+.tree-wrapper.root-drop-target {
+  outline: 2px dashed var(--primary-color, #3b82f6);
+  outline-offset: -4px;
+  border-radius: 6px;
+}
+
+.root-drop-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  /* Collapsed and invisible when idle — still in the DOM so it's a stable drop target. */
+  max-height: 0;
+  margin: 0 0.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.15s ease, opacity 0.15s ease, padding 0.15s ease, margin 0.15s ease;
+}
+
+.root-drop-bar.visible {
+  max-height: 3rem;
+  margin: 0.25rem 0.5rem;
+  padding: 0.5rem;
+  border-color: var(--surface-border);
+  background: var(--surface-ground);
+  opacity: 1;
+}
+
+.root-drop-bar.active {
+  color: var(--primary-color, #3b82f6);
+  border-color: var(--primary-color, #3b82f6);
+  background: var(--primary-50, rgba(59, 130, 246, 0.12));
 }
 
 .tree-node-group {

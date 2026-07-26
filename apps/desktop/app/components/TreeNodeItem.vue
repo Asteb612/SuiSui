@@ -24,6 +24,50 @@ const selectedKey = inject<Ref<string>>('selectedKey')
 const toggleExpanded = inject<(path: string) => void>('toggleExpanded')
 const onNodeSelect = inject<(node: FeatureTreeNode) => void>('onNodeSelect')
 
+// Drag & drop context (moving files/folders between folders), provided by FeatureTree.
+interface DndContext {
+  draggedPath: Ref<string | null>
+  dropTargetPath: Ref<string | null>
+  canDrop: (targetFolder: string) => boolean
+  start: (node: FeatureTreeNode) => void
+  end: () => void
+  drop: (targetFolder: string) => void
+}
+const dnd = inject<DndContext>('dnd')
+
+/** The destination folder a drop on THIS row targets: a folder itself, or a file's parent. */
+const dropFolderPath = computed(() => {
+  const p = props.node.relativePath
+  if (props.node.type === 'folder') return p
+  return p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
+})
+
+/** Highlight the folder row that a valid drop currently targets. */
+const isDropTarget = computed(
+  () => props.node.type === 'folder' && !!dnd && dnd.dropTargetPath.value === props.node.relativePath,
+)
+const isDragging = computed(() => !!dnd && dnd.draggedPath.value === props.node.relativePath)
+
+function onDragStart(e: DragEvent) {
+  dnd?.start(props.node)
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', props.node.relativePath)
+  }
+}
+function onDragOver(e: DragEvent) {
+  if (!dnd || !dnd.canDrop(dropFolderPath.value)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  dnd.dropTargetPath.value = dropFolderPath.value
+}
+function onDrop(e: DragEvent) {
+  if (!dnd || !dnd.canDrop(dropFolderPath.value)) return
+  e.preventDefault()
+  e.stopPropagation()
+  dnd.drop(dropFolderPath.value)
+}
+
 // Create computed properties to safely access injected refs
 const expandedKeysValue = computed(() => expandedKeys?.value || {})
 const selectedKeyValue = computed(() => selectedKey?.value || '')
@@ -87,8 +131,13 @@ function showMenu(event: MouseEvent) {
   >
     <div
       class="node-content"
-      :class="{ selected }"
+      :class="{ selected, 'drop-target': isDropTarget, dragging: isDragging }"
+      draggable="true"
       @click="onNodeSelect ? onNodeSelect(node) : emit('select', node)"
+      @dragstart="onDragStart"
+      @dragend="dnd?.end()"
+      @dragover="onDragOver"
+      @drop="onDrop"
     >
       <span
         v-if="node.type === 'folder'"
@@ -180,6 +229,17 @@ function showMenu(event: MouseEvent) {
 .node-content.selected {
   background-color: var(--primary-color);
   color: white;
+}
+
+/* Folder highlighted as the drop destination during a drag. */
+.node-content.drop-target {
+  background-color: var(--primary-50, rgba(59, 130, 246, 0.12));
+  outline: 2px dashed var(--primary-color, #3b82f6);
+  outline-offset: -2px;
+}
+
+.node-content.dragging {
+  opacity: 0.5;
 }
 
 .node-toggle {
