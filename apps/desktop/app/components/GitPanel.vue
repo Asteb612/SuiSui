@@ -226,13 +226,33 @@ async function clearCredentials() {
       />
     </div>
 
-    <div
-      v-if="gitWorkspaceStore.status"
-      class="git-status"
-    >
-      <div class="branch">
+    <!-- Branch name and the git actions share one row. -->
+    <div class="git-header-row">
+      <div
+        v-if="gitWorkspaceStore.status"
+        class="branch"
+      >
         <i class="pi pi-code-branch" />
         {{ branchName }}
+      </div>
+      <div class="git-actions">
+        <Button
+          v-if="hasRemote"
+          label="Pull"
+          icon="pi pi-download"
+          size="small"
+          outlined
+          :loading="gitWorkspaceStore.isPulling"
+          @click="() => pull()"
+        />
+        <Button
+          :label="hasRemote ? 'Commit & Push' : 'Commit'"
+          :icon="hasRemote ? 'pi pi-upload' : 'pi pi-check'"
+          size="small"
+          :disabled="!hasChanges"
+          :loading="gitWorkspaceStore.isCommitting"
+          @click="openCommitDialog"
+        />
       </div>
     </div>
 
@@ -242,26 +262,6 @@ async function clearCredentials() {
     >
       <i class="pi pi-circle-fill" />
       {{ changeCount }} changes
-    </div>
-
-    <div class="git-actions">
-      <Button
-        v-if="hasRemote"
-        label="Pull"
-        icon="pi pi-download"
-        size="small"
-        outlined
-        :loading="gitWorkspaceStore.isPulling"
-        @click="() => pull()"
-      />
-      <Button
-        :label="hasRemote ? 'Commit & Push' : 'Commit'"
-        :icon="hasRemote ? 'pi pi-upload' : 'pi pi-check'"
-        size="small"
-        :disabled="!hasChanges"
-        :loading="gitWorkspaceStore.isCommitting"
-        @click="openCommitDialog"
-      />
     </div>
 
     <div
@@ -383,10 +383,16 @@ async function clearCredentials() {
   color: var(--text-color);
 }
 
-.git-status {
+.git-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Keep the actions pinned to the right even when the branch label is absent. */
+.git-header-row .git-actions {
+  margin-left: auto;
 }
 
 .branch {

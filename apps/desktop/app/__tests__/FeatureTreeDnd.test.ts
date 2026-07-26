@@ -42,10 +42,10 @@ async function expand(container: Element, folderPath: string) {
   if (toggle) await fireEvent.click(toggle)
 }
 
-/** The always-present root drop bar. */
-function rootBar(container: Element): HTMLElement {
-  const el = container.querySelector<HTMLElement>('[data-testid="feature-tree-root-dropbar"]')
-  if (!el) throw new Error('no root drop bar')
+/** The empty-tree-area root drop zone. */
+function rootZone(container: Element): HTMLElement {
+  const el = container.querySelector<HTMLElement>('[data-testid="feature-tree-root-dropzone"]')
+  if (!el) throw new Error('no root drop zone')
   return el
 }
 
@@ -96,25 +96,15 @@ describe('FeatureTree — drag & drop moves', () => {
     expect(store.renameFolder).not.toHaveBeenCalled()
   })
 
-  it('reveals the root drop bar for a nested item and moves it to the root', async () => {
+  it('moves a nested file to the root via the empty-tree drop zone', async () => {
     const { container } = renderTree()
     const store = useWorkspaceStore()
     await expand(container, 'auth')
 
-    // The bar is always in the DOM but only "visible" once a nested item is dragged.
-    expect(rootBar(container).classList.contains('visible')).toBe(false)
     await fireEvent.dragStart(rowFor(container, 'auth/login.feature'))
-    expect(rootBar(container).classList.contains('visible')).toBe(true)
-
-    await fireEvent.dragOver(rootBar(container))
-    await fireEvent.drop(rootBar(container))
+    await fireEvent.dragOver(rootZone(container))
+    await fireEvent.drop(rootZone(container))
 
     expect(store.moveFeature).toHaveBeenCalledWith('auth/login.feature', '')
-  })
-
-  it('does NOT reveal the root drop bar for a root-level item', async () => {
-    const { container } = renderTree()
-    await fireEvent.dragStart(rowFor(container, 'home.feature'))
-    expect(rootBar(container).classList.contains('visible')).toBe(false)
   })
 })

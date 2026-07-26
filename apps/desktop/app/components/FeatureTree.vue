@@ -97,10 +97,8 @@ const dnd = {
 }
 provide('dnd', dnd)
 
-// Move to the features root. An explicit bar (shown while dragging a nested item) makes
-// this reachable; the empty tree area is also a target.
+// Move to the features root by dropping on the empty tree area.
 const isRootDropTarget = computed(() => !!draggedPath.value && dropTargetPath.value === '')
-const showRootDropBar = computed(() => !!draggedPath.value && parentOf(draggedPath.value) !== '')
 
 function rootDragOver(e: DragEvent) {
   if (!dnd.canDrop('')) return
@@ -292,20 +290,6 @@ async function refreshTree() {
       </div>
     </div>
 
-    <!-- Always in the DOM (a mid-drag insertion is an unreliable drop target); sits at
-         the bottom of the list and expands into a "move to root" target during a drag. -->
-    <div
-      class="root-drop-bar"
-      :class="{ visible: showRootDropBar, active: isRootDropTarget }"
-      data-testid="feature-tree-root-dropbar"
-      @dragenter="rootDragOver"
-      @dragover="rootDragOver"
-      @drop="rootDrop"
-    >
-      <i class="pi pi-arrow-down" />
-      <span>Move to workspace root</span>
-    </div>
-
     <!-- Dialogs -->
     <NewScenarioDialog
       v-model:visible="showNewFeatureDialog"
@@ -460,35 +444,6 @@ async function refreshTree() {
   border-radius: 6px;
 }
 
-/* Always rendered WITH real height so Chromium registers it as a drop target from the
-   start of a drag (a zero-height / mid-drag element is not a reliable drop target).
-   Muted when idle, prominent while dragging a nested item, highlighted on hover. */
-.root-drop-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  flex-shrink: 0;
-  margin: 0.25rem 0.5rem;
-  padding: 0.45rem;
-  font-size: 0.75rem;
-  color: var(--text-color-secondary);
-  border: 1px dashed var(--surface-border);
-  border-radius: 6px;
-  opacity: 0.45;
-  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.root-drop-bar.visible {
-  opacity: 1;
-}
-
-.root-drop-bar.active {
-  opacity: 1;
-  color: var(--primary-color, #3b82f6);
-  border-color: var(--primary-color, #3b82f6);
-  background: var(--primary-50, rgba(59, 130, 246, 0.12));
-}
 
 .tree-node-group {
   margin-bottom: 0.5rem;
