@@ -267,8 +267,8 @@ function onDisable() {
           data-testid="ai-effort-select"
         />
         <small class="hint">
-          Applied to providers with a reasoning-effort control (e.g. the Codex CLI).
-          Providers without one ignore it.
+          Applied to the Codex CLI and to reasoning models on a bring-your-own-key
+          endpoint (o-series, GPT-5). Other providers and non-reasoning models ignore it.
         </small>
       </div>
 

@@ -1,13 +1,16 @@
 import { streamText } from 'ai'
 import { createOllama } from 'ollama-ai-provider-v2'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import type { AIProviderStatus } from '@suisui/shared'
+import type { AIProviderStatus, AIReasoningEffort } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
 import type { IAIProvider, AIStreamRequest } from './IAIProvider'
 
 const logger = createLogger('VercelAIProvider')
 
 const DEFAULT_OLLAMA_BASE = 'http://127.0.0.1:11434'
+
+/** Provider name for the BYOK OpenAI-compatible endpoint; also the providerOptions key. */
+const BYOK_PROVIDER_NAME = 'byok'
 
 export type VercelProviderMode = 'ollama' | 'openai-compatible'
 
@@ -17,10 +20,23 @@ export interface VercelAIProviderOptions {
   baseUrl: string | null
   /** Reads the API key from the main-process credentials store; never exposed to the renderer. */
   getKey: () => Promise<string | null>
+  /** Reasoning effort; forwarded as `reasoning_effort` only to reasoning-capable models. */
+  effort?: AIReasoningEffort
 }
 
 function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
+}
+
+/**
+ * Whether a model accepts OpenAI's `reasoning_effort` parameter. Sending it to a
+ * non-reasoning model (e.g. gpt-4o) is a 400, so effort is gated on this. Matches the
+ * OpenAI reasoning families — the o-series (o1/o3/o4…) and gpt-5* — tolerating an
+ * optional `vendor/` gateway prefix (e.g. `openai/gpt-5`).
+ */
+function isReasoningModel(model: string): boolean {
+  const name = model.trim().toLowerCase().split('/').pop() ?? ''
+  return /^o\d/.test(name) || name.startsWith('gpt-5')
 }
 
 /**
@@ -87,6 +103,7 @@ export class VercelAIProvider implements IAIProvider {
       model: languageModel,
       prompt: req.input,
       abortSignal: req.signal,
+      ...this.reasoningProviderOptions(model),
     })
 
     for await (const delta of result.textStream) {
@@ -94,11 +111,23 @@ export class VercelAIProvider implements IAIProvider {
     }
   }
 
+  /**
+   * Provider options carrying `reasoning_effort` for BYOK reasoning models. Empty for
+   * Ollama, for non-reasoning models, or when no effort is set — so a plain BYOK model
+   * (gpt-4o, etc.) never receives an unsupported parameter.
+   */
+  private reasoningProviderOptions(model: string): { providerOptions?: Record<string, Record<string, string>> } {
+    if (this.opts.mode !== 'openai-compatible' || !this.opts.effort || !isReasoningModel(model)) {
+      return {}
+    }
+    return { providerOptions: { [BYOK_PROVIDER_NAME]: { reasoningEffort: this.opts.effort } } }
+  }
+
   private async openAICompatibleModel(model: string) {
     const base = this.opts.baseUrl ? trimTrailingSlash(this.opts.baseUrl) : null
     if (!base) throw new Error('No base URL configured for the OpenAI-compatible provider')
     const apiKey = (await this.opts.getKey()) ?? undefined
-    const provider = createOpenAICompatible({ name: 'byok', baseURL: base, apiKey })
+    const provider = createOpenAICompatible({ name: BYOK_PROVIDER_NAME, baseURL: base, apiKey })
     return provider(model)
   }
 }

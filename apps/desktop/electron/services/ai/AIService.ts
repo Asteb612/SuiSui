@@ -227,8 +227,9 @@ export class AIService {
    * Construct the concrete provider for a given type without touching persisted
    * config. Shared by `resolveProvider` (active config) and `status(target)` (probe).
    *
-   * `effort` is the reasoning-effort hint (default `medium`). Only providers with a
-   * native reasoning-effort control consume it (the Codex CLI); others ignore it.
+   * `effort` is the reasoning-effort hint (default `medium`). It is forwarded to the
+   * Codex CLI and to BYOK OpenAI-compatible *reasoning* models (o-series / gpt-5);
+   * providers/models without a reasoning-effort control ignore it.
    */
   private buildProvider(
     type: AIProviderType,
@@ -241,7 +242,7 @@ export class AIService {
       case 'ollama':
         return new VercelAIProvider({ mode: 'ollama', model, baseUrl, getKey })
       case 'openai-compatible':
-        return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey })
+        return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey, effort })
       case 'openai-codex-cli':
         return new OpenAiCodexProvider({ model, effort })
       case 'claude-subscription':

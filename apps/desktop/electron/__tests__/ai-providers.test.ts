@@ -23,6 +23,8 @@ vi.mock('node:child_process', () => ({
 }))
 
 import { EventEmitter } from 'node:events'
+import { streamText } from 'ai'
+import type { AIReasoningEffort } from '@suisui/shared'
 import { VercelAIProvider } from '../services/ai/VercelAIProvider'
 import { ClaudeSubscriptionProvider, buildSanitizedEnv } from '../services/ai/ClaudeSubscriptionProvider'
 import {
@@ -125,6 +127,55 @@ describe('VercelAIProvider — streaming', () => {
   it('throws a clear error when no model is selected', async () => {
     const provider = new VercelAIProvider({ mode: 'ollama', model: null, baseUrl: 'http://127.0.0.1:11434', getKey: async () => null })
     await expect(collect(provider.stream(req('x')))).rejects.toThrow('No model selected')
+  })
+})
+
+describe('VercelAIProvider — BYOK reasoning effort', () => {
+  const streamTextMock = vi.mocked(streamText)
+  beforeEach(() => streamTextMock.mockClear())
+
+  const byok = (model: string, effort?: AIReasoningEffort) =>
+    new VercelAIProvider({
+      mode: 'openai-compatible',
+      model,
+      baseUrl: 'https://api.openai.com/v1',
+      getKey: async () => 'sk-test',
+      effort,
+    })
+
+  const lastProviderOptions = () =>
+    (streamTextMock.mock.calls.at(-1)![0] as { providerOptions?: Record<string, Record<string, string>> }).providerOptions
+
+  it('forwards reasoning_effort for a BYOK reasoning model (o-series)', async () => {
+    await collect(byok('o4-mini', 'medium').stream(req('x')))
+    expect(lastProviderOptions()).toEqual({ byok: { reasoningEffort: 'medium' } })
+  })
+
+  it('forwards reasoning_effort for a gpt-5 model, tolerating a vendor prefix', async () => {
+    await collect(byok('openai/gpt-5-mini', 'high').stream(req('x')))
+    expect(lastProviderOptions()).toEqual({ byok: { reasoningEffort: 'high' } })
+  })
+
+  it('does NOT send reasoning_effort to a non-reasoning BYOK model (gpt-4o)', async () => {
+    await collect(byok('gpt-4o', 'high').stream(req('x')))
+    expect(lastProviderOptions()).toBeUndefined()
+  })
+
+  it('does NOT send reasoning_effort when no effort is configured', async () => {
+    await collect(byok('o4-mini').stream(req('x')))
+    expect(lastProviderOptions()).toBeUndefined()
+  })
+
+  it('does NOT send reasoning_effort for an Ollama model even if it looks like a reasoning model', async () => {
+    const provider = new VercelAIProvider({
+      mode: 'ollama',
+      model: 'gpt-5',
+      baseUrl: 'http://127.0.0.1:11434',
+      getKey: async () => null,
+      effort: 'high',
+    })
+    await collect(provider.stream(req('x')))
+    expect(lastProviderOptions()).toBeUndefined()
   })
 })
 
