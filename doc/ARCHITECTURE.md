@@ -352,3 +352,27 @@ BDD steps — never exposing Playwright's Inspector window **or its in-page over
   its NDJSON) is implemented and validated by a manual/opt-in harness, never CI.
 - **Insertion**: confirmed actions insert through the `scenario` store; the
   `.feature` remains the source of truth (recorder metadata is never written to Gherkin).
+
+## Auto-update (feature 008-auto-update)
+
+The app updates itself via **`electron-updater`** (the companion to the existing
+`electron-builder`), main-process only (Principle I). Updates are published to
+**public GitHub Releases** (stable channel); the release pipeline
+(`.github/workflows/desktop-release.yml`) publishes artifacts + `latest*.yml` on tag.
+
+- **Seam**: all `electron-updater` use lives behind `IUpdaterAdapter`
+  (`ElectronUpdaterAdapter` real, `FakeUpdaterAdapter` for tests — Principle III).
+  `UpdateService` owns a small state machine, never imports electron/electron-updater,
+  and is fully unit-tested.
+- **Never a forced restart** (FR-011): the service never calls `quitAndInstall`
+  autonomously. Downloads happen in the background; the user applies via an explicit
+  "Restart & update", and `UpdateBanner` is suppressed while a run/recording is active.
+- **Verification** (FR-008): `electron-updater` verifies integrity/authenticity per
+  platform; unverifiable/older updates are refused.
+- **Capability**: `computeCapability(platform, isPackaged, APPIMAGE)` marks dev and
+  Linux non-AppImage (deb) installs **notify-only** — they get a manual-download link
+  instead of a failing self-update (FR-016).
+- **Platforms**: macOS (DMG/ZIP, **requires signed + notarized** builds), Windows
+  (NSIS), Linux **AppImage**. Linux `.deb` = notify-only.
+- **State** crosses IPC as the serializable `UpdateState` (see IPC_TYPES.md); preferences
+  persist in `AppSettings` via `SettingsService`.

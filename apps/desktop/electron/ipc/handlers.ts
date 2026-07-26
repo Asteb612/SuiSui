@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable } from '@suisui/shared'
+import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -25,6 +25,9 @@ import {
   getEditorService,
   FakeCommandRunner,
   setCommandRunner,
+  UpdateService,
+  FakeUpdaterAdapter,
+  getUpdateService,
 } from '../services'
 import type {
   GitWorkspaceParams,
@@ -656,7 +659,44 @@ export function registerIpcHandlers(
     recorderService.addAssertion(validateAssertionRequest(request))
   })
 
+  // Auto-update handlers. In test mode the service uses a FakeUpdaterAdapter with a
+  // dev (notify-only) capability so no real electron-updater/network is touched
+  // (Constitution Principle III). In production the singleton (real adapter) is
+  // shared with main.ts, which wires the push emitter and kicks the startup check.
+  const updateService = isTestMode
+    ? new UpdateService({
+        adapter: new FakeUpdaterAdapter(),
+        settings: settingsService,
+        getVersion: () => app.getVersion(),
+        capability: { canSelfUpdate: false, reason: 'dev', manualUpdateUrl: null },
+      })
+    : getUpdateService()
+
+  ipcMain.handle(IPC_CHANNELS.UPDATE_CHECK, async () => updateService.check())
+  ipcMain.handle(IPC_CHANNELS.UPDATE_DOWNLOAD, async () => updateService.download())
+  ipcMain.handle(IPC_CHANNELS.UPDATE_QUIT_AND_INSTALL, async () => updateService.quitAndInstall())
+  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_STATE, async () => updateService.getState())
+  ipcMain.handle(IPC_CHANNELS.UPDATE_GET_PREFERENCES, async () => updateService.getPreferences())
+  ipcMain.handle(IPC_CHANNELS.UPDATE_SET_PREFERENCES, async (_event, prefs: unknown) =>
+    updateService.setPreferences(validateUpdatePreferences(prefs))
+  )
+
   logger.info('IPC handlers registered', { isTestMode })
+}
+
+/** Coerce untrusted renderer input into a clean `Partial<UpdatePreferences>`. */
+function validateUpdatePreferences(value: unknown): Partial<UpdatePreferences> {
+  if (!isRecord(value)) throw new Error('update.setPreferences: prefs must be an object')
+  const out: Partial<UpdatePreferences> = {}
+  if (value.autoCheck !== undefined) {
+    if (typeof value.autoCheck !== 'boolean') throw new Error('update.setPreferences: autoCheck must be a boolean')
+    out.autoCheck = value.autoCheck
+  }
+  if (value.autoDownload !== undefined) {
+    if (typeof value.autoDownload !== 'boolean') throw new Error('update.setPreferences: autoDownload must be a boolean')
+    out.autoDownload = value.autoDownload
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------

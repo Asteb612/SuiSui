@@ -2,6 +2,8 @@ import type { RunConfiguration } from './runner'
 import type { AIProviderConfig } from './ai'
 import { DEFAULT_AI_PROVIDER_CONFIG } from './ai'
 import type { RecorderLocatorSettings } from './recorder'
+import type { UpdatePreferences } from './update'
+import { DEFAULT_UPDATE_PREFERENCES } from './update'
 
 export interface AppSettings {
   workspacePath: string | null
@@ -18,6 +20,10 @@ export interface AppSettings {
   recorderAiEnabled?: boolean
   /** Per-workspace recorder locator preferences. */
   recorderLocatorSettings?: RecorderLocatorSettings
+  /** Auto-update behavior (check/download automatically). */
+  updatePreferences?: UpdatePreferences
+  /** Last app version seen at startup — powers the one-time "what's new" notice. */
+  lastSeenVersion?: string
 }
 
 export const DEFAULT_RUN_CONFIGURATION: RunConfiguration = {
@@ -41,4 +47,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   baseUrl: null,
   runConfiguration: { ...DEFAULT_RUN_CONFIGURATION },
   aiProvider: { ...DEFAULT_AI_PROVIDER_CONFIG },
+  updatePreferences: { ...DEFAULT_UPDATE_PREFERENCES },
 }

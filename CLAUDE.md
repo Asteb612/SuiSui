@@ -334,6 +334,9 @@ recorder components).
 
 ## Active Technologies
 
+- TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; **new (main-process only)**: `electron-updater` 6.x — the companion consumer of the update metadata `electron-builder` 25.1.8 already emits; reuses `SettingsService`, the typed-IPC + adapter-seam patterns, and the existing GitHub-Releases distribution infra (008-auto-update)
+- Update preferences persisted in `AppSettings` JSON via `SettingsService`; in-memory `UpdateState` in the main `UpdateService` + renderer `update` store; downloads cached by `electron-updater` (008-auto-update)
+
 - TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22; recorder child uses the app's embedded Node 22.13.1) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x. **No new bundled dependency** — the recorder drives the **workspace's** Playwright (`>=1.49 <1.61` supported) via the app's existing embedded Node; reuses `@suisui/step-catalog` (feature 006), `RunnerService`/`NodeService` infra (feature 002), the AI provider seam (feature 005), and the `safeStorage`/`.app/` pattern (feature 003, via #98 for credentials) (007-native-recorder)
 - In-memory session state (main `RecorderService` + renderer `recorder` store). No new persisted store: secrets are redacted (never stored); provenance stays in the renderer/optional `.app/` sidecar (deferred); source locations come from the catalog (007-native-recorder)
 

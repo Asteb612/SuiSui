@@ -115,14 +115,16 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Background steps section with drag-and-drop
 
 **Props:**
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+
+| Prop       | Type                         | Default      | Description                   |
+| ---------- | ---------------------------- | ------------ | ----------------------------- |
 | `editMode` | `'scenario' \| 'background'` | `'scenario'` | Which section is being edited |
-| `viewMode` | `'read' \| 'edit' \| 'run'` | `'read'` | Current view mode |
+| `viewMode` | `'read' \| 'edit' \| 'run'`  | `'read'`     | Current view mode             |
 
 **Events:**
-| Event | Description |
-|-------|-------------|
+
+| Event              | Description                                    |
+| ------------------ | ---------------------------------------------- |
 | `toggle-edit-mode` | Toggle between scenario and background editing |
 
 **Store Dependencies:**
@@ -173,13 +175,14 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Clear logs button
 
 **Status Colors:**
-| Status | Color |
-|--------|-------|
-| idle | Gray |
-| running | Blue |
-| passed | Green |
-| failed | Red |
-| error | Red |
+
+| Status  | Color |
+| ------- | ----- |
+| idle    | Gray  |
+| running | Blue  |
+| passed  | Green |
+| failed  | Red   |
+| error   | Red   |
 
 **Store Dependencies:**
 
@@ -254,10 +257,11 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - `useWorkspaceStore` - directory selection
 
 **Events:**
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `cloned` | `string` (path) | Emitted after successful clone |
-| `update:visible` | `boolean` | Dialog visibility |
+
+| Event            | Payload         | Description                    |
+| ---------------- | --------------- | ------------------------------ |
+| `cloned`         | `string` (path) | Emitted after successful clone |
+| `update:visible` | `boolean`       | Dialog visibility              |
 
 ---
 
@@ -316,19 +320,21 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Validation error highlighting
 
 **Props:**
-| Prop | Type | Description |
-|------|------|-------------|
-| `step` | `ScenarioStep` | The step data |
-| `index` | `number` | Step position |
-| `isBackground` | `boolean` | If in background section |
+
+| Prop           | Type           | Description              |
+| -------------- | -------------- | ------------------------ |
+| `step`         | `ScenarioStep` | The step data            |
+| `index`        | `number`       | Step position            |
+| `isBackground` | `boolean`      | If in background section |
 
 **Events:**
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `update` | `Partial<ScenarioStep>` | Step data changed |
-| `remove` | - | Delete requested |
-| `move-up` | - | Move up requested |
-| `move-down` | - | Move down requested |
+
+| Event       | Payload                 | Description         |
+| ----------- | ----------------------- | ------------------- |
+| `update`    | `Partial<ScenarioStep>` | Step data changed   |
+| `remove`    | -                       | Delete requested    |
+| `move-up`   | -                       | Move up requested   |
+| `move-down` | -                       | Move down requested |
 
 ---
 
@@ -363,9 +369,10 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Auto-detect placeholders from steps
 
 **Props:**
-| Prop | Type | Description |
-|------|------|-------------|
-| `examples` | `Examples` | The examples data |
+
+| Prop           | Type       | Description                    |
+| -------------- | ---------- | ------------------------------ |
+| `examples`     | `Examples` | The examples data              |
 | `placeholders` | `string[]` | Detected `<placeholder>` names |
 
 ---
@@ -382,10 +389,11 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - CSV-like paste support
 
 **Props:**
-| Prop | Type | Description |
-|------|------|-------------|
-| `columns` | `string[]` | Column headers |
-| `rows` | `string[][]` | Table data |
+
+| Prop      | Type         | Description    |
+| --------- | ------------ | -------------- |
+| `columns` | `string[]`   | Column headers |
+| `rows`    | `string[][]` | Table data     |
 
 ---
 
@@ -401,8 +409,9 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Inline editing
 
 **Props:**
-| Prop | Type | Description |
-|------|------|-------------|
+
+| Prop   | Type       | Description  |
+| ------ | ---------- | ------------ |
 | `tags` | `string[]` | Current tags |
 
 ---
@@ -420,11 +429,12 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 - Drag and drop support
 
 **Props:**
-| Prop | Type | Description |
-|------|------|-------------|
-| `node` | `TreeNode` | The tree node data |
-| `level` | `number` | Nesting depth |
-| `selected` | `boolean` | Selection state |
+
+| Prop       | Type       | Description        |
+| ---------- | ---------- | ------------------ |
+| `node`     | `TreeNode` | The tree node data |
+| `level`    | `number`   | Nesting depth      |
+| `selected` | `boolean`  | Selection state    |
 
 ---
 
@@ -459,21 +469,23 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
-| `loadWorkspace()` | Fetch current workspace from IPC |
-| `selectWorkspace()` | Open dialog, validate, persist |
-| `selectDirectory()` | Open directory dialog, return path only |
-| `setWorkspacePath(path)` | Set workspace by path, load features |
-| `loadFeatures()` | Fetch feature list from workspace |
-| `selectFeature(feature)` | Set selected feature |
-| `clearWorkspace()` | Reset all state |
+
+| Action                   | Description                             |
+| ------------------------ | --------------------------------------- |
+| `loadWorkspace()`        | Fetch current workspace from IPC        |
+| `selectWorkspace()`      | Open dialog, validate, persist          |
+| `selectDirectory()`      | Open directory dialog, return path only |
+| `setWorkspacePath(path)` | Set workspace by path, load features    |
+| `loadFeatures()`         | Fetch feature list from workspace       |
+| `selectFeature(feature)` | Set selected feature                    |
+| `clearWorkspace()`       | Reset all state                         |
 
 **Getters:**
-| Getter | Type | Description |
-|--------|------|-------------|
+
+| Getter         | Type    | Description              |
+| -------------- | ------- | ------------------------ |
 | `hasWorkspace` | boolean | Whether workspace is set |
-| `featureCount` | number | Number of feature files |
+| `featureCount` | number  | Number of feature files  |
 
 ---
 
@@ -494,20 +506,22 @@ The header "Change Workspace" button opens a dropdown menu with "Open Local Work
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
+
+| Action          | Description                      |
+| --------------- | -------------------------------- |
 | `exportSteps()` | Export steps from bddgen via IPC |
-| `loadCached()` | Load steps from cache |
-| `clearSteps()` | Reset state |
+| `loadCached()`  | Load steps from cache            |
+| `clearSteps()`  | Reset state                      |
 
 **Getters:**
-| Getter | Type | Description |
-|--------|------|-------------|
-| `givenSteps` | StepDefinition[] | Filter by Given keyword |
-| `whenSteps` | StepDefinition[] | Filter by When keyword |
-| `thenSteps` | StepDefinition[] | Filter by Then keyword |
-| `allSteps` | StepDefinition[] | All steps from workspace |
-| `stepsByKeyword` | (kw) => StepDefinition[] | Filter function |
+
+| Getter           | Type                     | Description              |
+| ---------------- | ------------------------ | ------------------------ |
+| `givenSteps`     | StepDefinition[]         | Filter by Given keyword  |
+| `whenSteps`      | StepDefinition[]         | Filter by When keyword   |
+| `thenSteps`      | StepDefinition[]         | Filter by Then keyword   |
+| `allSteps`       | StepDefinition[]         | All steps from workspace |
+| `stepsByKeyword` | (kw) => StepDefinition[] | Filter function          |
 
 ---
 
@@ -547,42 +561,44 @@ interface Examples {
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
-| `setFeatureName(name)` | Update feature name |
-| `setFeatureDescription(desc)` | Update feature description |
-| `setScenarioName(name)` | Update active scenario name |
-| `addScenario()` | Add new empty scenario |
-| `removeScenario(index)` | Remove scenario at index |
-| `setActiveScenario(index)` | Switch active scenario |
-| `addStep(keyword, pattern, args)` | Add step with auto-generated ID |
-| `updateStep(stepId, updates)` | Modify step properties |
-| `updateStepArg(stepId, argName, value)` | Update single argument |
-| `removeStep(stepId)` | Delete step |
-| `moveStep(fromIndex, toIndex)` | Reorder steps |
-| `addBackgroundStep(step)` | Add background step |
-| `removeBackgroundStep(stepId)` | Remove background step |
-| `moveBackgroundStep(from, to)` | Reorder background |
-| `setExamples(examples)` | Set scenario outline examples |
-| `addExampleRow(row)` | Add row to examples table |
-| `removeExampleRow(index)` | Remove example row |
-| `validate()` | Call IPC validation |
-| `save(featurePath)` | Convert to Gherkin and write |
-| `loadFromFeature(path, stepDefs)` | Parse Gherkin with step matching |
-| `toGherkin()` | Convert to Gherkin syntax |
-| `parseGherkin(content, stepDefs)` | Parse Gherkin content |
-| `clear()` | Reset all state |
+
+| Action                                  | Description                      |
+| --------------------------------------- | -------------------------------- |
+| `setFeatureName(name)`                  | Update feature name              |
+| `setFeatureDescription(desc)`           | Update feature description       |
+| `setScenarioName(name)`                 | Update active scenario name      |
+| `addScenario()`                         | Add new empty scenario           |
+| `removeScenario(index)`                 | Remove scenario at index         |
+| `setActiveScenario(index)`              | Switch active scenario           |
+| `addStep(keyword, pattern, args)`       | Add step with auto-generated ID  |
+| `updateStep(stepId, updates)`           | Modify step properties           |
+| `updateStepArg(stepId, argName, value)` | Update single argument           |
+| `removeStep(stepId)`                    | Delete step                      |
+| `moveStep(fromIndex, toIndex)`          | Reorder steps                    |
+| `addBackgroundStep(step)`               | Add background step              |
+| `removeBackgroundStep(stepId)`          | Remove background step           |
+| `moveBackgroundStep(from, to)`          | Reorder background               |
+| `setExamples(examples)`                 | Set scenario outline examples    |
+| `addExampleRow(row)`                    | Add row to examples table        |
+| `removeExampleRow(index)`               | Remove example row               |
+| `validate()`                            | Call IPC validation              |
+| `save(featurePath)`                     | Convert to Gherkin and write     |
+| `loadFromFeature(path, stepDefs)`       | Parse Gherkin with step matching |
+| `toGherkin()`                           | Convert to Gherkin syntax        |
+| `parseGherkin(content, stepDefs)`       | Parse Gherkin content            |
+| `clear()`                               | Reset all state                  |
 
 **Getters:**
-| Getter | Type | Description |
-|--------|------|-------------|
-| `activeScenario` | Scenario | Currently selected scenario |
-| `hasSteps` | boolean | Whether active scenario has steps |
-| `hasBackground` | boolean | Whether background has steps |
-| `isValid` | boolean | Validation passed |
-| `errors` | ValidationIssue[] | Error-level issues |
-| `warnings` | ValidationIssue[] | Warning-level issues |
-| `placeholders` | string[] | Detected `<placeholder>` names |
+
+| Getter           | Type              | Description                       |
+| ---------------- | ----------------- | --------------------------------- |
+| `activeScenario` | Scenario          | Currently selected scenario       |
+| `hasSteps`       | boolean           | Whether active scenario has steps |
+| `hasBackground`  | boolean           | Whether background has steps      |
+| `isValid`        | boolean           | Validation passed                 |
+| `errors`         | ValidationIssue[] | Error-level issues                |
+| `warnings`       | ValidationIssue[] | Warning-level issues              |
+| `placeholders`   | string[]          | Detected `<placeholder>` names    |
 
 **Step Pattern Matching:**
 When parsing Gherkin, the store matches step text against step definitions:
@@ -618,12 +634,13 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
+
+| Action                                     | Description            |
+| ------------------------------------------ | ---------------------- |
 | `runHeadless(featurePath?, scenarioName?)` | Execute headless tests |
-| `runUI(featurePath?, scenarioName?)` | Open Playwright UI |
-| `stop()` | Stop running test |
-| `clearLogs()` | Reset state |
+| `runUI(featurePath?, scenarioName?)`       | Open Playwright UI     |
+| `stop()`                                   | Stop running test      |
+| `clearLogs()`                              | Reset state            |
 
 ---
 
@@ -645,17 +662,19 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
-| `refreshStatus()` | Fetch git status |
-| `pull()` | Execute git pull |
+
+| Action                | Description         |
+| --------------------- | ------------------- |
+| `refreshStatus()`     | Fetch git status    |
+| `pull()`              | Execute git pull    |
 | `commitPush(message)` | Stage, commit, push |
 
 **Getters:**
-| Getter | Type | Description |
-|--------|------|-------------|
+
+| Getter       | Type    | Description              |
+| ------------ | ------- | ------------------------ |
 | `hasChanges` | boolean | Dirty or untracked files |
-| `branchName` | string | Current branch name |
+| `branchName` | string  | Current branch name      |
 
 ---
 
@@ -677,18 +696,20 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
-| `connect(token)` | Validate PAT, save token, fetch user info |
-| `connectViaDeviceFlow()` | Start device flow OAuth, return codes |
-| `pollDeviceFlow(deviceCode)` | Poll for device flow completion |
-| `disconnect()` | Delete token, clear state |
-| `loadRepos()` | Fetch user's GitHub repositories |
-| `restoreSession()` | Restore saved token on app startup |
+
+| Action                       | Description                               |
+| ---------------------------- | ----------------------------------------- |
+| `connect(token)`             | Validate PAT, save token, fetch user info |
+| `connectViaDeviceFlow()`     | Start device flow OAuth, return codes     |
+| `pollDeviceFlow(deviceCode)` | Poll for device flow completion           |
+| `disconnect()`               | Delete token, clear state                 |
+| `loadRepos()`                | Fetch user's GitHub repositories          |
+| `restoreSession()`           | Restore saved token on app startup        |
 
 **Getters:**
-| Getter | Type | Description |
-|--------|------|-------------|
+
+| Getter        | Type    | Description                     |
+| ------------- | ------- | ------------------------------- |
 | `isConnected` | boolean | Whether GitHub is authenticated |
 
 ---
@@ -711,13 +732,14 @@ The store handles bidirectional conversion between the internal `Scenario` objec
 ```
 
 **Actions:**
-| Action | Description |
-|--------|-------------|
-| `cloneOrOpen(params)` | Clone or open a GitHub repository |
-| `pull()` | Pull latest changes from remote |
-| `refreshStatus()` | Get workspace file status |
-| `commitAndPush(options)` | Stage, commit, and push changes |
-| `clear()` | Reset all state |
+
+| Action                   | Description                       |
+| ------------------------ | --------------------------------- |
+| `cloneOrOpen(params)`    | Clone or open a GitHub repository |
+| `pull()`                 | Pull latest changes from remote   |
+| `refreshStatus()`        | Get workspace file status         |
+| `commitAndPush(options)` | Stage, commit, and push changes   |
+| `clear()`                | Reset all state                   |
 
 ---
 
@@ -781,15 +803,16 @@ const { isDragging, draggedItem, dropIndex, startDrag, endDrag, handleDragOver, 
 ```
 
 **Return Values:**
-| Value | Type | Description |
-|-------|------|-------------|
-| `isDragging` | `Ref<boolean>` | Whether drag is active |
-| `draggedItem` | `Ref<T \| null>` | Current dragged item |
-| `dropIndex` | `Ref<number>` | Target drop position |
-| `startDrag` | `(item, index) => void` | Begin drag operation |
-| `endDrag` | `() => void` | End drag operation |
-| `handleDragOver` | `(event, index) => void` | Handle drag over event |
-| `handleDrop` | `(callback) => void` | Handle drop with callback |
+
+| Value            | Type                     | Description               |
+| ---------------- | ------------------------ | ------------------------- |
+| `isDragging`     | `Ref<boolean>`           | Whether drag is active    |
+| `draggedItem`    | `Ref<T \| null>`         | Current dragged item      |
+| `dropIndex`      | `Ref<number>`            | Target drop position      |
+| `startDrag`      | `(item, index) => void`  | Begin drag operation      |
+| `endDrag`        | `() => void`             | End drag operation        |
+| `handleDragOver` | `(event, index) => void` | Handle drag over event    |
+| `handleDrop`     | `(callback) => void`     | Handle drop with callback |
 
 ---
 
@@ -822,16 +845,17 @@ const {
 ```
 
 **Return Values:**
-| Value | Type | Description |
-|-------|------|-------------|
-| `expandedNodes` | `Ref<Set<string>>` | Expanded node paths |
-| `selectedNode` | `Ref<TreeNode \| null>` | Currently selected node |
-| `toggleExpand` | `(path) => void` | Toggle node expansion |
-| `selectNode` | `(node) => void` | Select a node |
-| `createFeature` | `(parentPath, name) => Promise` | Create new feature |
-| `createFolder` | `(parentPath, name) => Promise` | Create new folder |
-| `renameNode` | `(node, newName) => Promise` | Rename file/folder |
-| `deleteNode` | `(node) => Promise` | Delete file/folder |
+
+| Value           | Type                            | Description             |
+| --------------- | ------------------------------- | ----------------------- |
+| `expandedNodes` | `Ref<Set<string>>`              | Expanded node paths     |
+| `selectedNode`  | `Ref<TreeNode \| null>`         | Currently selected node |
+| `toggleExpand`  | `(path) => void`                | Toggle node expansion   |
+| `selectNode`    | `(node) => void`                | Select a node           |
+| `createFeature` | `(parentPath, name) => Promise` | Create new feature      |
+| `createFolder`  | `(parentPath, name) => Promise` | Create new folder       |
+| `renameNode`    | `(node, newName) => Promise`    | Rename file/folder      |
+| `deleteNode`    | `(node) => Promise`             | Delete file/folder      |
 
 ---
 
@@ -863,12 +887,13 @@ throttledFn.cancel()
 ```
 
 **Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `fn` | `Function` | required | Function to throttle |
-| `delay` | `number` | `100` | Throttle delay in ms |
-| `options.leading` | `boolean` | `true` | Execute on leading edge |
-| `options.trailing` | `boolean` | `true` | Execute on trailing edge |
+
+| Parameter          | Type       | Default  | Description              |
+| ------------------ | ---------- | -------- | ------------------------ |
+| `fn`               | `Function` | required | Function to throttle     |
+| `delay`            | `number`   | `100`    | Throttle delay in ms     |
+| `options.leading`  | `boolean`  | `true`   | Execute on leading edge  |
+| `options.trailing` | `boolean`  | `true`   | Execute on trailing edge |
 
 ---
 
@@ -990,3 +1015,23 @@ marker, and diagnostics badges. Filtering logic is the pure
     highlight + pick), `AssertionPicker` (full-set assertions + suggestions).
     Entry point: a **Record** button in `ScenarioBuilder.vue` opening the panel
     for the current scenario.
+
+## Auto-update (renderer, feature 008-auto-update)
+
+- **`useUpdateStore`** (`stores/update.ts`) — mirrors the main-process `UpdateState`.
+  `init()` pulls `getState()` + `getPreferences()` and subscribes to `onStateChanged`
+  (returns an unsubscribe kept for `teardown()`). Getters: `phase`, `currentVersion`,
+  `info`, `progress`, `error`, `capability`, `isChecking`/`isDownloading`/`isReady`,
+  `updateAvailable`, `isNotifyOnly`, `justUpdatedFrom`, `statusLabel`. Actions:
+  `check`, `download`, `quitAndInstall`, `setPreferences`.
+- **`UpdateBanner.vue`** — mounted globally in `pages/index.vue`; self-contained
+  (calls `store.init()` on mount / `teardown()` on unmount). Shows "Restart & update"
+  only when an update is `downloaded` **and** no run/recording is active (reads
+  `runner`/`recorder` stores) so it never interrupts in-progress work (FR-011).
+- **`SettingsDialog.vue` → "Software Updates"** — current version, "Check for updates"
+  with live status/progress, release notes, auto-check/auto-download toggles (persisted
+  via `setPreferences`), a manual-download link for notify-only installs, and a one-time
+  "what's new" line (`justUpdatedFrom`).
+
+All updater logic is main-process only; the renderer only ever sees the serializable
+`UpdateState` via `window.api.update`.

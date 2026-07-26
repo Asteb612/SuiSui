@@ -520,3 +520,30 @@ Main-process only, singleton + DI (Constitution IV). Serializable types live in
 - **recorderErrors** — `RECORDER_ERROR_INFO` message/recovery catalog (SC-008).
 - **EditorService** (`electron/services/EditorService.ts`) — opens a step's
   source at its line (VS Code URL, OS fallback; traversal-guarded).
+
+## Update services (`electron/services/update/`, feature 008-auto-update)
+
+Self-update, deterministic-first and behind a seam (Constitution III).
+
+- **`UpdateService`** — singleton + DI orchestrator. Owns the `UpdateState` machine,
+  maps raw adapter events → serializable `@suisui/shared` types, classifies errors,
+  persists preferences via a `UpdateSettingsPort` (satisfied by `SettingsService`), and
+  enforces "no autonomous install" (`quitAndInstall` runs only from a public method).
+  Imports **no** electron/electron-updater, so it is fully unit-testable.
+  Key methods: `check()`, `download()`, `quitAndInstall()`, `getState()`,
+  `get/setPreferences()`, `init()` (powers "what's new"), `checkOnStartup()`,
+  `setEmitter()`.
+- **`IUpdaterAdapter`** — the single seam over `electron-updater`
+  (`setHandlers`/`checkForUpdates`/`downloadUpdate`/`quitAndInstall`).
+- **`ElectronUpdaterAdapter`** — real impl; **lazily** imports `electron-updater`
+  (so importing the module never loads it under Vitest). Sets `autoDownload=false`
+  (the service decides) and `autoInstallOnAppQuit=true`. Excluded from unit coverage.
+- **`FakeUpdaterAdapter`** — scripted test double (`none`/`available`/`error`),
+  records `quitAndInstall` calls.
+- **`capability.ts`** — pure `computeCapability(platform, isPackaged, appImage)`.
+- **`getUpdateService.ts`** — the only place wiring electron + the real adapter +
+  `computeCapability`; `setUpdaterAdapter()` lets E2E inject a fake (like `setCommandRunner`).
+
+Wiring: `main.ts` sets the emitter (broadcasts `UpdateState` to all windows) and calls
+`init().then(checkOnStartup)`; `handlers.ts` registers the `update:*` invoke handlers
+(a `FakeUpdaterAdapter` + dev capability in test mode).

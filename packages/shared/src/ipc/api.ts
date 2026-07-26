@@ -21,6 +21,7 @@ import type {
   LocatorReference,
   LocatorValidationResult,
 } from '../types/recorder'
+import type { UpdateState, UpdatePreferences } from '../types/update'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -166,6 +167,26 @@ export interface ElectronAPI {
     onPicked: (callback: (picked: PickedElement) => void) => () => void
     onStatus: (callback: (status: RecorderStatus) => void) => () => void
     onError: (callback: (error: RecorderError) => void) => () => void
+  }
+
+  update: {
+    /** Trigger a check now (FR-006). Resolves with the resulting state snapshot. */
+    check: () => Promise<UpdateState>
+    /** Start downloading an available update (FR-002). No-op unless phase is 'available'. */
+    download: () => Promise<UpdateState>
+    /**
+     * Apply a downloaded update now by relaunching (FR-004). Only valid when phase is
+     * 'downloaded'. Triggered ONLY by explicit user action (FR-011).
+     */
+    quitAndInstall: () => Promise<void>
+    /** Current snapshot, incl. currentVersion + capability (FR-007, FR-016). */
+    getState: () => Promise<UpdateState>
+    /** Read persisted update preferences (FR-014). */
+    getPreferences: () => Promise<UpdatePreferences>
+    /** Update and persist preferences; returns the saved value (FR-014). */
+    setPreferences: (prefs: Partial<UpdatePreferences>) => Promise<UpdatePreferences>
+    /** Subscribe to state-change pushes; returns an unsubscribe fn. */
+    onStateChanged: (callback: (state: UpdateState) => void) => () => void
   }
 }
 
