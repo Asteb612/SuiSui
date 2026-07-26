@@ -26,12 +26,23 @@ function emptyProgress(): RunProgress {
   return { total: 0, completed: 0, passed: 0, failed: 0, skipped: 0 }
 }
 
+// The `list` reporter colorizes its output; strip SGR/CSI escapes before parsing or
+// displaying (a <pre> renders them as garbage otherwise).
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/g
+
+/** Remove ANSI escape sequences from a streamed log line. */
+export function stripAnsi(line: string): string {
+  return line.replace(ANSI_RE, '')
+}
+
 /**
  * Update live progress from one streamed `list`-reporter line. Best-effort and
  * degrades gracefully: unrecognized lines just don't move the counters (the raw log
  * still shows, and the final JSON report carries the authoritative numbers).
  */
-export function updateProgressFromLine(p: RunProgress, line: string): void {
+export function updateProgressFromLine(p: RunProgress, rawLine: string): void {
+  const line = stripAnsi(rawLine)
   const running = line.match(/Running\s+(\d+)\s+test/i)
   if (running) {
     p.total = Number(running[1])
@@ -322,7 +333,8 @@ export const useRunnerStore = defineStore('runner', {
       }
 
       window.api.runner.onRunnerLog((line: string) => {
-        s.logs.push(line)
+        // Strip ANSI so the log panel (a <pre>) is clean; the parser strips too.
+        s.logs.push(stripAnsi(line))
         updateProgressFromLine(s.progress, line)
       })
 

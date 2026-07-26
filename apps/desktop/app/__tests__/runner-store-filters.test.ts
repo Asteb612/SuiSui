@@ -310,4 +310,17 @@ describe('updateProgressFromLine — live `list` reporter parsing', () => {
     updateProgressFromLine(p, 'Some framework log line without a test result')
     expect(p).toEqual(fresh())
   })
+
+  it('parses ANSI-colored list output (glyphs and duration wrapped in escapes)', () => {
+    const ESC = '\u001b'
+    const p = fresh()
+    updateProgressFromLine(p, `${ESC}[2mRunning ${ESC}[22m6${ESC}[2m tests using ${ESC}[22m1${ESC}[2m worker${ESC}[22m`)
+    expect(p.total).toBe(6)
+
+    updateProgressFromLine(
+      p,
+      `  ${ESC}[32m✓${ESC}[39m  ${ESC}[2m1 ${ESC}[22m.features-gen/features/login.feature.spec.js:6:7 › Login › Sign in${ESC}[2m (257ms)${ESC}[22m`,
+    )
+    expect(p).toMatchObject({ total: 6, completed: 1, passed: 1 })
+  })
 })
