@@ -82,4 +82,22 @@ test.describe('Feature Tree Navigation', () => {
 
     await expect(window.locator(SEL.scenarioBuilder)).toContainText('Given')
   })
+
+  test('creates a new feature file from the header button', async () => {
+    const { window } = ctx
+
+    await ensureFolderPanelVisible(window)
+    await window.locator('[data-testid="new-feature-btn"]').click()
+
+    const nameInput = window.locator('[data-testid="new-scenario-name-input"]')
+    await expect(nameInput).toBeVisible()
+    await nameInput.fill('Smoke Check')
+    await window.getByRole('button', { name: 'Create' }).click()
+
+    // The new .feature spec file appears in the tree (suggested filename from the name).
+    await ensureFolderPanelVisible(window)
+    await expect(
+      window.locator(`${SEL.featureTreeFile}[data-path="smoke-check.feature"]`),
+    ).toBeVisible()
+  })
 })

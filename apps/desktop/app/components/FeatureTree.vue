@@ -160,11 +160,21 @@ async function refreshTree() {
           @click="refreshTree"
         />
         <Button
+          icon="pi pi-file-plus"
+          text
+          rounded
+          size="small"
+          title="New Feature File"
+          data-testid="new-feature-btn"
+          @click="openNewFeatureDialog()"
+        />
+        <Button
           icon="pi pi-folder-plus"
           text
           rounded
           size="small"
           title="New Folder"
+          data-testid="new-folder-btn"
           @click="openNewFolderDialog()"
         />
       </div>
