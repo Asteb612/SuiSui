@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useRunnerStore } from '../stores/runner'
-import type { WorkspaceTestInfo } from '@suisui/shared'
+import type { WorkspaceTestInfo, BatchRunResult } from '@suisui/shared'
 
 // Mock window.api
 vi.stubGlobal('window', {
@@ -13,9 +13,22 @@ vi.stubGlobal('window', {
       runBatch: vi.fn(),
       getWorkspaceTests: vi.fn(),
       stop: vi.fn(),
+      onRunnerLog: vi.fn(),
+      offRunnerLog: vi.fn(),
+      showReport: vi.fn().mockResolvedValue('http://127.0.0.1:9323/global/'),
     },
   },
 })
+
+const fakeBatch = (passed: boolean): BatchRunResult =>
+  ({
+    status: passed ? 'passed' : 'failed',
+    summary: { total: 1, passed: passed ? 1 : 0, failed: passed ? 0 : 1, skipped: 0 },
+    errors: [],
+    duration: 100,
+    stdout: '',
+    stderr: '',
+  }) as unknown as BatchRunResult
 
 const mockWorkspace: WorkspaceTestInfo = {
   features: [
@@ -197,7 +210,74 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(store.showResults).toBe(false)
   })
 
-  it('hasEnteredRunView defaults to false', () => {
-    expect(store.hasEnteredRunView).toBe(false)
+  it('defaults to the global scope', () => {
+    expect(store.activeScope).toBe('global')
+    expect(store.singleRun).toBe(false)
+  })
+})
+
+describe('Runner Store - scoped run state', () => {
+  let store: ReturnType<typeof useRunnerStore>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const runner = (window as any).api.runner
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    store = useRunnerStore()
+    runner.runBatch.mockReset()
+    runner.onRunnerLog.mockReset()
+    runner.offRunnerLog.mockReset()
+    runner.showReport.mockReset().mockResolvedValue('http://127.0.0.1:9323/x/')
+  })
+
+  it('keeps global and per-spec results in separate scopes', async () => {
+    // Global run passes.
+    runner.runBatch.mockResolvedValueOnce(fakeBatch(true))
+    store.setActiveScope('global')
+    await store.runBatch('headless')
+    expect(store.batchResult?.summary.passed).toBe(1)
+    expect(store.singleRun).toBe(false)
+
+    // A single-spec quick-run fails — its own scope.
+    runner.runBatch.mockResolvedValueOnce(fakeBatch(false))
+    store.setActiveScope('cart/checkout.feature')
+    await store.runBatch('headless', { single: true, featurePaths: ['cart/checkout.feature'] })
+    expect(store.singleRun).toBe(true)
+    expect(store.batchResult?.summary.failed).toBe(1)
+
+    // Back to global: its passing result is intact — the spec run did not clobber it.
+    store.setActiveScope('global')
+    expect(store.singleRun).toBe(false)
+    expect(store.batchResult?.summary.passed).toBe(1)
+  })
+
+  it('a single-spec run uses explicit featurePaths and never touches the global filters', async () => {
+    runner.runBatch.mockResolvedValueOnce(fakeBatch(true))
+    store.config.activeFilterTab = 'features'
+    store.config.selectedFeatures = ['a.feature']
+
+    store.setActiveScope('b.feature')
+    await store.runBatch('headless', { single: true, featurePaths: ['b.feature'] })
+
+    const opts = runner.runBatch.mock.calls.at(-1)![0]
+    expect(opts.featurePaths).toEqual(['b.feature'])
+    // Global filter selection is untouched by the scoped run.
+    expect(store.config.selectedFeatures).toEqual(['a.feature'])
+  })
+
+  it('scopes the report URL to the run that produced it', async () => {
+    runner.runBatch.mockResolvedValue(fakeBatch(true))
+    runner.showReport.mockImplementation((scope: string) =>
+      Promise.resolve(`http://127.0.0.1:9323/${scope}/`),
+    )
+
+    store.setActiveScope('global')
+    await store.runBatch('headless')
+    store.setActiveScope('login.feature')
+    await store.runBatch('headless', { single: true, featurePaths: ['login.feature'] })
+
+    expect(store.reportUrl).toBe('http://127.0.0.1:9323/login.feature/')
+    store.setActiveScope('global')
+    expect(store.reportUrl).toBe('http://127.0.0.1:9323/global/')
   })
 })

@@ -493,4 +493,36 @@ Feature: Shopping Cart
       expect(bddgenCall.options?.env?.FEATURE).toBeUndefined()
     })
   })
+
+  describe('showReport — per-scope report snapshots', () => {
+    it('snapshots each run report into its own scope folder and keeps them isolated', async () => {
+      const fsSync = await import('node:fs')
+      const reportDir = path.join(tempDir, 'playwright-report')
+      await fs.mkdir(reportDir, { recursive: true })
+
+      // Run 1 → global scope.
+      await fs.writeFile(path.join(reportDir, 'index.html'), 'GLOBAL REPORT')
+      const globalUrl = await service.showReport('global')
+      expect(globalUrl).toBe('http://127.0.0.1:9323/global/')
+
+      // Run 2 overwrites playwright-report → a single-spec scope (path is sanitized).
+      await fs.writeFile(path.join(reportDir, 'index.html'), 'SPEC REPORT')
+      const specUrl = await service.showReport('cart/checkout.feature')
+      expect(specUrl).toBe('http://127.0.0.1:9323/cart_checkout.feature/')
+
+      // Each scope kept its own snapshot — the spec run did not clobber global's report.
+      const read = (scope: string) =>
+        fsSync.readFileSync(path.join(tempDir, '.app', 'reports', scope, 'index.html'), 'utf-8')
+      expect(read('global')).toBe('GLOBAL REPORT')
+      expect(read('cart_checkout.feature')).toBe('SPEC REPORT')
+
+      // Close the static server so the test doesn't leak a handle (no-op if the port
+      // was already taken and the server was reused).
+      ;(service as unknown as { reportServer: { close(): void } | null }).reportServer?.close()
+    })
+
+    it('throws when there is no report to show for the scope', async () => {
+      await expect(service.showReport('global')).rejects.toThrow(/No report yet/)
+    })
+  })
 })

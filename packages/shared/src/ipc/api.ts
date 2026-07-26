@@ -71,8 +71,11 @@ export interface ElectronAPI {
     runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
     getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>
-    /** Start the HTML report server for the last run and return its URL (embedded in-app). */
-    showReport: () => Promise<string>
+    /**
+     * Snapshot the last run's HTML report into the given scope ('global' or a feature
+     * path), start the report server, and return the scope's report URL (embedded in-app).
+     */
+    showReport: (scope: string) => Promise<string>
     onRunnerLog: (callback: (line: string) => void) => void
     offRunnerLog: () => void
   }

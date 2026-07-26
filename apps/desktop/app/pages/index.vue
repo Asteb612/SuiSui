@@ -4,7 +4,7 @@ import { useWorkspaceStore } from '~/stores/workspace'
 import { useStepsStore } from '~/stores/steps'
 import { useScenarioStore } from '~/stores/scenario'
 import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
-import { useRunnerStore } from '~/stores/runner'
+import { useRunnerStore, GLOBAL_SCOPE } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useRecorderStore } from '~/stores/recorder'
 import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
@@ -123,18 +123,10 @@ function resolveRunFeaturePath(current: string): string {
 
 async function enterRunView() {
   activeView.value = 'runner'
-  // Entering via "Run Tests" is the full filters experience (not a single-spec run).
-  runnerStore.singleRun = false
+  // "Run Tests" always opens the GLOBAL runner (its own scope + filters), independent
+  // of whichever spec is open in the editor.
+  runnerStore.setActiveScope(GLOBAL_SCOPE)
   await runnerStore.loadWorkspaceTests()
-
-  // First-entry auto-select: if a feature is currently being viewed, select it
-  if (!runnerStore.hasEnteredRunView) {
-    runnerStore.hasEnteredRunView = true
-    if (scenarioStore.currentFeaturePath) {
-      runnerStore.config.selectedFeatures = [resolveRunFeaturePath(scenarioStore.currentFeaturePath)]
-      runnerStore.config.activeFilterTab = 'features'
-    }
-  }
 }
 
 function exitRunView() {
@@ -142,22 +134,27 @@ function exitRunView() {
 }
 
 /**
- * One-click run of the feature currently open in the editor: select ONLY it,
- * switch to the runner view, and run it in a visible (headed) browser with
- * tracing on so the user can watch the scenario replay and review it after.
+ * One-click run of the feature currently open in the editor: run ONLY it in its own
+ * scope (so its results/report never mix with the global runner's), switch to the
+ * runner view, and run it in a visible (headed) browser with tracing on so the user
+ * can watch the scenario replay and review it after.
  */
 async function quickRunCurrentSpec() {
   const current = scenarioStore.currentFeaturePath
   if (!current || runnerStore.isRunning) return
 
+  const target = resolveRunFeaturePath(current)
   activeView.value = 'runner'
+  // Scope this run to the spec file — does NOT touch the global runner's filters.
+  runnerStore.setActiveScope(target)
   await runnerStore.loadWorkspaceTests()
 
-  runnerStore.hasEnteredRunView = true
-  runnerStore.config.selectedFeatures = [resolveRunFeaturePath(current)]
-  runnerStore.config.activeFilterTab = 'features'
-
-  await runnerStore.runBatch('headless', { headed: true, trace: true, single: true })
+  await runnerStore.runBatch('headless', {
+    headed: true,
+    trace: true,
+    single: true,
+    featurePaths: [target],
+  })
 }
 
 // Git availability - hide if workspace is not a git repo

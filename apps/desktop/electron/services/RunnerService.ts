@@ -51,6 +51,21 @@ const REPORT_CONTENT_TYPES: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
+/** Directory holding per-scope report snapshots (kept out of the user's VCS under .app/). */
+function reportsRoot(workspacePath: string): string {
+  return path.join(workspacePath, '.app', 'reports')
+}
+
+/**
+ * A filesystem- and URL-safe id for a report scope (the global runner, or a spec's
+ * feature path). Collapses anything outside [A-Za-z0-9._-] so it is a single path
+ * segment, and never empty.
+ */
+function sanitizeReportScope(scope: string): string {
+  const id = scope.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|_+$/g, '')
+  return id || 'global'
+}
+
 export class RunnerService {
   private commandRunner: ICommandRunner
   private currentProcess: ChildProcess | null = null
@@ -124,22 +139,37 @@ export class RunnerService {
   }
 
   /**
-   * Serve the last run's Playwright HTML report from a tiny in-process static
-   * server and return its URL. The renderer embeds it in-app (an iframe in the
-   * runner view). We serve the report folder ourselves rather than spawning
-   * `playwright show-report` so it never depends on CLI resolution, the embedded
-   * Node, or a detached child that can fail silently in the packaged app.
+   * Snapshot the last run's Playwright HTML report into a per-SCOPE folder and serve
+   * it from a tiny in-process static server, returning its URL. Each scope (the global
+   * runner, or a single spec's quick-run) keeps its OWN report copy, so viewing one
+   * scope never shows another's results — Playwright overwrites `playwright-report/`
+   * on every run, so we copy it aside here, right after the run that produced it.
+   *
+   * We serve the folder ourselves rather than spawning `playwright show-report` so it
+   * never depends on CLI resolution, the embedded Node, or a detached child that can
+   * fail silently in the packaged app.
    */
-  async showReport(): Promise<string> {
+  async showReport(scope: string): Promise<string> {
     const workspacePath = getWorkspaceService().getPath()
     if (!workspacePath) throw new Error('No workspace selected')
-    if (!fs.existsSync(path.join(workspacePath, 'playwright-report', 'index.html'))) {
+
+    const scopeId = sanitizeReportScope(scope)
+    const src = path.join(workspacePath, 'playwright-report')
+    const dest = path.join(reportsRoot(workspacePath), scopeId)
+
+    // Snapshot the just-produced report into this scope's folder (when present).
+    if (fs.existsSync(path.join(src, 'index.html'))) {
+      fs.rmSync(dest, { recursive: true, force: true })
+      fs.mkdirSync(path.dirname(dest), { recursive: true })
+      fs.cpSync(src, dest, { recursive: true })
+    } else if (!fs.existsSync(path.join(dest, 'index.html'))) {
+      // No fresh report and none previously snapshotted for this scope.
       throw new Error('No report yet — run a test first, then watch the replay.')
     }
 
     const host = '127.0.0.1'
     const port = 9323
-    const url = `http://${host}:${port}`
+    const url = `http://${host}:${port}/${scopeId}/`
 
     if (this.reportServer) return url
 
@@ -154,15 +184,18 @@ export class RunnerService {
     return url
   }
 
-  /** Serve a static file from the CURRENT workspace's playwright-report/ dir. */
+  /**
+   * Serve a static file from a per-scope report snapshot under `.app/reports/`. The URL
+   * shape is `/<scopeId>/<asset>`; a bare `/<scopeId>/` serves that scope's index.html.
+   */
   private serveReportFile(req: http.IncomingMessage, res: http.ServerResponse): void {
     const workspacePath = getWorkspaceService().getPath()
-    const root = workspacePath ? path.join(workspacePath, 'playwright-report') : ''
+    const root = workspacePath ? reportsRoot(workspacePath) : ''
     try {
-      let pathname = decodeURIComponent((req.url || '/').split('?')[0])
-      if (pathname === '/' || pathname === '') pathname = '/index.html'
-      const filePath = path.normalize(path.join(root, pathname))
-      if (!root || (filePath !== root && !filePath.startsWith(root + path.sep))) {
+      let rel = decodeURIComponent((req.url || '/').split('?')[0]).replace(/^\/+/, '')
+      if (rel === '' || rel.endsWith('/')) rel += 'index.html'
+      const filePath = path.normalize(path.join(root, rel))
+      if (!root || !filePath.startsWith(root + path.sep)) {
         res.writeHead(403).end('Forbidden')
         return
       }

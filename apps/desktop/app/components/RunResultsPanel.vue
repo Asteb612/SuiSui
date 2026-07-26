@@ -121,7 +121,7 @@ function formatDuration(ms: number): string {
         text
         size="small"
         data-testid="back-to-filters-btn"
-        @click="runnerStore.showResults = false"
+        @click="runnerStore.showFilters()"
       />
       <div class="results-header-spacer" />
       <Button

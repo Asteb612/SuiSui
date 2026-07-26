@@ -316,8 +316,8 @@ export function registerIpcHandlers(
     await runnerService.stop()
   })
 
-  ipcMain.handle(IPC_CHANNELS.RUNNER_SHOW_REPORT, async () => {
-    return runnerService.showReport()
+  ipcMain.handle(IPC_CHANNELS.RUNNER_SHOW_REPORT, async (_event, scope: unknown) => {
+    return runnerService.showReport(typeof scope === 'string' && scope ? scope : 'global')
   })
 
   // Settings handlers

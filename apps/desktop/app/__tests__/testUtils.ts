@@ -436,10 +436,26 @@ export function createInitialStoreState(overrides: Record<string, Record<string,
       ...(overrides.gitWorkspace ?? {}),
     },
     runner: {
-      status: 'idle',
-      baseUrl: 'http://localhost:3000',
-      logs: [],
       isRunning: false,
+      baseUrl: 'http://localhost:3000',
+      activeScope: 'global',
+      // Run output is scoped (global runner + per-spec). Flat runner overrides
+      // (status/logs/lastResult/…) are applied to the active 'global' scope, which is
+      // what the store's getters read.
+      scopes: {
+        global: {
+          status: 'idle',
+          logs: [],
+          errors: [],
+          batchResult: null,
+          lastResult: null,
+          showResults: false,
+          reportUrl: '',
+          reportLoading: false,
+          singleRun: false,
+          ...(overrides.runner ?? {}),
+        },
+      },
       ...(overrides.runner ?? {}),
     },
   }

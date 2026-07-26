@@ -26,11 +26,24 @@ function createWrapper(overrides: {
               ...overrides.scenario,
             },
             runner: {
-              status: 'idle',
-              baseUrl: 'http://localhost:3000',
-              logs: [],
               isRunning: false,
-              lastResult: null,
+              baseUrl: 'http://localhost:3000',
+              activeScope: 'global',
+              // Run output is scoped; flat runner overrides apply to the 'global' scope.
+              scopes: {
+                global: {
+                  status: 'idle',
+                  logs: [],
+                  errors: [],
+                  batchResult: null,
+                  lastResult: null,
+                  showResults: false,
+                  reportUrl: '',
+                  reportLoading: false,
+                  singleRun: false,
+                  ...overrides.runner,
+                },
+              },
               ...overrides.runner,
             },
           },
