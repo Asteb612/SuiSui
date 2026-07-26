@@ -45,6 +45,13 @@ export interface WorkspaceStatusResult {
   }
 }
 
+export interface BranchListResult {
+  /** The currently checked-out branch. */
+  current: string
+  /** All local branch names (includes `current`), sorted. */
+  branches: string[]
+}
+
 export interface CommitPushOptions {
   message: string
   authorName?: string

@@ -13,6 +13,7 @@ import type {
   FileStatusType,
   CommitPushOptions,
   CommitPushResult,
+  BranchListResult,
 } from '@suisui/shared'
 import {
   GitAuthError,
@@ -325,6 +326,44 @@ export class GitWorkspaceService {
       filteredStatus,
       counts,
     }
+  }
+
+  /** List local branches and the currently checked-out one. */
+  async listBranches(localPath: string): Promise<BranchListResult> {
+    const dir = localPath
+    await this.ensureRepoInitialized(localPath)
+    const branches = (await git.listBranches({ fs, dir })).filter((b) => b && b !== 'HEAD')
+    let current = 'main'
+    try {
+      current = (await git.currentBranch({ fs, dir, fullname: false })) ?? 'main'
+    } catch {
+      current = 'main'
+    }
+    // A freshly-initialized branch may not appear in listBranches until it has a commit.
+    if (current && !branches.includes(current)) branches.push(current)
+    return { current, branches: [...new Set(branches)].sort() }
+  }
+
+  /** Switch to an existing local branch. Fails if uncommitted changes would be overwritten. */
+  async checkoutBranch(localPath: string, branch: string): Promise<void> {
+    const dir = localPath
+    await this.ensureRepoInitialized(localPath)
+    const name = branch.trim()
+    if (!name) throw new Error('Branch name is required')
+    await git.checkout({ fs, dir, ref: name })
+    logger.info('Checked out branch', { dir, branch: name })
+  }
+
+  /** Create a new branch from the current HEAD and switch to it. */
+  async createBranch(localPath: string, branch: string): Promise<void> {
+    const dir = localPath
+    await this.ensureRepoInitialized(localPath)
+    const name = branch.trim()
+    if (!name) throw new Error('Branch name is required')
+    const existing = await git.listBranches({ fs, dir })
+    if (existing.includes(name)) throw new Error(`Branch "${name}" already exists`)
+    await git.branch({ fs, dir, ref: name, checkout: true })
+    logger.info('Created and checked out branch', { dir, branch: name })
   }
 
   async commitAndPush(

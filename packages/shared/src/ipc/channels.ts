@@ -68,6 +68,9 @@ export const IPC_CHANNELS = {
   GIT_WS_PULL: 'gitws:pull',
   GIT_WS_STATUS: 'gitws:status',
   GIT_WS_COMMIT_PUSH: 'gitws:commitPush',
+  GIT_WS_LIST_BRANCHES: 'gitws:listBranches',
+  GIT_WS_CHECKOUT_BRANCH: 'gitws:checkoutBranch',
+  GIT_WS_CREATE_BRANCH: 'gitws:createBranch',
 
   // Git Credentials
   GIT_CRED_SAVE: 'git:credSave',

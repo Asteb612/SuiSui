@@ -7,7 +7,7 @@ import type { AppSettings } from '../types/settings'
 import type { WorkspaceVariable } from '../types/variables'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
 import type { DependencyStatus, DependencyInstallResult, PackageJsonCheckResult } from '../types/dependency'
-import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult } from '../types/gitWorkspace'
+import type { GitWorkspaceParams, GitCredentials, WorkspaceMetadata, PullResult, WorkspaceStatusResult, CommitPushOptions, CommitPushResult, BranchListResult } from '../types/gitWorkspace'
 import type { AIProviderConfig, AIProviderStatus, AIStatusTarget, AIGenerationRequest, AIStreamChunk, AIStreamDone, AIStreamError } from '../types/ai'
 import type {
   RecorderStartOptions,
@@ -116,6 +116,9 @@ export interface ElectronAPI {
     pull: (localPath: string, credentials?: GitCredentials) => Promise<PullResult>
     status: (localPath: string) => Promise<WorkspaceStatusResult>
     commitAndPush: (localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) => Promise<CommitPushResult>
+    listBranches: (localPath: string) => Promise<BranchListResult>
+    checkoutBranch: (localPath: string, branch: string) => Promise<void>
+    createBranch: (localPath: string, branch: string) => Promise<void>
   }
 
   gitCredentials: {

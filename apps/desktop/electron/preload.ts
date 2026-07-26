@@ -93,6 +93,9 @@ const api: ElectronAPI = {
     status: (localPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_STATUS, localPath),
     commitAndPush: (localPath, credentials, options) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, localPath, credentials, options),
+    listBranches: (localPath) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_LIST_BRANCHES, localPath),
+    checkoutBranch: (localPath, branch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_CHECKOUT_BRANCH, localPath, branch),
+    createBranch: (localPath, branch) => ipcRenderer.invoke(IPC_CHANNELS.GIT_WS_CREATE_BRANCH, localPath, branch),
   },
 
   gitCredentials: {

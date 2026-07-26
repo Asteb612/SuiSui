@@ -40,10 +40,72 @@ const canSubmitAuth = computed(() => {
   return trimmed !== '' && authTokenValidation.value.valid
 })
 
+const gitRoot = computed(() => workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path ?? null)
+
 async function refreshWorkspaceGitStatus() {
-  const gitRoot = workspaceStore.workspace?.gitRoot ?? workspaceStore.workspace?.path
-  if (!gitRoot) return
-  await gitWorkspaceStore.refreshStatus(gitRoot)
+  if (!gitRoot.value) return
+  await gitWorkspaceStore.refreshStatus(gitRoot.value)
+}
+
+// --- Branch management ---
+const branches = ref<string[]>([])
+const branchMenuRef = ref()
+const showNewBranchDialog = ref(false)
+const newBranchName = ref('')
+
+async function loadBranches() {
+  if (!gitRoot.value) return
+  try {
+    const result = await gitWorkspaceStore.listBranches(gitRoot.value)
+    branches.value = result.branches
+  } catch (err) {
+    panelError.value = err instanceof Error ? err.message : 'Failed to list branches'
+  }
+}
+
+const branchMenuItems = computed(() => {
+  const items: Array<Record<string, unknown>> = branches.value.map((b) => ({
+    label: b,
+    icon: b === branchName.value ? 'pi pi-check' : 'pi pi-code-branch',
+    command: () => void switchBranch(b),
+  }))
+  items.push({ separator: true })
+  items.push({ label: 'Create new branch…', icon: 'pi pi-plus', command: () => openNewBranchDialog() })
+  return items
+})
+
+async function openBranchMenu(event: MouseEvent) {
+  await loadBranches()
+  branchMenuRef.value?.toggle(event)
+}
+
+async function switchBranch(branch: string) {
+  if (!gitRoot.value || branch === branchName.value) return
+  try {
+    await gitWorkspaceStore.checkoutBranch(gitRoot.value, branch)
+    lastMessage.value = `Switched to branch "${branch}"`
+    panelError.value = null
+  } catch (err) {
+    panelError.value = err instanceof Error ? err.message : 'Failed to switch branch'
+  }
+}
+
+function openNewBranchDialog() {
+  newBranchName.value = ''
+  showNewBranchDialog.value = true
+}
+
+async function confirmNewBranch() {
+  const name = newBranchName.value.trim()
+  if (!name || !gitRoot.value) return
+  try {
+    await gitWorkspaceStore.createBranch(gitRoot.value, name)
+    lastMessage.value = `Created and switched to branch "${name}"`
+    panelError.value = null
+    showNewBranchDialog.value = false
+  } catch (err) {
+    panelError.value = err instanceof Error ? err.message : 'Failed to create branch'
+  }
 }
 
 // Reload credentials when workspace changes
@@ -228,13 +290,26 @@ async function clearCredentials() {
 
     <!-- Branch name and the git actions share one row. -->
     <div class="git-header-row">
-      <div
+      <Button
         v-if="gitWorkspaceStore.status"
-        class="branch"
+        class="branch-btn"
+        text
+        size="small"
+        aria-haspopup="true"
+        title="Switch or create a branch"
+        data-testid="git-branch-btn"
+        @click="openBranchMenu"
       >
         <i class="pi pi-code-branch" />
-        {{ branchName }}
-      </div>
+        <span class="branch-name">{{ branchName }}</span>
+        <i class="pi pi-angle-down branch-caret" />
+      </Button>
+      <Menu
+        ref="branchMenuRef"
+        :model="branchMenuItems"
+        :popup="true"
+        data-testid="git-branch-menu"
+      />
       <div class="git-actions">
         <Button
           v-if="hasRemote"
@@ -278,6 +353,40 @@ async function clearCredentials() {
     >
       {{ lastMessage }}
     </div>
+
+    <Dialog
+      v-model:visible="showNewBranchDialog"
+      modal
+      header="New Branch"
+      :style="{ width: '360px' }"
+    >
+      <div class="commit-dialog">
+        <label for="new-branch-name">Branch Name</label>
+        <InputText
+          id="new-branch-name"
+          v-model="newBranchName"
+          placeholder="e.g. feature/my-change"
+          data-testid="new-branch-input"
+          @keyup.enter="confirmNewBranch"
+        />
+        <small class="branch-hint">Created from the current branch and checked out.</small>
+      </div>
+      <template #footer>
+        <Button
+          label="Cancel"
+          text
+          @click="showNewBranchDialog = false"
+        />
+        <Button
+          label="Create branch"
+          icon="pi pi-plus"
+          :disabled="!newBranchName.trim()"
+          :loading="gitWorkspaceStore.isSwitchingBranch"
+          data-testid="create-branch-btn"
+          @click="confirmNewBranch"
+        />
+      </template>
+    </Dialog>
 
     <Dialog
       v-model:visible="showCommitDialog"
@@ -401,6 +510,33 @@ async function clearCredentials() {
   gap: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
+}
+
+/* Clickable branch switcher (opens the branch menu). */
+.branch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.branch-btn .branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 10rem;
+}
+
+.branch-btn .branch-caret {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.branch-hint {
+  font-size: 0.72rem;
+  color: var(--text-color-secondary);
 }
 
 .changes-indicator {

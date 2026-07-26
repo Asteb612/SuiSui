@@ -20,6 +20,7 @@ vi.mock('isomorphic-git', () => {
     fetch: vi.fn(),
     writeRef: vi.fn(),
     checkout: vi.fn(),
+    branch: vi.fn(),
     isDescendent: vi.fn(),
     walk: vi.fn(),
     TREE: vi.fn(),
@@ -99,6 +100,38 @@ describe('GitWorkspaceService', () => {
         },
       })
     )
+  })
+
+  it('lists branches with the current one, filtering HEAD and sorting', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'suisui-gitws-branches-'))
+    gitMock.listBranches.mockResolvedValue(['main', 'dev', 'HEAD'])
+    gitMock.currentBranch.mockResolvedValue('dev')
+
+    const result = await service.listBranches(dir)
+
+    expect(result.current).toBe('dev')
+    expect(result.branches).toEqual(['dev', 'main'])
+  })
+
+  it('checks out an existing branch', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'suisui-gitws-checkout-'))
+
+    await service.checkoutBranch(dir, 'dev')
+
+    expect(gitMock.checkout).toHaveBeenCalledWith(expect.objectContaining({ dir, ref: 'dev' }))
+  })
+
+  it('creates a new branch and checks it out, rejecting duplicates', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'suisui-gitws-create-'))
+    gitMock.listBranches.mockResolvedValue(['main'])
+
+    await service.createBranch(dir, 'feature/x')
+    expect(gitMock.branch).toHaveBeenCalledWith(
+      expect.objectContaining({ dir, ref: 'feature/x', checkout: true }),
+    )
+
+    gitMock.listBranches.mockResolvedValue(['main', 'dup'])
+    await expect(service.createBranch(dir, 'dup')).rejects.toThrow(/already exists/)
   })
 })
 

@@ -397,9 +397,13 @@ export function registerIpcHandlers(
       return { updatedFiles: [], conflicts: [], headOid: 'abc123mock' }
     })
 
+    // Stateful branch mocks so the UI reflects switch/create in E2E/test mode.
+    const testBranches = ['main']
+    let testCurrentBranch = 'main'
+
     ipcMain.handle(IPC_CHANNELS.GIT_WS_STATUS, async () => {
       return {
-        branch: 'main',
+        branch: testCurrentBranch,
         hasRemote: false,
         fullStatus: [],
         filteredStatus: [],
@@ -409,6 +413,19 @@ export function registerIpcHandlers(
 
     ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async () => {
       return { commitOid: 'mock-commit-oid', pushed: true }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_LIST_BRANCHES, async () => {
+      return { current: testCurrentBranch, branches: [...testBranches].sort() }
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_CHECKOUT_BRANCH, async (_event, _localPath: string, branch: string) => {
+      testCurrentBranch = branch
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_CREATE_BRANCH, async (_event, _localPath: string, branch: string) => {
+      if (!testBranches.includes(branch)) testBranches.push(branch)
+      testCurrentBranch = branch
     })
 
     // Git Credentials handlers (test mode mocks)
@@ -433,6 +450,18 @@ export function registerIpcHandlers(
 
     ipcMain.handle(IPC_CHANNELS.GIT_WS_COMMIT_PUSH, async (_event, localPath: string, credentials: GitCredentials | undefined, options: CommitPushOptions) => {
       return gitWorkspaceService.commitAndPush(localPath, credentials, options)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_LIST_BRANCHES, async (_event, localPath: string) => {
+      return gitWorkspaceService.listBranches(localPath)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_CHECKOUT_BRANCH, async (_event, localPath: string, branch: string) => {
+      return gitWorkspaceService.checkoutBranch(localPath, branch)
+    })
+
+    ipcMain.handle(IPC_CHANNELS.GIT_WS_CREATE_BRANCH, async (_event, localPath: string, branch: string) => {
+      return gitWorkspaceService.createBranch(localPath, branch)
     })
 
     ipcMain.handle(IPC_CHANNELS.GIT_CRED_SAVE, async (_event, workspacePath: string, credentials: GitCredentials) => {
