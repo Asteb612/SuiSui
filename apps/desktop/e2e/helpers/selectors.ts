@@ -56,7 +56,7 @@ export const SEL = {
   doneBtn: '[data-testid="done-btn"]',
 
   // Test runner view
-  sidebarRunBtn: '[data-testid="sidebar-run-btn"]',
+  runTestsBtn: '[data-testid="run-tests-btn"]',
   quickRunBtn: '[data-testid="quick-run-btn"]',
   backToEditorBtn: '[data-testid="back-to-editor-btn"]',
 

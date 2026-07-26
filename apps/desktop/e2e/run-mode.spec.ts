@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { launchApp, closeApp, ensureFolderPanelVisible, type AppContext } from './helpers/app'
+import { launchApp, closeApp, type AppContext } from './helpers/app'
 import { copyFixture, cleanupFixture } from './helpers/fixtures'
 import { SEL } from './helpers/selectors'
 
@@ -32,13 +32,12 @@ test.describe('Run Mode', () => {
     await expect(window.locator(SEL.validationIndicator)).toBeVisible()
   })
 
-  test('should show the "Run Tests" button in the sidebar', async () => {
+  test('should show the "Run Tests" button in the header', async () => {
     const { window } = ctx
 
-    // The Run Tests button lives in the sidebar, which auto-hides after a feature
-    // is opened; reopen it. The button is always enabled (it opens the runner view).
-    await ensureFolderPanelVisible(window)
-    const runBtn = window.locator(SEL.sidebarRunBtn)
+    // The Run Tests button lives in the top header (always visible in editor view,
+    // independent of the folder panel). It opens the runner view.
+    const runBtn = window.locator(SEL.runTestsBtn)
     await expect(runBtn).toBeVisible()
     await expect(runBtn).toBeEnabled()
   })
@@ -46,8 +45,7 @@ test.describe('Run Mode', () => {
   test('should switch to the test runner view', async () => {
     const { window } = ctx
 
-    await ensureFolderPanelVisible(window)
-    await window.locator(SEL.sidebarRunBtn).click()
+    await window.locator(SEL.runTestsBtn).click()
 
     // Runner view shows a "Back to editor" affordance.
     await expect(window.locator(SEL.backToEditorBtn)).toBeVisible()
@@ -60,7 +58,6 @@ test.describe('Run Mode', () => {
 
     // Back in the editor: the runner "back" button is gone and Run Tests is available again.
     await expect(window.locator(SEL.backToEditorBtn)).toHaveCount(0)
-    await ensureFolderPanelVisible(window)
-    await expect(window.locator(SEL.sidebarRunBtn)).toBeVisible()
+    await expect(window.locator(SEL.runTestsBtn)).toBeVisible()
   })
 })

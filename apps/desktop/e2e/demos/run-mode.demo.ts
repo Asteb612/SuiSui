@@ -4,7 +4,6 @@ import {
   closeDemoApp,
   copyFixture,
   cleanupFixture,
-  ensureFolderPanelVisible,
   pause,
   SEL,
   type DemoContext,
@@ -25,12 +24,8 @@ test('run-mode demo', async () => {
   await expect(window.locator(SEL.scenarioBuilder)).toBeVisible()
   await pause(window, 2000)
 
-  // Make folder panel visible to access Run Tests button
-  await ensureFolderPanelVisible(window)
-  await pause(window, 1000)
-
-  // Click the "Run Tests" button in the sidebar
-  const runTestsBtn = window.locator('[data-testid="sidebar-run-btn"]')
+  // Click the "Run Tests" button in the top header
+  const runTestsBtn = window.locator('[data-testid="run-tests-btn"]')
   await expect(runTestsBtn).toBeVisible()
   await runTestsBtn.hover()
   await pause(window, 1000)

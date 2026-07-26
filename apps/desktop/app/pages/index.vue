@@ -292,6 +292,17 @@ function cancelInit() {
         @click="showHelpDialog = true"
       />
       <Button
+        v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
+        label="Run Tests"
+        icon="pi pi-play"
+        text
+        size="small"
+        severity="success"
+        title="Open the test runner"
+        data-testid="run-tests-btn"
+        @click="enterRunView"
+      />
+      <Button
         v-if="workspaceStore.hasWorkspace"
         label="Record"
         icon="pi pi-circle-fill"
@@ -435,17 +446,6 @@ function cancelInit() {
             <FeatureTree />
           </div>
           <GitPanel v-if="isGitAvailable" />
-          <div class="sidebar-run-button">
-            <Button
-              icon="pi pi-play"
-              label="Run Tests"
-              severity="success"
-              size="small"
-              class="w-full"
-              data-testid="sidebar-run-btn"
-              @click="enterRunView"
-            />
-          </div>
         </aside>
 
         <!-- Center: Scenario Builder -->
@@ -1170,16 +1170,6 @@ function cancelInit() {
   padding: 0;
   display: flex;
   flex-direction: column;
-}
-
-.sidebar-run-button {
-  padding: 0.75rem;
-  border-top: 1px solid var(--surface-border);
-  flex-shrink: 0;
-}
-
-.sidebar-run-button :deep(.p-button) {
-  justify-content: center;
 }
 
 .right-panel .panel-content {
