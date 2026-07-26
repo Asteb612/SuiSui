@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import type { AIProviderStatus } from '@suisui/shared'
+import type { AIProviderStatus, AIReasoningEffort } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
 import { CODEX_BILLING_ENV_KEYS as BILLING_ENV_KEYS } from './billingEnv'
 import type { IAIProvider, AIStreamRequest } from './IAIProvider'
@@ -67,7 +67,7 @@ export class OpenAiCodexProvider implements IAIProvider {
   /** The CLI binary to spawn. Defaults to `codex`; overridable (DI) so tests can point at a fake-CLI stub. */
   private readonly command: string
 
-  constructor(private opts: { model?: string | null; command?: string } = {}) {
+  constructor(private opts: { model?: string | null; effort?: AIReasoningEffort; command?: string } = {}) {
     this.command = opts.command ?? 'codex'
   }
 
@@ -109,9 +109,12 @@ export class OpenAiCodexProvider implements IAIProvider {
 
   async *stream(req: AIStreamRequest): AsyncIterable<string> {
     const modelArgs = this.opts.model ? ['-m', this.opts.model] : []
+    // Reasoning effort via codex's config override (`-c key=value`); the string value
+    // is quoted so codex parses it as a TOML string. Omitted when no effort is set.
+    const effortArgs = this.opts.effort ? ['-c', `model_reasoning_effort="${this.opts.effort}"`] : []
     // `--` ends option parsing so a prompt that happens to start with `-` is never
     // mistaken for a codex flag (defense-in-depth; prompts are non-flag today).
-    const child = spawn(this.command, ['exec', '--json', ...modelArgs, '--', req.input], {
+    const child = spawn(this.command, ['exec', '--json', ...effortArgs, ...modelArgs, '--', req.input], {
       env: buildSanitizedCodexEnv(),
       windowsHide: true,
     })

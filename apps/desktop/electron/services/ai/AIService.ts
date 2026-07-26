@@ -1,5 +1,5 @@
-import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIStatusTarget } from '@suisui/shared'
-import { DEFAULT_AI_PROVIDER_CONFIG } from '@suisui/shared'
+import type { AIProviderConfig, AIProviderStatus, AIProviderType, AIStatusTarget, AIReasoningEffort } from '@suisui/shared'
+import { DEFAULT_AI_PROVIDER_CONFIG, AI_REASONING_EFFORTS, DEFAULT_AI_REASONING_EFFORT } from '@suisui/shared'
 import { createLogger } from '../../utils/logger'
 import { getSettingsService, type SettingsService } from '../SettingsService'
 import { getAICredentialsService, type AICredentialsService } from './AICredentialsService'
@@ -37,6 +37,11 @@ function assertSafeBaseUrl(baseUrl: string | null): void {
   }
 }
 
+/** Coerce a possibly-missing/invalid effort to a valid value (default `medium`). */
+function normalizeEffort(effort: AIReasoningEffort | undefined): AIReasoningEffort {
+  return effort && AI_REASONING_EFFORTS.includes(effort) ? effort : DEFAULT_AI_REASONING_EFFORT
+}
+
 export interface AIServiceDeps {
   /** Inject a provider directly (tests use FakeAIProvider). Bypasses config-based resolution. */
   provider?: IAIProvider
@@ -66,15 +71,17 @@ export class AIService {
   async getConfig(): Promise<AIProviderConfig> {
     const settings = await this.settingsService.get()
     const config = settings.aiProvider ?? { ...DEFAULT_AI_PROVIDER_CONFIG }
-    return { ...config, hasApiKey: await this.credentialsService.hasKey() }
+    // Normalize effort so pre-existing configs (and any bogus value) read as `medium`.
+    return { ...config, effort: normalizeEffort(config.effort), hasApiKey: await this.credentialsService.hasKey() }
   }
 
   async setConfig(config: AIProviderConfig): Promise<void> {
     assertSafeBaseUrl(config.baseUrl)
     // Never persist a secret here; hasApiKey is derived from the credentials store.
     const hasApiKey = await this.credentialsService.hasKey()
-    await this.settingsService.save({ aiProvider: { ...config, hasApiKey } })
-    logger.info('AI provider config saved', { type: config.type, model: config.model })
+    const effort = normalizeEffort(config.effort)
+    await this.settingsService.save({ aiProvider: { ...config, effort, hasApiKey } })
+    logger.info('AI provider config saved', { type: config.type, model: config.model, effort })
   }
 
   /**
@@ -213,14 +220,22 @@ export class AIService {
     if (this.providerOverride) return this.providerOverride
     const config = await this.getConfig()
     if (!config.type) return null
-    return this.buildProvider(config.type, config.model, config.baseUrl)
+    return this.buildProvider(config.type, config.model, config.baseUrl, normalizeEffort(config.effort))
   }
 
   /**
    * Construct the concrete provider for a given type without touching persisted
    * config. Shared by `resolveProvider` (active config) and `status(target)` (probe).
+   *
+   * `effort` is the reasoning-effort hint (default `medium`). Only providers with a
+   * native reasoning-effort control consume it (the Codex CLI); others ignore it.
    */
-  private buildProvider(type: AIProviderType, model: string | null, baseUrl: string | null): IAIProvider {
+  private buildProvider(
+    type: AIProviderType,
+    model: string | null,
+    baseUrl: string | null,
+    effort: AIReasoningEffort = DEFAULT_AI_REASONING_EFFORT,
+  ): IAIProvider {
     const getKey = () => this.credentialsService.getKey()
     switch (type) {
       case 'ollama':
@@ -228,7 +243,7 @@ export class AIService {
       case 'openai-compatible':
         return new VercelAIProvider({ mode: 'openai-compatible', model, baseUrl, getKey })
       case 'openai-codex-cli':
-        return new OpenAiCodexProvider({ model })
+        return new OpenAiCodexProvider({ model, effort })
       case 'claude-subscription':
         return new ClaudeSubscriptionProvider({ model })
       default:

@@ -245,6 +245,19 @@ describe('OpenAiCodexProvider — streaming with sanitized env (FR-006)', () => 
     expect(spawnMock.mock.calls[0]![1]).toEqual(['exec', '--json', '-m', 'gpt-5-codex', '--', 'x'])
   })
 
+  it('forwards reasoning effort via -c model_reasoning_effort before -m', async () => {
+    const child = makeFakeCodexChild()
+    spawnMock.mockReturnValue(child)
+    const provider = new OpenAiCodexProvider({ model: 'gpt-5-codex', effort: 'medium' })
+    const p = collect(provider.stream(req('x')))
+    await tick()
+    child.emit('close', 0)
+    await p
+    expect(spawnMock.mock.calls[0]![1]).toEqual([
+      'exec', '--json', '-c', 'model_reasoning_effort="medium"', '-m', 'gpt-5-codex', '--', 'x',
+    ])
+  })
+
   it('does not duplicate output when a version streams deltas AND a final full message', async () => {
     const child = makeFakeCodexChild()
     spawnMock.mockReturnValue(child)

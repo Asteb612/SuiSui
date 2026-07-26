@@ -71,6 +71,26 @@ describe('AIService', () => {
     expect(result.hasApiKey).toBe(true)
   })
 
+  it('defaults reasoning effort to medium for a config that predates the field', async () => {
+    // Persisted config with no `effort` (older schema).
+    const config = { type: 'openai-codex-cli', model: null, baseUrl: null, hasApiKey: false } as AIProviderConfig
+    const service = new AIService({
+      provider: new FakeAIProvider(),
+      settingsService: fakeSettings({ aiProvider: config }),
+      credentialsService: fakeCreds(false),
+    })
+
+    expect((await service.getConfig()).effort).toBe('medium')
+  })
+
+  it('normalizes a bogus effort value to medium on save', async () => {
+    const settings = fakeSettings()
+    const service = new AIService({ provider: new FakeAIProvider(), settingsService: settings, credentialsService: fakeCreds(false) })
+    await service.setConfig({ type: 'openai-codex-cli', model: null, baseUrl: null, hasApiKey: false, effort: 'ultra' as never })
+
+    expect((await settings.get()).aiProvider!.effort).toBe('medium')
+  })
+
   it('does not persist a secret in the config', async () => {
     const settings = fakeSettings()
     const service = new AIService({ provider: new FakeAIProvider(), settingsService: settings, credentialsService: fakeCreds(true) })

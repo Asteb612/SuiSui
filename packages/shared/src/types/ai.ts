@@ -12,6 +12,19 @@ import type { ValidationResult } from './validation'
 export type AIProviderType = 'ollama' | 'openai-compatible' | 'openai-codex-cli' | 'claude-subscription'
 
 /**
+ * Reasoning-effort hint for reasoning-capable providers. Defaults to `medium`.
+ * It is forwarded to backends that expose a reasoning-effort control (the Codex
+ * CLI via `model_reasoning_effort`); providers without one ignore it.
+ */
+export type AIReasoningEffort = 'low' | 'medium' | 'high'
+
+/** The valid reasoning-effort values, in ascending order. */
+export const AI_REASONING_EFFORTS: readonly AIReasoningEffort[] = ['low', 'medium', 'high']
+
+/** Default reasoning effort applied to every provider. */
+export const DEFAULT_AI_REASONING_EFFORT: AIReasoningEffort = 'medium'
+
+/**
  * The set of provider types whose availability can be auto-detected (local service /
  * installed-and-logged-in CLI). Selection of these is gated on detection in the
  * settings UI (spec FR-020); `openai-compatible` (BYOK) is exempt — always selectable,
@@ -32,6 +45,8 @@ export interface AIProviderConfig {
   model: string | null
   baseUrl: string | null
   hasApiKey: boolean
+  /** Reasoning effort for reasoning-capable providers. Absent on pre-existing configs → treated as `medium`. */
+  effort?: AIReasoningEffort
 }
 
 export const DEFAULT_AI_PROVIDER_CONFIG: AIProviderConfig = {
@@ -39,6 +54,7 @@ export const DEFAULT_AI_PROVIDER_CONFIG: AIProviderConfig = {
   model: null,
   baseUrl: null,
   hasApiKey: false,
+  effort: DEFAULT_AI_REASONING_EFFORT,
 }
 
 /** Result of provider detection / "test connection". */
