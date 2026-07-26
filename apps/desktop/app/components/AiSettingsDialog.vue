@@ -47,6 +47,26 @@ const saving = ref(false)
 const needsBaseUrl = computed(() => type.value === 'ollama' || type.value === 'openai-compatible')
 const needsKey = computed(() => type.value === 'openai-compatible')
 
+/**
+ * Suggested models per provider. Shown as an editable dropdown so users can still
+ * type an unlisted model (endpoints and local Ollama installs vary). For Ollama the
+ * authoritative list is whatever the local server reports (`status.models`), which
+ * is merged in front of these suggestions after a Test connection.
+ */
+const CURATED_MODELS: Record<AIProviderType, string[]> = {
+  ollama: ['llama3.2', 'llama3.1', 'qwen2.5-coder', 'mistral', 'gemma3', 'deepseek-r1'],
+  'openai-compatible': ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini', 'gpt-5', 'gpt-5-mini'],
+  'openai-codex-cli': ['gpt-5-codex', 'gpt-5', 'o4-mini', 'gpt-4.1'],
+  'claude-subscription': ['sonnet', 'opus', 'haiku'],
+}
+
+/** Model dropdown options for the selected provider (detected Ollama models first). */
+const modelOptions = computed<string[]>(() => {
+  if (!type.value) return []
+  const detected = type.value === 'ollama' ? (aiStore.status?.models ?? []) : []
+  return Array.from(new Set([...detected, ...CURATED_MODELS[type.value]]))
+})
+
 watch(
   () => props.visible,
   async (visible) => {
@@ -71,6 +91,9 @@ function onRedetect() {
 
 watch(type, (next) => {
   if (next === 'ollama' && !baseUrl.value) baseUrl.value = 'http://127.0.0.1:11434'
+  // Preselect a sensible default model when switching to a provider and none is set
+  // yet (never clobbers a model loaded from config or typed by the user).
+  if (next && !model.value) model.value = CURATED_MODELS[next][0] ?? ''
 })
 
 async function onTestConnection() {
@@ -205,20 +228,18 @@ function onDisable() {
       >
         <label for="ai-model">Model</label>
         <Select
-          v-if="aiStore.status?.models?.length"
           id="ai-model"
           v-model="model"
-          :options="aiStore.status.models"
+          :options="modelOptions"
           editable
+          placeholder="Select or type a model"
           class="w-full"
+          data-testid="ai-model-select"
         />
-        <InputText
-          v-else
-          id="ai-model"
-          v-model="model"
-          placeholder="e.g., llama3.2"
-          class="w-full"
-        />
+        <small class="hint">
+          Suggested models for this provider. You can type any other model name.
+          <template v-if="type === 'ollama'">Run Test connection to list models installed locally.</template>
+        </small>
       </div>
 
       <div
