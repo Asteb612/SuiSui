@@ -137,7 +137,11 @@ function clearAllFilters() {
             @update:model-value="(val: string | undefined) => runnerStore.setBaseUrl(val ?? '')"
           />
         </div>
-        <div class="toolbar-field">
+        <div
+          v-if="!runnerStore.singleRun"
+          class="toolbar-field"
+          data-testid="execution-selector"
+        >
           <label class="toolbar-label">Execution</label>
           <SelectButton
             :model-value="runnerStore.config.executionMode"

@@ -51,5 +51,10 @@ test.describe('Header quick actions', () => {
 
     // One click switches to the runner view (its back-to-editor control appears).
     await expect(window.locator(SEL.backToEditorBtn)).toBeVisible()
+
+    // A single-spec quick-run hides the filter-oriented controls: there are no
+    // filters to return to, and execution mode is irrelevant for one spec.
+    await expect(window.locator(SEL.backToFiltersBtn)).toHaveCount(0)
+    await expect(window.locator(SEL.executionSelector)).toHaveCount(0)
   })
 })

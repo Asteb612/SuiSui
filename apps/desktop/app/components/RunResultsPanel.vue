@@ -112,13 +112,15 @@ function formatDuration(ms: number): string {
 
 <template>
   <div class="run-results-panel">
-    <!-- Back to Filters button -->
+    <!-- Back to Filters button (hidden for a single-spec quick-run — there are no filters to return to) -->
     <div class="results-header">
       <Button
+        v-if="!runnerStore.singleRun"
         icon="pi pi-arrow-left"
         label="Back to Filters"
         text
         size="small"
+        data-testid="back-to-filters-btn"
         @click="runnerStore.showResults = false"
       />
       <div class="results-header-spacer" />

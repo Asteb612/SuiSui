@@ -31,6 +31,12 @@ export const useRunnerStore = defineStore('runner', {
     // UI state (session-scoped, not persisted)
     showResults: false,
     hasEnteredRunView: false,
+    /**
+     * True when the current run was launched as a one-off single-spec run from the
+     * editor (quick-run), not through the filters panel. The runner view then hides
+     * filter-oriented controls (Back to Filters, the execution-mode selector).
+     */
+    singleRun: false,
     /** URL of the in-app Playwright report iframe (empty = none). */
     reportUrl: '' as string,
     /** True while the report server is starting (show a spinner). */
@@ -163,12 +169,14 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
-    async runBatch(mode: 'headless' | 'ui', opts: { headed?: boolean; trace?: boolean } = {}) {
+    async runBatch(mode: 'headless' | 'ui', opts: { headed?: boolean; trace?: boolean; single?: boolean } = {}) {
       if (this.isRunning) return
 
       this.isRunning = true
       this.status = 'running'
       this.showResults = true
+      // A filter-panel run is a normal batch; only the editor quick-run marks itself single.
+      this.singleRun = opts.single ?? false
       this.batchResult = null
       this.reportUrl = ''
       this.reportLoading = false

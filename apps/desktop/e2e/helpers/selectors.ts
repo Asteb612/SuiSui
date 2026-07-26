@@ -59,6 +59,8 @@ export const SEL = {
   runTestsBtn: '[data-testid="run-tests-btn"]',
   quickRunBtn: '[data-testid="quick-run-btn"]',
   backToEditorBtn: '[data-testid="back-to-editor-btn"]',
+  backToFiltersBtn: '[data-testid="back-to-filters-btn"]',
+  executionSelector: '[data-testid="execution-selector"]',
 
   // Validation
   validationPanel: '[data-testid="validation-panel"]',

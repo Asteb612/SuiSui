@@ -123,6 +123,8 @@ function resolveRunFeaturePath(current: string): string {
 
 async function enterRunView() {
   activeView.value = 'runner'
+  // Entering via "Run Tests" is the full filters experience (not a single-spec run).
+  runnerStore.singleRun = false
   await runnerStore.loadWorkspaceTests()
 
   // First-entry auto-select: if a feature is currently being viewed, select it
@@ -155,7 +157,7 @@ async function quickRunCurrentSpec() {
   runnerStore.config.selectedFeatures = [resolveRunFeaturePath(current)]
   runnerStore.config.activeFilterTab = 'features'
 
-  await runnerStore.runBatch('headless', { headed: true, trace: true })
+  await runnerStore.runBatch('headless', { headed: true, trace: true, single: true })
 }
 
 // Git availability - hide if workspace is not a git repo

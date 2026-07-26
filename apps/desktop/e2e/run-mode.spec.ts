@@ -49,6 +49,10 @@ test.describe('Run Mode', () => {
 
     // Runner view shows a "Back to editor" affordance.
     await expect(window.locator(SEL.backToEditorBtn)).toBeVisible()
+
+    // Entering via "Run Tests" is the full filters experience: the execution-mode
+    // selector is present (unlike a single-spec quick-run).
+    await expect(window.locator(SEL.executionSelector)).toBeVisible()
   })
 
   test('should return to the editor via the back button', async () => {
