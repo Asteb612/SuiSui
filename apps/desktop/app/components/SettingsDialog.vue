@@ -63,7 +63,7 @@ async function onSave() {
     :visible="visible"
     modal
     header="Settings"
-    :style="{ width: '520px' }"
+    :style="{ width: '760px', maxWidth: '94vw' }"
     data-testid="settings-dialog"
     @update:visible="$emit('update:visible', $event)"
   >
@@ -214,6 +214,12 @@ async function onSave() {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  /* Cap the body height so a long variables list scrolls instead of overflowing the
+     dialog; short content stays compact (content-driven, not a fixed height). */
+  max-height: 68vh;
+  overflow-y: auto;
+  /* Keep the scrollbar from crowding the inputs. */
+  padding-right: 0.5rem;
 }
 
 .group {
