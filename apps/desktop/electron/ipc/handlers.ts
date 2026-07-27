@@ -380,8 +380,30 @@ export function registerIpcHandlers(
     return dependencyService.ensureRequiredDependencies()
   })
 
-  ipcMain.handle(IPC_CHANNELS.DEPS_INSTALL, async () => {
-    return dependencyService.install()
+  ipcMain.handle(IPC_CHANNELS.DEPS_INSTALL, async (event) => {
+    // Same line-buffered streaming as RUNNER_LOG: a first install downloads the
+    // pinned package manager and then resolves a whole monorepo, so the UI needs
+    // to show progress rather than appearing frozen.
+    let buf = ''
+    const emit = (line: string) => {
+      const clean = line.replace(/\r$/, '')
+      if (clean.length > 0 && !event.sender.isDestroyed()) {
+        event.sender.send(IPC_CHANNELS.DEPS_LOG, clean)
+      }
+    }
+    const onOutput = (_stream: 'stdout' | 'stderr', data: string) => {
+      buf += data
+      let nl: number
+      while ((nl = buf.indexOf('\n')) !== -1) {
+        emit(buf.slice(0, nl))
+        buf = buf.slice(nl + 1)
+      }
+    }
+    try {
+      return await dependencyService.install(undefined, onOutput)
+    } finally {
+      emit(buf) // flush any trailing partial line
+    }
   })
 
   // Git Workspace handlers (isomorphic-git)

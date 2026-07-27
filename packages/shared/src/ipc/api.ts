@@ -110,6 +110,9 @@ export interface ElectronAPI {
     checkPackageJson: () => Promise<PackageJsonCheckResult>
     ensureRequired: () => Promise<PackageJsonCheckResult>
     install: () => Promise<DependencyInstallResult>
+    /** Stream the install's output line by line while it runs. */
+    onDepsLog: (callback: (line: string) => void) => void
+    offDepsLog: () => void
   }
 
   gitWorkspace: {

@@ -324,3 +324,54 @@ describe('updateProgressFromLine — live `list` reporter parsing', () => {
     expect(p).toMatchObject({ total: 6, completed: 1, passed: 1 })
   })
 })
+
+/**
+ * Regression: the run timer read "0s" for a whole run.
+ *
+ * `RunResultsPanel` is mounted by `v-if="showResults"`, and the store sets
+ * `isRunning` BEFORE `showResults` — so the panel always mounts with the run
+ * already in flight. A start instant measured from the panel therefore has to
+ * come from the store; anything the panel derives from its own mount is either
+ * late or, if its watcher never observes a transition, never set at all.
+ */
+describe('runner store — run start instant', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('stamps startedAt while the run is still in flight', async () => {
+    const store = useRunnerStore()
+    const runnerApi = (
+      window as unknown as {
+        api: { runner: { runBatch: ReturnType<typeof vi.fn> } }
+      }
+    ).api.runner
+
+    // Hold the run open so the in-flight state can be observed at all — it is
+    // reset the moment the run finishes.
+    let release: (value: BatchRunResult) => void = () => {}
+    runnerApi.runBatch.mockImplementationOnce(
+      () => new Promise<BatchRunResult>((resolve) => (release = resolve)),
+    )
+
+    const before = Date.now()
+    const inFlight = store.runBatch('headless')
+    await Promise.resolve()
+
+    expect(store.isRunning).toBe(true)
+    // Set before `showResults`, which is exactly why the panel — mounted by
+    // that flag — cannot measure the start for itself.
+    expect(store.showResults).toBe(true)
+    expect(store.startedAt).toBeGreaterThanOrEqual(before)
+
+    release(fakeBatch(true))
+    await inFlight
+  })
+
+  it('clears startedAt once the run is no longer in flight', async () => {
+    const store = useRunnerStore()
+    await store.runBatch('headless')
+    expect(store.isRunning).toBe(false)
+    expect(store.startedAt).toBe(0)
+  })
+})

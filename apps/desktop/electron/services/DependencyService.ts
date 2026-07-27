@@ -15,11 +15,146 @@ import { createLogger } from '../utils/logger'
 
 const logger = createLogger('DependencyService')
 
+/**
+ * Absolute ceiling for a dependency install.
+ *
+ * Deliberately generous: a cold install of a monorepo downloads the pinned
+ * package manager, resolves every workspace project, and runs postinstall
+ * scripts (builds, Playwright browser downloads). The old flat 5 minutes killed
+ * such installs midway, which is worse than useless — it left a half-populated
+ * node_modules behind.
+ */
+const INSTALL_TOTAL_TIMEOUT_MS = 45 * 60 * 1000
+
+/**
+ * How long the install may produce *nothing at all* before we call it wedged.
+ *
+ * This, not the ceiling above, is what actually catches a stuck install.
+ * Package managers stream progress the whole way through, so several minutes of
+ * complete silence means it is blocked — on a prompt with no answer, or on a
+ * lock held by a leftover process — rather than merely slow.
+ */
+const INSTALL_IDLE_TIMEOUT_MS = 5 * 60 * 1000
+
 // Required dependencies for SuiSui workspaces
 const REQUIRED_DEPENDENCIES: RequiredDependency[] = [
   { name: '@playwright/test', version: '^1.40.0', type: 'devDependencies' },
   { name: 'playwright-bdd', version: '^8.0.0', type: 'devDependencies' },
 ]
+
+/**
+ * A workspace's package manager, and the directory its install must run in.
+ *
+ * `dir` is NOT always the workspace: in a monorepo the lockfile lives at the
+ * repo root, and pnpm/yarn refuse to install from a sub-package. Detection
+ * therefore walks upwards.
+ */
+export interface PackageManager {
+  readonly name: 'npm' | 'pnpm' | 'yarn'
+  /** Directory to run the install in — where the lockfile/workspace file lives. */
+  readonly dir: string
+  /** True when `dir` is above the opened workspace (a monorepo sub-package). */
+  readonly isMonorepoRoot: boolean
+}
+
+/**
+ * Detect which package manager a workspace uses.
+ *
+ * Walks up from the workspace looking for a lockfile or workspace manifest,
+ * because a project opened at `repo/e2e` may be a member of a pnpm or yarn
+ * workspace whose lockfile is at `repo/`. Running `npm install` there fails
+ * outright — npm cannot parse pnpm's `workspace:` protocol and reports
+ * EUNSUPPORTEDPROTOCOL.
+ *
+ * Precedence at each level: pnpm, then yarn, then npm. Falls back to npm in the
+ * workspace itself when nothing is found, which is the right default for a
+ * standalone project.
+ */
+export function detectPackageManager(workspacePath: string): PackageManager {
+  const markers: ReadonlyArray<{ file: string; name: PackageManager['name'] }> = [
+    { file: 'pnpm-workspace.yaml', name: 'pnpm' },
+    { file: 'pnpm-lock.yaml', name: 'pnpm' },
+    { file: 'yarn.lock', name: 'yarn' },
+    { file: 'package-lock.json', name: 'npm' },
+  ]
+
+  let dir = workspacePath
+  for (;;) {
+    for (const marker of markers) {
+      if (fs.existsSync(path.join(dir, marker.file))) {
+        return {
+          name: marker.name,
+          dir,
+          isMonorepoRoot: dir !== workspacePath,
+        }
+      }
+    }
+
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  return { name: 'npm', dir: workspacePath, isMonorepoRoot: false }
+}
+
+/** Scripts a package manager runs as part of installing, in any workspace. */
+export const INSTALL_LIFECYCLE_SCRIPTS = [
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepare',
+] as const
+
+/**
+ * Arguments that scope an install to just the opened workspace package.
+ *
+ * Opening `repo/e2e` means wanting to run that project's tests, not to build
+ * every sibling in the monorepo. The install still has to run from the repo
+ * root (that is where the lockfile lives), but it does not have to *install*
+ * the root: skipping unrelated siblings avoids downloading hundreds of
+ * packages, plus their postinstall scripts, that the tests never touch.
+ *
+ * Returns an empty list — meaning "install everything" — whenever scoping is
+ * not safely possible, so the fallback is always the correct-but-slower path.
+ */
+export function workspaceFilterArgs(
+  pm: PackageManager,
+  packageName: string | null,
+  rootHasInstallScripts: boolean,
+): string[] {
+  // The opened workspace IS the install root: there is nothing to narrow to.
+  if (!pm.isMonorepoRoot) return []
+  // An unnamed package cannot be referenced by any of the filter syntaxes.
+  if (!packageName) return []
+  // A root install script routinely reaches across the whole repo — this one,
+  // for instance, builds two sibling packages:
+  //
+  //   "postinstall": "pnpm --filter @acme/shared run build && pnpm --filter @acme/gql run build"
+  //
+  // Those siblings sit outside the opened package's dependency closure, so a
+  // filtered install prunes their dependencies from the store and then runs a
+  // script that needs them. The script fails on a missing module, and the
+  // damage outlives the run: the sibling keeps a node_modules entry whose
+  // symlink now dangles. Scoping is only safe when the root stays out of it.
+  if (rootHasInstallScripts) return []
+
+  switch (pm.name) {
+    case 'pnpm':
+      // The trailing "..." also selects the package's workspace dependencies.
+      // Without it a `workspace:` link resolves to nothing and the tests fail
+      // on a missing import rather than on anything they were meant to check.
+      return ['--filter', `${packageName}...`]
+    case 'npm':
+      return ['--workspace', packageName]
+    case 'yarn':
+      // Classic yarn has no per-workspace install, and Berry spells it as a
+      // different verb entirely (`yarn workspaces focus`) rather than a flag on
+      // install. Telling the two apart reliably is not worth it here — a full
+      // install is slower but always right.
+      return []
+  }
+}
 
 /**
  * Extract major version from a semver range like "^8.0.0", "~6.6.0", "1.2.3", etc.
@@ -372,7 +507,10 @@ export class DependencyService implements IDependencyService {
     return { needsInstall: false, lastInstallState: lastState }
   }
 
-  async install(workspacePath?: string): Promise<DependencyInstallResult> {
+  async install(
+    workspacePath?: string,
+    onOutput?: (stream: 'stdout' | 'stderr', data: string) => void,
+  ): Promise<DependencyInstallResult> {
     const wsPath = workspacePath ?? getWorkspaceService().getPath()
     if (!wsPath) {
       return {
@@ -427,15 +565,54 @@ export class DependencyService implements IDependencyService {
       }
     }
 
-    // Determine if we should use npm ci or npm install
-    // Use 'install' if package.json was modified (lockfile out of sync) or no lockfile exists
-    const packageLockPath = path.join(wsPath, 'package-lock.json')
-    const hasLockfile = fs.existsSync(packageLockPath)
-    const npmCommand = (packageJsonCheck.wasModified || !hasLockfile) ? 'install' : 'ci'
+    // Which package manager does this project use, and where must it run?
+    const pm = detectPackageManager(wsPath)
+    const installDir = pm.dir
+
+    // Reinstall from scratch when we changed package.json or there is no
+    // lockfile; otherwise honour the lockfile exactly.
+    //   npm  : install / ci
+    //   pnpm : install / install --frozen-lockfile
+    //   yarn : install / install --immutable  (Berry; classic ignores it)
+    const lockfiles: Record<PackageManager['name'], string> = {
+      npm: 'package-lock.json',
+      pnpm: 'pnpm-lock.yaml',
+      yarn: 'yarn.lock',
+    }
+    const hasLockfile = fs.existsSync(path.join(installDir, lockfiles[pm.name]))
+    const reinstall = packageJsonCheck.wasModified || !hasLockfile
+
+    const baseArgs: string[] =
+      pm.name === 'npm'
+        ? [reinstall ? 'install' : 'ci']
+        : pm.name === 'pnpm'
+          ? reinstall ? ['install'] : ['install', '--frozen-lockfile']
+          : reinstall ? ['install'] : ['install', '--immutable']
+
+    // Narrow the install to the opened package when it is one member of a
+    // larger repo. Siblings already on disk are left untouched — a filtered
+    // install adds to node_modules, it does not prune what it skipped.
+    const workspacePackageJson = await this.readPackageJson(wsPath)
+    const packageName =
+      typeof workspacePackageJson?.name === 'string' ? workspacePackageJson.name : null
+
+    const rootPackageJson = pm.isMonorepoRoot ? await this.readPackageJson(installDir) : null
+    const rootScripts = (rootPackageJson?.scripts ?? {}) as Record<string, unknown>
+    const rootHasInstallScripts = INSTALL_LIFECYCLE_SCRIPTS.some(
+      (script) => typeof rootScripts[script] === 'string',
+    )
+
+    const filterArgs = workspaceFilterArgs(pm, packageName, rootHasInstallScripts)
+    const pmArgs = [...baseArgs, ...filterArgs]
 
     logger.info('Installing dependencies', {
       workspacePath: wsPath,
-      command: npmCommand,
+      packageManager: pm.name,
+      installDir,
+      isMonorepoRoot: pm.isMonorepoRoot,
+      scopedTo: filterArgs.length > 0 ? packageName : null,
+      rootHasInstallScripts,
+      args: pmArgs,
       nodePath,
       npmPath,
     })
@@ -447,34 +624,100 @@ export class DependencyService implements IDependencyService {
       npm_config_audit: 'false',
       npm_config_update_notifier: 'false',
       PATH: nodeDir + path.delimiter + (process.env.PATH || ''),
+      // Corepack downloads the pinned package manager on first use and asks
+      // "Do you want to continue? [Y/n]" before doing so. We run without a TTY,
+      // so that prompt never receives an answer and the install hangs until the
+      // timeout. Answering up front is the documented way to run corepack
+      // non-interactively.
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+      // A workspace may pin a package manager (`packageManager` in
+      // package.json) that corepack's strict mode refuses to run. Honour the
+      // project's choice rather than failing the install over it.
+      COREPACK_ENABLE_STRICT: '0',
+      // Suppress interactive progress/prompts in the package managers too.
+      CI: '1',
+      // Answer the prompts we know about, up front, instead of relying on the
+      // package manager's own CI detection.
+      //
+      // pnpm asks "The modules directory ... will be removed and reinstalled
+      // from scratch. Proceed? (Y/n)" whenever node_modules was built under
+      // different settings. With no TTY that question is never answered and the
+      // install simply stops — output, then silence, forever. Answering "yes"
+      // is the only non-blocking option: the alternative is aborting an install
+      // the user explicitly asked for.
+      npm_config_confirm_modules_purge: 'false',
+      // Applies to any `npx`/`pnpm dlx` a postinstall script shells out to.
+      npm_config_yes: 'true',
     }
 
-    // Determine npm args - if npmPath is a .js file, we need to run it with node
+    // How to invoke the chosen package manager.
+    //
+    // npm ships with the embedded Node runtime, so it is called directly (via
+    // `node npm-cli.js` when the resolved path is a script).
+    //
+    // pnpm and yarn do not ship with us. Corepack does — it is bundled with
+    // Node >= 16 — and is the supported way to run them without a global
+    // install, so we shell out through it. If corepack is unavailable the run
+    // fails with the package manager's own error, which is clearer than
+    // silently falling back to npm and emitting EUNSUPPORTEDPROTOCOL.
     const isNpmScript = npmPath.endsWith('.js')
-    const args = isNpmScript
-      ? [npmPath, npmCommand]
-      : [npmCommand]
-    const execPath = isNpmScript ? nodePath : npmPath
+    const corepackPath = path.join(nodeDir, 'corepack')
+
+    const { execPath, args } =
+      pm.name === 'npm'
+        ? {
+            execPath: isNpmScript ? nodePath : npmPath,
+            args: isNpmScript ? [npmPath, ...pmArgs] : pmArgs,
+          }
+        : {
+            execPath: nodePath,
+            args: [corepackPath, pm.name, ...pmArgs],
+          }
+
+    // Announce what is about to happen BEFORE the slow part. A first run
+    // downloads the pinned package manager and then installs a whole monorepo,
+    // which can take minutes; without this the UI shows nothing at all.
+    onOutput?.(
+      'stdout',
+      `Installing dependencies with ${pm.name} ${pmArgs.join(' ')}\n` +
+        `Directory: ${installDir}${pm.isMonorepoRoot ? ' (monorepo root)' : ''}\n` +
+        (filterArgs.length > 0
+          ? `Scoped to ${packageName} and its workspace dependencies — siblings are skipped.\n`
+          : ''),
+    )
 
     const result = await this.commandRunner.exec(execPath, args, {
-      cwd: wsPath,
+      cwd: installDir,
       env,
-      timeout: 300000, // 5 minutes
+      timeout: INSTALL_TOTAL_TIMEOUT_MS,
+      idleTimeout: INSTALL_IDLE_TIMEOUT_MS,
+      onOutput,
     })
 
     const duration = Date.now() - startTime
 
     if (result.code !== 0) {
-      logger.error('npm install failed', undefined, {
+      logger.error(`${pm.name} install failed`, undefined, {
         exitCode: result.code,
+        timedOut: result.timedOut ?? false,
         stderr: result.stderr.substring(0, 500),
       })
+      // A timeout is not "exit code -1" to a user — say what actually happened
+      // and, for the idle case, that the command had simply stopped producing
+      // output. `result.stderr` already carries the tail that shows where.
+      const error = result.timedOut
+        ? `${pm.name} ${pmArgs.join(' ')} was stopped after ${Math.round(duration / 1000)}s — ` +
+          (result.timedOut === 'idle'
+            ? `it produced no output for ${INSTALL_IDLE_TIMEOUT_MS / 60000} minutes and appears to be stuck.`
+            : `it exceeded the ${INSTALL_TOTAL_TIMEOUT_MS / 60000} minute limit.`)
+        : `${pm.name} ${pmArgs.join(' ')} failed with exit code ${result.code}`
+
       return {
         success: false,
         duration,
         stdout: result.stdout,
         stderr: result.stderr,
-        error: `npm ${npmCommand} failed with exit code ${result.code}`,
+        error,
       }
     }
 
@@ -489,8 +732,12 @@ export class DependencyService implements IDependencyService {
       { timeout: 5000 }
     )
 
-    // Hash the lockfile (might have been created/updated)
-    const lockfileHash = await this.hashFile(packageLockPath) || ''
+    // Hash the lockfile (might have been created/updated). Use the detected
+    // package manager's lockfile at the directory the install actually ran in,
+    // not npm's in the workspace — otherwise a pnpm monorepo hashes a file that
+    // never exists and the install is treated as stale on every launch.
+    const lockfileHash =
+      (await this.hashFile(path.join(installDir, lockfiles[pm.name]))) || ''
 
     // Save install state
     const installState: InstallState = {

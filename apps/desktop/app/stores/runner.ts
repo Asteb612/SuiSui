@@ -80,6 +80,15 @@ interface RunScope {
   singleRun: boolean
   /** Live per-test progress while the run is in flight. */
   progress: RunProgress
+  /**
+   * When the in-flight run started, as an epoch ms stamp; 0 when idle.
+   *
+   * Owned by the store rather than the panel because the panel is mounted by a
+   * `v-if` that only turns on *after* the run has already begun — anything it
+   * measured from its own mount would start at the wrong moment, or (if it
+   * never saw the transition) not start at all.
+   */
+  startedAt: number
 }
 
 function emptyScope(singleRun = false): RunScope {
@@ -94,6 +103,7 @@ function emptyScope(singleRun = false): RunScope {
     reportLoading: false,
     singleRun,
     progress: emptyProgress(),
+    startedAt: 0,
   }
 }
 
@@ -140,6 +150,10 @@ export const useRunnerStore = defineStore('runner', {
     },
     showResults(): boolean {
       return this.currentScope.showResults
+    },
+    /** Epoch ms the in-flight run started, or 0 when idle. */
+    startedAt(): number {
+      return this.currentScope.startedAt
     },
     reportUrl(): string {
       return this.currentScope.reportUrl
@@ -319,6 +333,7 @@ export const useRunnerStore = defineStore('runner', {
 
       this.isRunning = true
       s.status = 'running'
+      s.startedAt = Date.now()
       s.showResults = true
       s.singleRun = opts.single ?? false
       s.batchResult = null
@@ -389,6 +404,7 @@ export const useRunnerStore = defineStore('runner', {
       } finally {
         window.api.runner.offRunnerLog()
         this.isRunning = false
+        s.startedAt = 0
         // Integrate Playwright's HTML report directly in the results panel, scoped to
         // this run (UI mode has no report of its own).
         if (mode !== 'ui') void this.showReport(scope)
@@ -400,6 +416,7 @@ export const useRunnerStore = defineStore('runner', {
       const s = this.ensureScope()
       this.isRunning = true
       s.status = 'running'
+      s.startedAt = Date.now()
       s.logs = ['Starting headless test run...']
       s.errors = []
       if (this.baseUrl) {
@@ -443,6 +460,7 @@ export const useRunnerStore = defineStore('runner', {
         s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         this.isRunning = false
+        s.startedAt = 0
       }
     },
 
@@ -450,6 +468,7 @@ export const useRunnerStore = defineStore('runner', {
       const s = this.ensureScope()
       this.isRunning = true
       s.status = 'running'
+      s.startedAt = Date.now()
       s.logs = ['Starting Playwright UI...']
       s.errors = []
       if (this.baseUrl) {
@@ -487,6 +506,7 @@ export const useRunnerStore = defineStore('runner', {
         s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         this.isRunning = false
+        s.startedAt = 0
       }
     },
 
@@ -496,6 +516,7 @@ export const useRunnerStore = defineStore('runner', {
         this.isRunning = false
         const s = this.ensureScope()
         s.status = 'idle'
+        s.startedAt = 0
         s.logs.push('Test run stopped')
       } catch {
         // Ignore stop errors
