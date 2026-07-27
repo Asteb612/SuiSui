@@ -103,23 +103,32 @@ const showLogs = ref(false)
 // --- Live run progress + elapsed timer (so a long/stuck run is visible) ---
 const elapsedMs = ref(0)
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
-let runStart = 0
 
+// `immediate` matters: this panel is behind `v-if="showResults"`, which the store
+// only turns on *after* it has already set `isRunning`. Without it the watcher
+// never sees a transition, the interval is never started, and the run reads
+// "0s" for its entire duration.
+//
+// The start instant comes from the store for the same reason — the panel mounts
+// after the run begins, and may unmount and remount mid-run.
 watch(
-  () => runnerStore.isRunning,
-  (running) => {
-    if (running) {
-      runStart = Date.now()
-      elapsedMs.value = 0
-      if (elapsedTimer) clearInterval(elapsedTimer)
-      elapsedTimer = setInterval(() => {
-        elapsedMs.value = Date.now() - runStart
-      }, 500)
-    } else if (elapsedTimer) {
+  () => [runnerStore.isRunning, runnerStore.startedAt] as const,
+  ([running, startedAt]) => {
+    if (elapsedTimer) {
       clearInterval(elapsedTimer)
       elapsedTimer = null
     }
+    if (!running || !startedAt) {
+      elapsedMs.value = 0
+      return
+    }
+    const tick = (): void => {
+      elapsedMs.value = Date.now() - startedAt
+    }
+    tick()
+    elapsedTimer = setInterval(tick, 500)
   },
+  { immediate: true },
 )
 onUnmounted(() => {
   if (elapsedTimer) clearInterval(elapsedTimer)

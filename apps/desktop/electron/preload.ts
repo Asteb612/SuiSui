@@ -85,6 +85,13 @@ const api: ElectronAPI = {
     checkPackageJson: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_CHECK_PACKAGE_JSON),
     ensureRequired: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_ENSURE_REQUIRED),
     install: () => ipcRenderer.invoke(IPC_CHANNELS.DEPS_INSTALL),
+    onDepsLog: (callback: (line: string) => void) => {
+      ipcRenderer.removeAllListeners(IPC_CHANNELS.DEPS_LOG)
+      ipcRenderer.on(IPC_CHANNELS.DEPS_LOG, (_e: Electron.IpcRendererEvent, line: string) => callback(line))
+    },
+    offDepsLog: () => {
+      ipcRenderer.removeAllListeners(IPC_CHANNELS.DEPS_LOG)
+    },
   },
 
   gitWorkspace: {

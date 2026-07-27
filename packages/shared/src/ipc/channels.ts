@@ -38,6 +38,7 @@ export const IPC_CHANNELS = {
   RUNNER_STOP: 'runner:stop',
   RUNNER_SHOW_REPORT: 'runner:showReport',
   RUNNER_LOG: 'runner:log',
+  DEPS_LOG: 'deps:log',
 
   // Settings
   SETTINGS_GET: 'settings:get',

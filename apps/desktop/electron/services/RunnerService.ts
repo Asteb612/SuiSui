@@ -26,6 +26,22 @@ const logger = createLogger('RunnerService')
 const debugRunner = process.env.SUISUI_DEBUG_RUNNER === '1'
 
 /**
+ * How long a test run may produce *no output at all* before we treat it as hung.
+ *
+ * Test runs are bounded by elapsed time only in the sense that Playwright itself
+ * enforces per-test `timeout` and, if configured, `globalTimeout`. A wall-clock
+ * cap here just truncates healthy suites: a 150-test run at a few seconds each
+ * sails past ten minutes while passing, and killing it mid-flight destroys the
+ * report it was about to produce.
+ *
+ * The `list` reporter prints a line as each test finishes, so silence — not
+ * elapsed time — is what distinguishes "wedged" from "long". The window is set
+ * well above a single test's budget (including retries) so a slow test is never
+ * mistaken for a hang.
+ */
+const RUN_IDLE_TIMEOUT_MS = 15 * 60 * 1000
+
+/**
  * Escapes special regex characters in a string for use in Playwright's --grep option
  */
 function escapeRegex(str: string): string {
@@ -362,6 +378,11 @@ export class RunnerService {
       featurePaths: options.featurePaths?.length ?? 'all',
       tags: options.tags,
       nameFilter: options.nameFilter,
+      // Logged so the run's own guard is visible up front. Electron does not
+      // reload the main process when `tsc --watch` rebuilds it, so a stale
+      // build is otherwise indistinguishable from a fix that did not work.
+      idleTimeoutMs: options.mode === 'ui' ? 0 : RUN_IDLE_TIMEOUT_MS,
+      totalTimeoutMs: 0,
     })
 
     // Run bddgen to generate all spec files (no FEATURE env var)
@@ -446,7 +467,10 @@ export class RunnerService {
       [playwrightCliPath, ...playwrightArgs],
       {
         cwd: workspacePath,
-        timeout: options.mode === 'ui' ? 0 : 600000,
+        // No wall-clock cap: Playwright owns the run's total budget via its own
+        // `globalTimeout`. SuiSui only guards against the process going silent.
+        timeout: 0,
+        idleTimeout: options.mode === 'ui' ? 0 : RUN_IDLE_TIMEOUT_MS,
         env,
         onOutput,
       },
@@ -729,7 +753,11 @@ export class RunnerService {
     // Run playwright test
     const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...playwrightArgs], {
       cwd: workspacePath,
-      timeout: options.mode === 'ui' ? 0 : 300000,
+      // As above: bound by silence, not by elapsed time. A single spec can
+      // legitimately run long once retries and a generous per-test timeout are
+      // in play.
+      timeout: 0,
+      idleTimeout: options.mode === 'ui' ? 0 : RUN_IDLE_TIMEOUT_MS,
       env,
     })
 
