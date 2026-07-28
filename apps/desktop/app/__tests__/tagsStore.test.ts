@@ -381,3 +381,29 @@ describe('tags store — bulk flow (US3)', () => {
     expect(applyBulkMock).not.toHaveBeenCalled()
   })
 })
+
+describe('tags store — subscription refcounting', () => {
+  it('keeps the subscription alive while another consumer is still mounted', async () => {
+    // The tag browser and the editor's tag picker share one index; whichever
+    // unmounts first must not tear down the other's subscription.
+    const unsubscribe = vi.fn()
+    onIndexChangedMock.mockReturnValue(unsubscribe)
+
+    const store = useTagsStore()
+    await store.init() // browser mounts
+    await store.init() // tag picker mounts
+
+    store.dispose() // browser unmounts
+    expect(unsubscribe).not.toHaveBeenCalled()
+
+    store.dispose() // picker unmounts
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('subscribes only once for several consumers', async () => {
+    const store = useTagsStore()
+    await store.init()
+    await store.init()
+    expect(onIndexChangedMock).toHaveBeenCalledTimes(1)
+  })
+})

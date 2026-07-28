@@ -1079,3 +1079,11 @@ All updater logic is main-process only; the renderer only ever sees the serializ
 - **`BulkTagDialog.vue`** validates the tag name live with the same shared rule the service
   enforces, shows the preview, and reports per-scenario outcomes (skipped/failed with
   reasons) afterwards.
+- **`TagsEditor.vue`** (scenario/feature tags in the editor) suggests existing workspace
+  tags via `AutoComplete` while still accepting a brand-new one — Enter commits typed text,
+  clicking a suggestion commits that. Tags already applied are filtered out of the
+  suggestions, and the same `isValidTagName` rule rejects unusable names before they reach
+  the file.
+- The tag index subscription is **refcounted** (`consumers` in store state): the browser and
+  the editor's picker both use it, and whichever unmounts first must not tear down the
+  other's subscription.

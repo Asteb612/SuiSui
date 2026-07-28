@@ -18,6 +18,17 @@ interface TagsStoreState {
   sortMode: TagSortMode
   /** `TagUsage.id`s selected for a bulk operation. */
   selectedScenarioIds: string[]
+  /**
+   * How many mounted components are using the index.
+   *
+   * The tag browser and the scenario editor's tag picker both need it, and
+   * either can unmount first — without refcounting, the first to leave would
+   * tear down the subscription the other still depends on.
+   *
+   * Lives in state, not module scope, so it cannot leak between store instances
+   * (which in tests means leaking between test cases).
+   */
+  consumers: number
   /** Outcome of the last bulk operation, for the summary panel. */
   lastResult: BulkTagResult | null
   isApplying: boolean
@@ -53,10 +64,14 @@ export const useTagsStore = defineStore('tags', {
     selectedScenarioIds: [],
     lastResult: null,
     isApplying: false,
+    consumers: 0,
   }),
 
   getters: {
     isIndexing: (state): boolean => state.index.state === 'building',
+
+    /** Every tag name in the workspace — the suggestion source for tag pickers. */
+    allTagNames: (state): string[] => state.index.tags.map((tag) => tag.name),
     hasWorkspaceIndex: (state): boolean => state.index.state !== 'idle',
     hasUnparsedFiles: (state): boolean => state.index.unparsedFiles.length > 0,
 
@@ -123,16 +138,23 @@ export const useTagsStore = defineStore('tags', {
 
   actions: {
     async init() {
-      unsubscribeIndex?.()
-      unsubscribeIndex = window.api.tags.onIndexChanged((index) => {
-        this.index = index
-        this.pruneSelection()
-      })
+      if (this.consumers === 0) {
+        // Drop any handle left over from a previous store instance before
+        // subscribing afresh.
+        unsubscribeIndex?.()
+        unsubscribeIndex = window.api.tags.onIndexChanged((index) => {
+          this.index = index
+          this.pruneSelection()
+        })
+      }
+      this.consumers++
       this.index = await window.api.tags.getIndex()
       this.pruneSelection()
     },
 
     dispose() {
+      this.consumers = Math.max(0, this.consumers - 1)
+      if (this.consumers > 0) return
       unsubscribeIndex?.()
       unsubscribeIndex = null
     },

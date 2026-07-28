@@ -40,6 +40,40 @@ export const primeVueStubs = {
     props: ['modelValue', 'placeholder', 'size', 'disabled', 'invalid', 'autofocus'],
     emits: ['update:modelValue'],
   },
+  AutoComplete: {
+    name: 'AutoComplete',
+    // Mirrors the real component closely enough to test through the DOM:
+    // typing emits `complete`, and each suggestion is clickable.
+    template: `<div data-testid="autocomplete">
+      <input
+        data-testid="autocomplete-input"
+        :value="modelValue"
+        :placeholder="placeholder"
+        :class="{ 'p-invalid': invalid }"
+        @input="onInput($event)"
+        @focus="$emit('complete', { query: modelValue || '' })"
+        @keydown="$emit('keydown', $event)"
+        @blur="$emit('blur', $event)"
+      />
+      <ul data-testid="autocomplete-suggestions">
+        <li
+          v-for="s in (suggestions || [])"
+          :key="s"
+          :data-testid="'suggestion-' + s"
+          @click="$emit('item-select', { value: s })"
+        >{{ s }}</li>
+      </ul>
+    </div>`,
+    props: ['modelValue', 'suggestions', 'placeholder', 'invalid', 'size', 'delay', 'dropdown', 'dropdownMode', 'completeOnFocus', 'emptySearchMessage'],
+    emits: ['update:modelValue', 'complete', 'item-select', 'blur', 'keydown'],
+    methods: {
+      onInput(this: { $emit: (e: string, payload: unknown) => void }, event: Event) {
+        const value = (event.target as HTMLInputElement).value
+        this.$emit('update:modelValue', value)
+        this.$emit('complete', { query: value })
+      },
+    },
+  },
   Checkbox: {
     name: 'Checkbox',
     template: '<input type="checkbox" data-testid="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" :id="inputId" />',
