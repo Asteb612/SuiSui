@@ -3,7 +3,8 @@ import { computed } from 'vue'
 import TableEditor from './TableEditor.vue'
 import { formatStepPattern } from '~/utils/stepPatternFormatter'
 import { parseTableValue } from '~/utils/tableUtils'
-import type { ScenarioStep, ValidationIssue } from '@suisui/shared'
+import type { ExecutionStatus, ScenarioStep, ValidationIssue } from '@suisui/shared'
+import { statusPresentation, formatDuration } from '~/utils/runStatus'
 
 interface TableRow {
   [key: string]: string
@@ -17,6 +18,15 @@ const props = defineProps<{
   stepType: 'scenario' | 'background'
   isDragging?: boolean
   isDropTarget?: boolean
+  /**
+   * Live execution status while a run is in flight (feature 011).
+   *
+   * Undefined means "no live information" — either no run, or a reporter that
+   * produced nothing — and the row renders exactly as it always has.
+   */
+  liveStatus?: ExecutionStatus
+  /** Milliseconds the step took, once it has finished. */
+  liveDurationMs?: number
 }>()
 
 const emit = defineEmits<{
@@ -41,6 +51,17 @@ const canMoveUp = computed(() => props.index > 0)
 const canMoveDown = computed(() => props.index < props.totalSteps - 1)
 
 const formattedPattern = computed(() => formatStepPattern(props.step.pattern))
+
+const live = computed(() =>
+  props.liveStatus ? statusPresentation(props.liveStatus) : null,
+)
+
+/** Duration is only meaningful once the step has actually finished. */
+const liveDuration = computed(() =>
+  props.liveDurationMs !== undefined && props.liveStatus !== 'running'
+    ? formatDuration(props.liveDurationMs)
+    : '',
+)
 
 function handleDragStart(event: DragEvent) {
   emit('drag-start', event)
@@ -70,7 +91,8 @@ function handleDragEnd() {
       'has-error': hasError,
       'is-dragging': isDragging,
       'is-drop-target': isDropTarget,
-      'background-step-row': stepType === 'background'
+      'background-step-row': stepType === 'background',
+      [`live-${liveStatus}`]: !!liveStatus
     }"
     :data-testid="`${stepType}-step`"
     draggable="true"
@@ -107,6 +129,18 @@ function handleDragEnd() {
 
     <div class="step-content">
       <div class="step-header">
+        <!-- Live run status. Icon + accessible label, never colour alone. -->
+        <span
+          v-if="live"
+          class="step-live-status"
+          :class="`live-icon-${liveStatus}`"
+          :title="live.label"
+          :aria-label="live.label"
+          role="img"
+          :data-testid="`step-live-status-${liveStatus}`"
+        >
+          <i :class="live.icon" />
+        </span>
         <span
           class="step-keyword"
           :class="step.keyword.toLowerCase()"
@@ -139,6 +173,11 @@ function handleDragEnd() {
           data-testid="remove-btn"
           @click="$emit('remove')"
         />
+        <span
+          v-if="liveDuration"
+          class="step-live-duration"
+          data-testid="step-live-duration"
+        >{{ liveDuration }}</span>
       </div>
 
       <div
@@ -234,6 +273,57 @@ function handleDragEnd() {
 
 .step-row.background-step-row:hover {
   background: rgba(59, 130, 246, 0.06);
+}
+
+/* --- Live run status (feature 011) --- */
+
+/* A left border marks the row's outcome without tinting the text. `running` also
+   gets a background so the executing step is findable at a glance in a long
+   scenario — that is the whole point of watching a run. */
+.step-row.live-running {
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: inset 3px 0 0 var(--p-blue-500, #3b82f6);
+}
+
+.step-row.live-passed {
+  box-shadow: inset 3px 0 0 var(--p-green-500, #22c55e);
+}
+
+.step-row.live-failed {
+  background: rgba(220, 53, 69, 0.06);
+  box-shadow: inset 3px 0 0 var(--p-red-500, #ef4444);
+}
+
+.step-row.live-skipped,
+.step-row.live-interrupted {
+  box-shadow: inset 3px 0 0 var(--surface-border);
+}
+
+/* Pending steps are deliberately dimmed rather than badged, so the steps that
+   HAVE run are what draws the eye. */
+.step-row.live-pending .step-content {
+  opacity: 0.55;
+}
+
+.step-live-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+}
+
+.live-icon-pending { color: var(--text-color-secondary); }
+.live-icon-running { color: var(--p-blue-600, #2563eb); }
+.live-icon-passed { color: var(--p-green-600, #16a34a); }
+.live-icon-failed { color: var(--p-red-600, #dc2626); }
+.live-icon-skipped { color: var(--text-color-secondary); }
+.live-icon-interrupted { color: var(--p-orange-600, #ea580c); }
+
+.step-live-duration {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-secondary);
 }
 
 .step-controls {

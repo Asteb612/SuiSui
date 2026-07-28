@@ -59,6 +59,51 @@ export function provisionProgressReporter(workspacePath: string): string | null 
     return null
   }
 }
+/**
+ * Replay a captured run instead of executing Playwright — E2E support only.
+ *
+ * Live per-step progress can only be exercised end to end if something produces
+ * reporter output, and Constitution III forbids launching a real browser from the
+ * test suite. So an E2E run streams a checked-in capture through the SAME stdout
+ * path a real run uses: the real parser, the real IPC channel, the real UI.
+ *
+ * Double-gated on `APP_TEST_MODE` so it cannot be reached in a shipped app, and
+ * returns null — leaving the real run untouched — whenever it is not requested.
+ */
+async function replayScriptedRun(
+  onOutput?: (stream: 'stdout' | 'stderr', data: string) => void,
+): Promise<BatchRunResult | null> {
+  const fixture = process.env.TEST_RUN_PROGRESS_FIXTURE
+  if (process.env.APP_TEST_MODE !== '1' || !fixture) return null
+
+  let lines: string[]
+  try {
+    lines = fs.readFileSync(fixture, 'utf-8').split('\n').filter(Boolean)
+  } catch (error) {
+    logger.warn('Scripted run fixture could not be read', { fixture, error: String(error) })
+    return null
+  }
+
+  // Paced so the UI genuinely renders intermediate states; a synchronous dump
+  // would only ever prove the terminal state, never that a step was seen running.
+  const perLineMs = Number(process.env.TEST_RUN_PROGRESS_INTERVAL_MS ?? '250')
+
+  for (const line of lines) {
+    onOutput?.('stdout', `${line}\n`)
+    await new Promise((resolve) => setTimeout(resolve, perLineMs))
+  }
+
+  return {
+    status: 'failed',
+    featureResults: [],
+    summary: { total: lines.length, passed: 0, failed: 0, skipped: 0, features: 0 },
+    duration: lines.length * perLineMs,
+    stdout: '',
+    stderr: '',
+    errors: [],
+  }
+}
+
 const debugRunner = process.env.SUISUI_DEBUG_RUNNER === '1'
 
 /**
@@ -302,6 +347,9 @@ export class RunnerService {
   }
 
   async runBatch(options: BatchRunOptions, onOutput?: (stream: 'stdout' | 'stderr', data: string) => void): Promise<BatchRunResult> {
+    const scripted = await replayScriptedRun(onOutput)
+    if (scripted) return scripted
+
     const workspaceService = getWorkspaceService()
     const workspacePath = workspaceService.getPath()
 

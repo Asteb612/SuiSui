@@ -10,7 +10,8 @@ import StepAddDialog from './StepAddDialog.vue'
 import { parseTableValue } from '~/utils/tableUtils'
 import { useThrottle } from '~/composables/useThrottle'
 import { stripAnchors, parseSegments as sharedParseSegments, getOutlinePlaceholder } from '@suisui/shared'
-import type { ScenarioStep, StepDefinition, PatternSegment } from '@suisui/shared'
+import type { ScenarioStep, StepDefinition, PatternSegment, LiveStepDisplay } from '@suisui/shared'
+import { statusPresentation } from '~/utils/runStatus'
 
 interface TableRow {
   [key: string]: string
@@ -134,6 +135,38 @@ const outlineArgOptions = computed(() => {
 })
 
 // Group steps by main keyword (Given/When/Then), hiding And/But
+/**
+ * Live per-step statuses for the scenario currently open, or null when there is
+ * nothing live to show (no run, no reporter, or a different scenario executing).
+ *
+ * Keyed by step id rather than index so the grouped rendering below — which
+ * re-buckets steps by keyword — cannot misalign statuses.
+ */
+const liveStepById = computed((): Map<string, LiveStepDisplay> => {
+  const map = new Map<string, LiveStepDisplay>()
+
+  const path = scenarioStore.currentFeaturePath
+  const name = scenarioStore.scenario.name
+  if (!path || !name) return map
+
+  const merged = runnerStore.liveStepsFor(path, name)
+  if (!merged) return map
+
+  // Reported order is background steps first, then the scenario's own.
+  const ordered = [...scenarioStore.background, ...scenarioStore.scenario.steps]
+  ordered.forEach((step, index) => {
+    const display = merged[index]
+    if (display) map.set(step.id, display)
+  })
+
+  return map
+})
+
+/** Live status for one step, or undefined when there is none to show. */
+function liveStatusFor(stepId: string): LiveStepDisplay | undefined {
+  return liveStepById.value.get(stepId)
+}
+
 const groupedSteps = computed((): StepGroup[] => {
   const groups: StepGroup[] = []
   let currentGroup: StepGroup | null = null
@@ -792,7 +825,10 @@ function selectScenario(index: number) {
             >
               <div
                 class="precondition-item"
-                :class="{ dragging: isStepDragging(step.id) }"
+                :class="{
+                  dragging: isStepDragging(step.id),
+                  [`live-${liveStatusFor(step.id)?.status}`]: !!liveStatusFor(step.id)
+                }"
                 :draggable="isBackgroundEditMode"
                 @dragstart="handleStepDragStart($event, 'background', step.id)"
                 @dragend="handleStepDragEnd"
@@ -801,7 +837,22 @@ function selectScenario(index: number) {
                   v-if="isBackgroundEditMode"
                   class="pi pi-bars drag-handle"
                 />
-                
+
+                <!-- Live run status. The label says "background" so a step shown
+                     as executing is attributable to the Background, not the
+                     scenario body (FR-005). -->
+                <span
+                  v-if="liveStatusFor(step.id)"
+                  class="live-status"
+                  :class="`live-icon-${liveStatusFor(step.id)!.status}`"
+                  :title="`Background step — ${statusPresentation(liveStatusFor(step.id)!.status).label}`"
+                  :aria-label="`Background step — ${statusPresentation(liveStatusFor(step.id)!.status).label}`"
+                  role="img"
+                  :data-testid="`live-status-background-${liveStatusFor(step.id)!.status}`"
+                >
+                  <i :class="statusPresentation(liveStatusFor(step.id)!.status).icon" />
+                </span>
+
                 <!-- Read mode: formatted text -->
                 <span
                   v-if="!isBackgroundEditMode"
@@ -1021,7 +1072,8 @@ function selectScenario(index: number) {
                       class="step-item"
                       :class="{
                         'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
-                        dragging: isStepDragging(step.id)
+                        dragging: isStepDragging(step.id),
+                        [`live-${liveStatusFor(step.id)?.status}`]: !!liveStatusFor(step.id)
                       }"
                       :draggable="isEditMode"
                       @dragstart="handleStepDragStart($event, 'scenario', step.id)"
@@ -1031,6 +1083,19 @@ function selectScenario(index: number) {
                         v-if="isEditMode"
                         class="pi pi-bars drag-handle"
                       />
+
+                      <!-- Live run status: icon + accessible label, never colour alone. -->
+                      <span
+                        v-if="liveStatusFor(step.id)"
+                        class="live-status"
+                        :class="`live-icon-${liveStatusFor(step.id)!.status}`"
+                        :title="statusPresentation(liveStatusFor(step.id)!.status).label"
+                        :aria-label="statusPresentation(liveStatusFor(step.id)!.status).label"
+                        role="img"
+                        :data-testid="`live-status-${liveStatusFor(step.id)!.status}`"
+                      >
+                        <i :class="statusPresentation(liveStatusFor(step.id)!.status).icon" />
+                      </span>
 
                       <!-- Read mode: show formatted step text -->
                       <span
@@ -2070,6 +2135,54 @@ function selectScenario(index: number) {
 .step-item:hover {
   background: var(--surface-hover);
 }
+
+/* --- Live run status (feature 011) ---
+   Applies to both scenario steps and Background steps. Status is carried by an
+   icon and an accessible label; these rules only reinforce it. */
+
+.step-item.live-running,
+.precondition-item.live-running {
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 3px 0 0 var(--p-blue-500, #3b82f6);
+}
+
+.step-item.live-passed,
+.precondition-item.live-passed {
+  box-shadow: inset 3px 0 0 var(--p-green-500, #22c55e);
+}
+
+.step-item.live-failed,
+.precondition-item.live-failed {
+  background: rgba(220, 53, 69, 0.07);
+  box-shadow: inset 3px 0 0 var(--p-red-500, #ef4444);
+}
+
+.step-item.live-skipped,
+.step-item.live-interrupted,
+.precondition-item.live-skipped,
+.precondition-item.live-interrupted {
+  box-shadow: inset 3px 0 0 var(--surface-border);
+}
+
+/* Steps still to come are dimmed so the run's actual position stands out. */
+.step-item.live-pending,
+.precondition-item.live-pending {
+  opacity: 0.55;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+}
+
+.live-icon-pending { color: var(--text-color-secondary); }
+.live-icon-running { color: var(--p-blue-600, #2563eb); }
+.live-icon-passed { color: var(--p-green-600, #16a34a); }
+.live-icon-failed { color: var(--p-red-600, #dc2626); }
+.live-icon-skipped { color: var(--text-color-secondary); }
+.live-icon-interrupted { color: var(--p-orange-600, #ea580c); }
 
 .step-item.dragging {
   opacity: 0.4;

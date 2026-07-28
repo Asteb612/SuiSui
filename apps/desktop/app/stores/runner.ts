@@ -8,13 +8,25 @@ import type {
   RunConfiguration,
   BatchRunOptions,
   LiveRunState,
+  AuthoredSteps,
+  LiveStepDisplay,
+  ScenarioExecution,
+  ScenarioStep,
+  ReportedScenarioOutcome,
 } from '@suisui/shared'
 import {
   DEFAULT_RUN_CONFIGURATION,
   applyProgressEvent,
+  applyReportOutcomes,
   emptyLiveRunState,
   reconcileLiveRun,
+  mergeLiveSteps,
+  parseFeatureSteps,
+  authoredStepsFor,
+  stepTitleMatches,
+  resolvePattern,
 } from '@suisui/shared'
+import { useScenarioStore } from './scenario'
 
 /**
  * Unsubscribe handle for the live-progress push (one subscription at a time).
@@ -79,6 +91,91 @@ export function updateProgressFromLine(p: RunProgress, rawLine: string): void {
     p.completed++
     p.skipped++
   }
+}
+
+/** Cache key for a scenario's authored step list. */
+function authoredKey(relativePath: string, scenarioTitle: string): string {
+  return `${relativePath}\n${scenarioTitle}`
+}
+
+/**
+ * Authored steps taken from the feature currently open in the editor.
+ *
+ * Preferred over reading the file because it reflects UNSAVED edits — the steps
+ * the user is looking at are the ones their statuses should land on.
+ *
+ * Returns null when the open feature is a different file, or has no scenario
+ * matching the reported title, so the caller falls back to reading from disk.
+ */
+function authoredFromEditor(
+  editor: ReturnType<typeof useScenarioStore>,
+  relativePath: string,
+  scenarioTitle: string,
+): AuthoredSteps | null {
+  if (editor.currentFeaturePath !== relativePath) return null
+
+  // An outline row reports its substituted title, so exact first, tolerant second.
+  const scenario =
+    editor.scenarios.find((s) => s.name === scenarioTitle) ??
+    editor.scenarios.find((s) => stepTitleMatches(s.name, scenarioTitle))
+  if (!scenario) return null
+
+  // Same shape the reporter emits: keyword + the pattern with its args filled in.
+  const title = (step: ScenarioStep) =>
+    `${step.keyword} ${resolvePattern(step.pattern, step.args)}`
+
+  const background = editor.background.map(title)
+
+  return {
+    titles: [...background, ...scenario.steps.map(title)],
+    backgroundCount: background.length,
+  }
+}
+
+/** Flatten a batch result into the per-scenario outcomes reconciliation needs. */
+function reportedOutcomes(result: BatchRunResult): ReportedScenarioOutcome[] {
+  // Arrives over IPC and a failed/aborted run can omit sections of it, so nothing
+  // here may assume the shape is complete.
+  return (result.featureResults ?? []).flatMap((feature) =>
+    (feature.scenarioResults ?? []).map((scenario) => ({
+      relativePath: feature.relativePath,
+      name: scenario.name,
+      status: scenario.status,
+    })),
+  )
+}
+
+/**
+ * Find the execution of one scenario in live state.
+ *
+ * Live state is keyed by the reporter's testId, which the editor has no way to
+ * know, so lookups go through feature path + title instead. A `Scenario Outline`
+ * has one execution PER example row; the latest-started is used, which is the row
+ * a viewer of the editor would take "this scenario is running" to mean.
+ */
+function findExecution(
+  live: LiveRunState,
+  relativePath: string,
+  scenarioTitle: string,
+): ScenarioExecution | undefined {
+  let best: ScenarioExecution | undefined
+
+  for (const execution of Object.values(live.scenarios)) {
+    if (execution.relativePath !== relativePath) continue
+    if (execution.title !== scenarioTitle && !stepTitleMatches(scenarioTitle, execution.title)) {
+      continue
+    }
+    // Prefer whatever is actually running, then the most recently started.
+    if (
+      !best ||
+      (execution.status === 'running' && best.status !== 'running') ||
+      (execution.status === best.status && (execution.startedAt ?? 0) > (best.startedAt ?? 0))
+    ) {
+      best = execution
+    }
+  }
+
+  return best
 }
 
 /**
@@ -151,6 +248,16 @@ export const useRunnerStore = defineStore('runner', {
     // GLOBAL_SCOPE for the filters runner, or a feature path for a single-spec quick-run.
     activeScope: GLOBAL_SCOPE as string,
     scopes: { [GLOBAL_SCOPE]: emptyScope() } as Record<string, RunScope>,
+
+    /**
+     * Authored step lists for scenarios seen during a run, keyed by
+     * `relativePath\ntitle`.
+     *
+     * Needed because the reporter emits nothing for steps that have not run: the
+     * authored list is the only source of the pending tail. Kept in state (not
+     * module scope) so it resets with the store and cannot leak between tests.
+     */
+    authoredSteps: {} as Record<string, AuthoredSteps>,
   }),
 
   getters: {
@@ -172,6 +279,36 @@ export const useRunnerStore = defineStore('runner', {
     /** Live per-step execution state for the displayed scope (feature 011). */
     live(): LiveRunState {
       return this.currentScope.live
+    },
+
+    /**
+     * Steps of a scenario as they should be displayed: authored text, live status.
+     *
+     * Returns null when there is nothing live to show — no progress events at all,
+     * or no authored list for this scenario — so callers keep rendering exactly
+     * what they rendered before this feature existed.
+     */
+    liveStepsFor(): (relativePath: string, scenarioTitle: string) => LiveStepDisplay[] | null {
+      const live = this.currentScope.live
+      const authoredCache = this.authoredSteps
+
+      return (relativePath: string, scenarioTitle: string) => {
+        if (!live.available) return null
+
+        const authored = authoredCache[authoredKey(relativePath, scenarioTitle)]
+        if (!authored) return null
+
+        return mergeLiveSteps(authored, findExecution(live, relativePath, scenarioTitle))
+      }
+    },
+
+    /** Live execution record for a scenario, if it ran in the current run. */
+    executionFor(): (
+      relativePath: string,
+      scenarioTitle: string,
+    ) => ScenarioExecution | undefined {
+      const live = this.currentScope.live
+      return (relativePath, scenarioTitle) => findExecution(live, relativePath, scenarioTitle)
     },
     batchResult(): BatchRunResult | null {
       return this.currentScope.batchResult
@@ -271,6 +408,32 @@ export const useRunnerStore = defineStore('runner', {
         this.scopes[this.activeScope] = emptyScope(this.activeScope !== GLOBAL_SCOPE)
       }
       return this.scopes[this.activeScope]!
+    },
+
+    /**
+     * Make sure a scenario's authored step list is available for display.
+     *
+     * Best-effort: on failure the scenario simply shows no per-step detail and the
+     * aggregate counters carry the run, exactly as before this feature.
+     */
+    async ensureAuthoredSteps(relativePath: string, scenarioTitle: string) {
+      const key = authoredKey(relativePath, scenarioTitle)
+      if (this.authoredSteps[key]) return
+
+      // The open editor wins: it has the user's unsaved edits, the file does not.
+      const fromEditor = authoredFromEditor(useScenarioStore(), relativePath, scenarioTitle)
+      if (fromEditor) {
+        this.authoredSteps[key] = fromEditor
+        return
+      }
+
+      try {
+        const content = await window.api.features.read(relativePath)
+        const authored = authoredStepsFor(parseFeatureSteps(content), scenarioTitle)
+        if (authored) this.authoredSteps[key] = authored
+      } catch {
+        // Unreadable or renamed mid-run — leave it absent.
+      }
     },
 
     /** Select which scope the runner view displays (GLOBAL_SCOPE or a feature path). */
@@ -373,6 +536,8 @@ export const useRunnerStore = defineStore('runner', {
       s.progress = emptyProgress()
       // A new run must never show anything from the previous one.
       s.live = emptyLiveRunState()
+      // Re-read authored steps too: the user may have edited the feature since.
+      this.authoredSteps = {}
       stopRequested = false
       s.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
       s.errors = []
@@ -391,7 +556,25 @@ export const useRunnerStore = defineStore('runner', {
       // filtered out of the log stream in the main process.
       unsubscribeProgress?.()
       unsubscribeProgress = window.api.runner.onProgress((event) => {
-        s.live = applyProgressEvent(s.live, event)
+        // Verify ordinals against the authored steps when we have them, so a
+        // drifted index is dropped rather than painting the wrong step.
+        const authored =
+          event.type === 'stepStart' || event.type === 'stepEnd'
+            ? this.authoredSteps[
+                authoredKey(
+                  s.live.scenarios[event.testId]?.relativePath ?? '',
+                  s.live.scenarios[event.testId]?.title ?? '',
+                )
+              ]
+            : undefined
+
+        s.live = applyProgressEvent(s.live, event, authored?.titles)
+
+        // Fetching is async; kick it off as soon as a scenario appears so its
+        // steps are ready to display by the time they start reporting.
+        if (event.type === 'testStart') {
+          void this.ensureAuthoredSteps(event.relativePath, event.title)
+        }
       })
 
       try {
@@ -446,8 +629,13 @@ export const useRunnerStore = defineStore('runner', {
         window.api.runner.offRunnerLog()
         unsubscribeProgress?.()
         unsubscribeProgress = null
-        // Nothing may be left showing `running` once the run is over.
+        // Nothing may be left showing `running` once the run is over...
         s.live = reconcileLiveRun(s.live, stopRequested ? 'stopped' : 'completed')
+        // ...and where the report disagrees with what the live stream said, the
+        // report wins (FR-017) — it is the authoritative record of the run.
+        if (s.batchResult) {
+          s.live = applyReportOutcomes(s.live, reportedOutcomes(s.batchResult))
+        }
         stopRequested = false
         this.isRunning = false
         s.startedAt = 0

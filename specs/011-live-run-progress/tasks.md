@@ -38,9 +38,9 @@ pnpm monorepo. Shared contracts and pure logic in `packages/shared/src/`; main p
 
 **Purpose**: Establish the shared type surface everything else compiles against.
 
-- [X] T001 Create `packages/shared/src/types/run-progress.ts` with `ExecutionStatus`, `StepExecution`, `ScenarioExecution`, `LiveRunState`, and the `RunProgressEvent` union, exactly as specified in data-model.md
-- [X] T002 Create the barrel `packages/shared/src/run-progress/index.ts` and add `export * from './types/run-progress'` plus `export * from './run-progress'` to `packages/shared/src/index.ts`
-- [X] T003 Run `pnpm --filter @suisui/shared build` then `pnpm typecheck; echo "exit=$?"` and confirm the new types resolve from both `apps/desktop/electron` and `apps/desktop/app`
+- [x] T001 Create `packages/shared/src/types/run-progress.ts` with `ExecutionStatus`, `StepExecution`, `ScenarioExecution`, `LiveRunState`, and the `RunProgressEvent` union, exactly as specified in data-model.md
+- [x] T002 Create the barrel `packages/shared/src/run-progress/index.ts` and add `export * from './types/run-progress'` plus `export * from './run-progress'` to `packages/shared/src/index.ts`
+- [x] T003 Run `pnpm --filter @suisui/shared build` then `pnpm typecheck; echo "exit=$?"` and confirm the new types resolve from both `apps/desktop/electron` and `apps/desktop/app`
 
 **Checkpoint**: Shared types compile and are importable from both processes.
 
@@ -55,35 +55,35 @@ events end to end. No per-step display yet; that is US1.
 
 ### Pure logic in `@suisui/shared`
 
-- [X] T004 [P] Write failing tests in `packages/shared/src/__tests__/parseProgressLine.test.ts`: a valid event of each `type` parses; a line without the sentinel returns `null`; a sentinel with malformed JSON returns `null`; an unknown `type` returns `null`; an event missing a required field returns `null`; and a plain log line that merely *contains* the sentinel mid-line is not treated as an event
-- [X] T005 Implement `parseProgressLine(line: string): RunProgressEvent | null` in `packages/shared/src/run-progress/parseProgressLine.ts` until T004 passes. Treat the payload as untrusted input — never throw, return `null` for anything unrecognized
-- [X] T006 [P] Write failing tests in `packages/shared/src/__tests__/liveRunReducer.test.ts`: `stepEnd` arriving before `stepStart`; an event for an unknown `testId` creates its scenario rather than being dropped; two tests interleaved keep separate step state; a retry bumps `attempt`; **a `stepEnd` whose title disagrees with the authored step at that index is dropped**; `runEnd` forces every `running` step and scenario to a terminal status; and `available` flips true on the first event
-- [X] T007 Implement `liveRunReducer(state, event, authoredSteps?)` in `packages/shared/src/run-progress/liveRunReducer.ts` until T006 passes. Pure — no I/O, no Pinia. `running` is a **set of testIds**, never a single value
-- [X] T008 Run `pnpm --filter @suisui/shared build` then `pnpm test; echo "exit=$?"` and confirm the shared suite is green
+- [x] T004 [P] Write failing tests in `packages/shared/src/__tests__/parseProgressLine.test.ts`: a valid event of each `type` parses; a line without the sentinel returns `null`; a sentinel with malformed JSON returns `null`; an unknown `type` returns `null`; an event missing a required field returns `null`; and a plain log line that merely _contains_ the sentinel mid-line is not treated as an event
+- [x] T005 Implement `parseProgressLine(line: string): RunProgressEvent | null` in `packages/shared/src/run-progress/parseProgressLine.ts` until T004 passes. Treat the payload as untrusted input — never throw, return `null` for anything unrecognized
+- [x] T006 [P] Write failing tests in `packages/shared/src/__tests__/liveRunReducer.test.ts`: `stepEnd` arriving before `stepStart`; an event for an unknown `testId` creates its scenario rather than being dropped; two tests interleaved keep separate step state; a retry bumps `attempt`; **a `stepEnd` whose title disagrees with the authored step at that index is dropped**; `runEnd` forces every `running` step and scenario to a terminal status; and `available` flips true on the first event
+- [x] T007 Implement `liveRunReducer(state, event, authoredSteps?)` in `packages/shared/src/run-progress/liveRunReducer.ts` until T006 passes. Pure — no I/O, no Pinia. `running` is a **set of testIds**, never a single value
+- [x] T008 Run `pnpm --filter @suisui/shared build` then `pnpm test; echo "exit=$?"` and confirm the shared suite is green
 
 ### Reporter (runs inside the workspace's Playwright)
 
-- [X] T009 Create the reporter asset `apps/desktop/electron/assets/suisui-progress-reporter.cjs`: plain CommonJS implementing `onBegin`/`onTestBegin`/`onStepBegin`/`onStepEnd`/`onTestEnd`/`onEnd`, emitting one sentinel-prefixed NDJSON line per event. Only steps with `category === 'test.step'` produce events; the step `index` is the running count of such steps per test; every step event carries its `title`. **Every callback body wrapped in try/catch** — a reporter exception must never fail the user's tests
-- [ ] T010 [P] Capture a reporter fixture to `apps/desktop/electron/__tests__/fixtures/progress-capture.ndjson` following the recipe in quickstart.md, covering: a passing scenario, a failing scenario with following steps skipped, a scenario with a `Background`, a `Scenario Outline` with 2+ rows, and a parallel run with interleaved tests
-- [ ] T011 Write a replay test in `apps/desktop/electron/__tests__/progressReplay.test.ts` that feeds the captured fixture through the real `parseProgressLine` + `liveRunReducer` and asserts the terminal state: no step left `running`, statuses matching the known suite. This is how the reporter is covered without running real Playwright (Constitution III)
+- [x] T009 Create the reporter asset `apps/desktop/electron/assets/suisui-progress-reporter.cjs`: plain CommonJS implementing `onBegin`/`onTestBegin`/`onStepBegin`/`onStepEnd`/`onTestEnd`/`onEnd`, emitting one sentinel-prefixed NDJSON line per event. Only steps with `category === 'test.step'` produce events; the step `index` is the running count of such steps per test; every step event carries its `title`. **Every callback body wrapped in try/catch** — a reporter exception must never fail the user's tests
+- [x] T010 [P] Capture a reporter fixture to `apps/desktop/electron/__tests__/fixtures/progress-capture.ndjson` following the recipe in quickstart.md, covering: a passing scenario, a failing scenario with following steps skipped, a scenario with a `Background`, a `Scenario Outline` with 2+ rows, and a parallel run with interleaved tests
+- [x] T011 Write a replay test in `apps/desktop/electron/__tests__/progressReplay.test.ts` that feeds the captured fixture through the real `parseProgressLine` + `liveRunReducer` and asserts the terminal state: no step left `running`, statuses matching the known suite. This is how the reporter is covered without running real Playwright (Constitution III)
 
 ### RunnerService wiring
 
-- [X] T012 Write failing tests in `apps/desktop/electron/__tests__/runnerProgress.test.ts` using `FakeCommandRunner`: the reporter path is appended to `--reporter` when the file was written; it is **not** appended when writing fails **and the run still proceeds**; sentinel lines in the fake stdout are not forwarded to the human log; ordinary lines are
-- [X] T013 Implement reporter provisioning in `apps/desktop/electron/services/RunnerService.ts`: copy the asset to `<workspace>/.app/suisui-progress-reporter.cjs` before each run (overwriting), and append its absolute path to the existing `--reporter=list,json,html` chain. Wrap the write — a failure silently skips the reporter and never fails the run (FR-019)
+- [x] T012 Write failing tests in `apps/desktop/electron/__tests__/runnerProgress.test.ts` using `FakeCommandRunner`: the reporter path is appended to `--reporter` when the file was written; it is **not** appended when writing fails **and the run still proceeds**; sentinel lines in the fake stdout are not forwarded to the human log; ordinary lines are
+- [x] T013 Implement reporter provisioning in `apps/desktop/electron/services/RunnerService.ts`: copy the asset to `<workspace>/.app/suisui-progress-reporter.cjs` before each run (overwriting), and append its absolute path to the existing `--reporter=list,json,html` chain. Wrap the write — a failure silently skips the reporter and never fails the run (FR-019)
 
 ### IPC (all five touchpoints)
 
-- [X] T014 Add `RUNNER_PROGRESS: 'runner:progress'` to `packages/shared/src/ipc/channels.ts`
-- [X] T015 Add `onProgress: (callback: (event: RunProgressEvent) => void) => () => void` to the `runner` block in `packages/shared/src/ipc/api.ts`. Use the **unsubscribe-returning** shape used by `update`/`recorder`/`search` — do not copy the older `onRunnerLog`/`offRunnerLog` pattern
-- [X] T016 Split the output stream in the `RUNNER_RUN_BATCH` handler in `apps/desktop/electron/ipc/handlers.ts`: run each complete line through `parseProgressLine`; forward a parsed event on `RUNNER_PROGRESS` and `continue` so it **never reaches the log**; pass everything else to the existing log emit unchanged (FR-018)
-- [X] T017 Add the `onProgress` binding to `apps/desktop/electron/preload.ts`, returning an unsubscribe fn
-- [X] T018 Run `pnpm --filter @suisui/shared build`, then `pnpm typecheck; echo "exit=$?"` and `pnpm test; echo "exit=$?"`; confirm `packages/shared/src/__tests__/ipcContract.test.ts` passes with the new channel
+- [x] T014 Add `RUNNER_PROGRESS: 'runner:progress'` to `packages/shared/src/ipc/channels.ts`
+- [x] T015 Add `onProgress: (callback: (event: RunProgressEvent) => void) => () => void` to the `runner` block in `packages/shared/src/ipc/api.ts`. Use the **unsubscribe-returning** shape used by `update`/`recorder`/`search` — do not copy the older `onRunnerLog`/`offRunnerLog` pattern
+- [x] T016 Split the output stream in the `RUNNER_RUN_BATCH` handler in `apps/desktop/electron/ipc/handlers.ts`: run each complete line through `parseProgressLine`; forward a parsed event on `RUNNER_PROGRESS` and `continue` so it **never reaches the log**; pass everything else to the existing log emit unchanged (FR-018)
+- [x] T017 Add the `onProgress` binding to `apps/desktop/electron/preload.ts`, returning an unsubscribe fn
+- [x] T018 Run `pnpm --filter @suisui/shared build`, then `pnpm typecheck; echo "exit=$?"` and `pnpm test; echo "exit=$?"`; confirm `packages/shared/src/__tests__/ipcContract.test.ts` passes with the new channel
 
 ### Renderer plumbing
 
-- [X] T019 Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for the store shell: subscribing on run start, unsubscribing when the run ends, live state cleared when a new run starts (FR-022), and `available` staying false when no events arrive
-- [X] T020 Add live run state to `apps/desktop/app/stores/runner.ts`: hold a `LiveRunState` per run scope, subscribe to `onProgress` on run start, feed events through the shared reducer, unsubscribe on completion, and reset on the next run, until T019 passes
+- [x] T019 Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for the store shell: subscribing on run start, unsubscribing when the run ends, live state cleared when a new run starts (FR-022), and `available` staying false when no events arrive
+- [x] T020 Add live run state to `apps/desktop/app/stores/runner.ts`: hold a `LiveRunState` per run scope, subscribe to `onProgress` on run start, feed events through the shared reducer, unsubscribe on completion, and reset on the next run, until T019 passes
 
 **Checkpoint**: Events flow from the workspace's Playwright to the renderer store and the log panel
 stays clean. Nothing is displayed yet — that is US1.
@@ -100,19 +100,19 @@ steps show skipped, and the outcomes match the final report.
 
 ### Tests for User Story 1
 
-- [ ] T021 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for the display merge: authored steps with no execution show `pending`; executions overlay onto the authored list by index; background steps appear first and are labelled as background; a step after a failure shows `skipped` rather than `pending`
-- [ ] T022 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for reconciliation: when the final report disagrees with a live status, the report wins (FR-017); after `runEnd` no step remains `running` (FR-006); a step that never reported completion resolves from the report rather than staying running
-- [ ] T023 [P] [US1] Write a failing test in `packages/shared/src/__tests__/liveRunReducer.test.ts` asserting the **mismatch guard**: a `stepEnd` whose `title` does not match the authored step at that index leaves the step untouched rather than applying a status to the wrong step
+- [x] T021 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for the display merge: authored steps with no execution show `pending`; executions overlay onto the authored list by index; background steps appear first and are labelled as background; a step after a failure shows `skipped` rather than `pending`
+- [x] T022 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for reconciliation: when the final report disagrees with a live status, the report wins (FR-017); after `runEnd` no step remains `running` (FR-006); a step that never reported completion resolves from the report rather than staying running
+- [x] T023 [P] [US1] Write a failing test in `packages/shared/src/__tests__/liveRunReducer.test.ts` asserting the **mismatch guard**: a `stepEnd` whose `title` does not match the authored step at that index leaves the step untouched rather than applying a status to the wrong step
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Provide the authored step list for a scenario in `apps/desktop/app/stores/runner.ts`: use the open feature's parsed scenario when available, otherwise read and parse the feature via the existing `features.read`, so `pending` steps can be shown (FR-002, research Decision 5)
-- [ ] T025 [US1] Implement the merge selector in `apps/desktop/app/stores/runner.ts` that combines the authored step list with `StepExecution` records into the display model, applying the title mismatch guard, until T021 and T023 pass
-- [ ] T026 [US1] Add a live status indicator to `apps/desktop/app/components/StepRow.vue` covering pending, running, passed, failed, skipped, and interrupted, with the running state visually distinct (FR-002, FR-003)
-- [ ] T027 [US1] Reflect live statuses in the scenario editor in `apps/desktop/app/components/ScenarioBuilder.vue` when the executing scenario is the one displayed (FR-012), without mutating scenario content (FR-023)
-- [ ] T028 [US1] Label background steps in the live display in `apps/desktop/app/components/ScenarioBuilder.vue` so they are identifiable as background (FR-005)
-- [ ] T029 [US1] Implement end-of-run reconciliation in `apps/desktop/app/stores/runner.ts`: on run completion, override live statuses from the final report and force any remaining `running` to a terminal status, until T022 passes (FR-006, FR-017)
-- [ ] T030 [US1] Write `apps/desktop/e2e/live-run-progress.spec.ts` covering the US1 journey in `APP_TEST_MODE` with scripted run output: steps transition running → terminal during the run, the failing step is marked failed, later steps show skipped, and nothing remains running at the end
+- [x] T024 [US1] Provide the authored step list for a scenario in `apps/desktop/app/stores/runner.ts`: use the open feature's parsed scenario when available, otherwise read and parse the feature via the existing `features.read`, so `pending` steps can be shown (FR-002, research Decision 5)
+- [x] T025 [US1] Implement the merge selector in `apps/desktop/app/stores/runner.ts` that combines the authored step list with `StepExecution` records into the display model, applying the title mismatch guard, until T021 and T023 pass
+- [x] T026 [US1] Add a live status indicator to `apps/desktop/app/components/StepRow.vue` covering pending, running, passed, failed, skipped, and interrupted, with the running state visually distinct (FR-002, FR-003)
+- [x] T027 [US1] Reflect live statuses in the scenario editor in `apps/desktop/app/components/ScenarioBuilder.vue` when the executing scenario is the one displayed (FR-012), without mutating scenario content (FR-023)
+- [x] T028 [US1] Label background steps in the live display in `apps/desktop/app/components/ScenarioBuilder.vue` so they are identifiable as background (FR-005)
+- [x] T029 [US1] Implement end-of-run reconciliation in `apps/desktop/app/stores/runner.ts`: on run completion, override live statuses from the final report and force any remaining `running` to a terminal status, until T022 passes (FR-006, FR-017)
+- [x] T030 [US1] Write `apps/desktop/e2e/live-run-progress.spec.ts` covering the US1 journey in `APP_TEST_MODE` with scripted run output: steps transition running → terminal during the run, the failing step is marked failed, later steps show skipped, and nothing remains running at the end
 
 **Checkpoint**: US1 is fully functional and shippable on its own.
 
@@ -246,10 +246,10 @@ Task: "Title mismatch guard in packages/shared/src/__tests__/liveRunReducer.test
 ### Incremental Delivery
 
 1. Setup + Foundational → events flow end to end, log stays clean
-2. + US1 → **MVP**: steps light up live
-3. + US2 → whole-run visibility, including parallel
-4. + US3 → stuck-run attribution
-5. + Polish → FR-016 parity, docs, accessibility, issue #77 update
+2. - US1 → **MVP**: steps light up live
+3. - US2 → whole-run visibility, including parallel
+4. - US3 → stuck-run attribution
+5. - Polish → FR-016 parity, docs, accessibility, issue #77 update
 
 ### Parallel Team Strategy
 
