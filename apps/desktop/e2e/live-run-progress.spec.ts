@@ -89,3 +89,76 @@ test.describe('Live run progress', () => {
     }
   })
 })
+
+/**
+ * US2 + US3, driven by a capture with TWO scenarios interleaved. One finishes;
+ * the other stalls mid-step and is still running when the run ends.
+ */
+test.describe('Live run progress — run view', () => {
+  let ctx: AppContext
+  let workspacePath: string
+
+  test.beforeAll(async () => {
+    workspacePath = await copyFixture('with-features')
+    ctx = await launchApp(workspacePath, {
+      TEST_RUN_PROGRESS_FIXTURE: path.resolve(
+        __dirname,
+        'fixtures',
+        'run-progress-parallel.ndjson',
+      ),
+      // 19 lines at 600ms ≈ 11s of run, so the stalled step comfortably crosses
+      // the 5s threshold that makes it worth calling out.
+      TEST_RUN_PROGRESS_INTERVAL_MS: '600',
+    })
+  })
+
+  test.afterAll(async () => {
+    await closeApp(ctx)
+    await cleanupFixture(workspacePath)
+  })
+
+  test('lists executing scenarios and lets their steps be inspected in place', async () => {
+    const { window } = ctx
+
+    await window.locator(`${SEL.featureTreeFile}[data-path="login.feature"]`).click()
+    await expect(window.locator(SEL.scenarioBuilder)).toContainText('Given')
+    await window.locator(SEL.quickRunBtn).click()
+
+    // Both scenarios appear, each identified by name and owning feature (FR-007).
+    const list = window.locator('[data-testid="live-scenarios"]')
+    await expect(list).toBeVisible({ timeout: 15_000 })
+    await expect(list).toContainText('Successful login')
+    await expect(list).toContainText('Failed login')
+
+    // Both are in flight at once — a parallel run highlights every running
+    // scenario, not just one (FR-009).
+    await expect(window.locator('.live-scenario.is-running')).toHaveCount(2)
+
+    // Expanding one shows its steps without leaving the run view (FR-011).
+    await window.locator('[data-testid="live-scenario-toggle"]').first().click()
+    await expect(window.locator('[data-testid="live-steps"]')).toBeVisible()
+
+    // US3: 'Failed login' stalls on a step that never completes. Once its
+    // elapsed time crosses the threshold, the step is called out by name so the
+    // stall is attributable without reading the log.
+    // Asserted inside this test because the callout only exists while the run
+    // is in flight — a separate test would race the run's end.
+    await expect(window.locator('[data-testid="stuck-step"]')).toBeVisible({
+      timeout: 25_000,
+    })
+    await expect(window.locator('[data-testid="stuck-step"]')).toContainText('password')
+
+    // The editor selection is untouched by any of this (FR-013).
+    await window.locator(SEL.backToEditorBtn).click()
+    await expect(window.locator(SEL.scenarioBuilder)).toContainText('Given')
+  })
+
+  test('settles the stalled scenario as interrupted, not failed (FR-020)', async () => {
+    const { window } = ctx
+
+    // Once the run ends nothing may still read as running.
+    await expect(window.locator('[data-testid="live-status-running"]')).toHaveCount(0, {
+      timeout: 25_000,
+    })
+  })
+})

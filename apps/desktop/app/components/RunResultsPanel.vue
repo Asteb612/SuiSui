@@ -3,6 +3,7 @@ import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 import { useRunnerStore } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useStepsStore } from '~/stores/steps'
+import { statusPresentation, formatDuration } from '~/utils/runStatus'
 
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
@@ -160,10 +161,71 @@ function statusClass(status: string): string {
   return `status-${status}`
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
+// --- Live per-scenario / per-step view (feature 011, US2 + US3) ---
+
+/** Which scenario's steps are expanded in the live list. */
+const selectedTestId = ref<string | null>(null)
+
+/** True once progress events have arrived; otherwise the aggregate view stands alone. */
+const hasLiveDetail = computed(
+  () => runnerStore.live.available && runnerStore.liveScenarios.length > 0,
+)
+
+const runningIds = computed(() => new Set(runnerStore.live.running))
+
+/**
+ * Wall clock, derived from the SINGLE elapsed ticker above.
+ *
+ * One interval drives every elapsed readout on this panel (FR-014). A timer per
+ * step would multiply by the number of steps on screen for no added precision.
+ */
+const nowMs = computed(() =>
+  runnerStore.startedAt ? runnerStore.startedAt + elapsedMs.value : Date.now(),
+)
+
+/** Steps of the expanded scenario, or null when there is nothing to show. */
+const selectedSteps = computed(() => {
+  const scenario = runnerStore.liveScenarios.find((s) => s.testId === selectedTestId.value)
+  if (!scenario) return null
+  return runnerStore.liveStepsFor(scenario.relativePath, scenario.title)
+})
+
+function toggleScenario(testId: string): void {
+  selectedTestId.value = selectedTestId.value === testId ? null : testId
 }
+
+/** How long a step has been running, or how long it took once finished. */
+function stepElapsedMs(step: { status: string; startedAt?: number; durationMs?: number }): number {
+  if (step.status === 'running' && step.startedAt) return Math.max(0, nowMs.value - step.startedAt)
+  return step.durationMs ?? 0
+}
+
+/**
+ * The step that has been running longest, surfaced so a stalled run is
+ * attributable to a step without reading the log (US3).
+ *
+ * Only shown once it has been running a while — flagging every step the instant
+ * it starts would make the callout meaningless.
+ */
+const STUCK_THRESHOLD_MS = 5000
+
+const longestRunningStep = computed(() => {
+  let worst: { scenario: string; title: string; elapsed: number } | null = null
+
+  for (const scenario of runnerStore.liveScenarios) {
+    if (!runningIds.value.has(scenario.testId)) continue
+    for (const step of Object.values(scenario.steps)) {
+      if (step.status !== 'running' || !step.startedAt) continue
+      const elapsed = nowMs.value - step.startedAt
+      if (!worst || elapsed > worst.elapsed) {
+        worst = { scenario: scenario.title, title: step.title, elapsed }
+      }
+    }
+  }
+
+  return worst && worst.elapsed >= STUCK_THRESHOLD_MS ? worst : null
+})
+
 </script>
 
 <template>
@@ -243,6 +305,108 @@ function formatDuration(ms: number): string {
             class="run-progress-fill"
             :style="{ width: progressPct + '%' }"
           />
+        </div>
+      </div>
+
+      <!-- Longest-running step, so a stalled run is attributable without the log -->
+      <div
+        v-if="longestRunningStep"
+        class="stuck-step"
+        data-testid="stuck-step"
+      >
+        <i class="pi pi-clock" />
+        <span>
+          Running for {{ formatDuration(longestRunningStep.elapsed) }}:
+          <strong>{{ longestRunningStep.title }}</strong>
+          <span class="stuck-step-scenario">in {{ longestRunningStep.scenario }}</span>
+        </span>
+      </div>
+
+      <!-- Live scenario list (US2). Only appears when the reporter produced
+           events; otherwise the counters above are the whole story. -->
+      <div
+        v-if="hasLiveDetail"
+        class="live-scenarios"
+        data-testid="live-scenarios"
+      >
+        <div
+          v-for="scenario in runnerStore.liveScenarios"
+          :key="scenario.testId"
+          class="live-scenario"
+          :class="[
+            `live-${scenario.status}`,
+            { 'is-running': runningIds.has(scenario.testId) }
+          ]"
+          :data-testid="`live-scenario-${scenario.status}`"
+        >
+          <button
+            type="button"
+            class="live-scenario-head"
+            :aria-expanded="selectedTestId === scenario.testId"
+            data-testid="live-scenario-toggle"
+            @click="toggleScenario(scenario.testId)"
+          >
+            <span
+              class="live-status"
+              :class="`live-icon-${scenario.status}`"
+              :title="statusPresentation(scenario.status).label"
+              :aria-label="statusPresentation(scenario.status).label"
+              role="img"
+            >
+              <i :class="statusPresentation(scenario.status).icon" />
+            </span>
+            <span class="live-scenario-name">{{ scenario.title }}</span>
+            <span class="live-scenario-feature">{{ scenario.relativePath }}</span>
+            <span
+              v-if="scenario.durationMs"
+              class="live-scenario-duration"
+            >{{ formatDuration(scenario.durationMs) }}</span>
+            <i
+              class="pi live-scenario-chevron"
+              :class="selectedTestId === scenario.testId ? 'pi-chevron-down' : 'pi-chevron-right'"
+            />
+          </button>
+
+          <!-- Steps of the selected scenario, without leaving the run view (FR-011) -->
+          <ol
+            v-if="selectedTestId === scenario.testId && selectedSteps"
+            class="live-steps"
+            data-testid="live-steps"
+          >
+            <li
+              v-for="step in selectedSteps"
+              :key="step.index"
+              class="live-step"
+              :class="`live-${step.status}`"
+            >
+              <span
+                class="live-status"
+                :class="`live-icon-${step.status}`"
+                :title="statusPresentation(step.status).label"
+                :aria-label="statusPresentation(step.status).label"
+                role="img"
+              >
+                <i :class="statusPresentation(step.status).icon" />
+              </span>
+              <span class="live-step-title">{{ step.title }}</span>
+              <span
+                v-if="step.isBackground"
+                class="live-step-background"
+              >background</span>
+              <span
+                v-if="stepElapsedMs(step)"
+                class="live-step-elapsed"
+                data-testid="live-step-elapsed"
+              >{{ formatDuration(stepElapsedMs(step)) }}</span>
+            </li>
+          </ol>
+
+          <p
+            v-else-if="selectedTestId === scenario.testId"
+            class="live-steps-empty"
+          >
+            Step details are not available for this scenario.
+          </p>
         </div>
       </div>
 
@@ -629,6 +793,160 @@ function formatDuration(ms: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* --- Live scenario / step list (feature 011, US2 + US3) --- */
+
+.stuck-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(234, 88, 12, 0.08);
+  color: var(--p-orange-700, #c2410c);
+  font-size: 0.82rem;
+}
+
+.stuck-step-scenario {
+  margin-left: 0.4rem;
+  color: var(--text-color-secondary);
+}
+
+.live-scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 0.75rem 0.75rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.live-scenario {
+  border: 1px solid var(--surface-border);
+  border-radius: 6px;
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+/* Every running scenario is highlighted, not just one — a parallel run has
+   several genuinely in flight (FR-009). */
+.live-scenario.is-running {
+  border-color: var(--p-blue-400, #60a5fa);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.live-scenario.live-failed {
+  border-color: var(--p-red-300, #fca5a5);
+}
+
+.live-scenario-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--text-color);
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-scenario-head:hover {
+  background: var(--surface-hover);
+}
+
+.live-scenario-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-scenario-feature {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.74rem;
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-scenario-duration,
+.live-step-elapsed {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-secondary);
+}
+
+.live-scenario-chevron {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--text-color-secondary);
+}
+
+.live-steps {
+  margin: 0;
+  padding: 0.25rem 0.6rem 0.5rem 2rem;
+  list-style: none;
+  border-top: 1px solid var(--surface-border);
+}
+
+.live-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 0;
+  font-size: 0.8rem;
+}
+
+.live-step-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-step.live-pending .live-step-title {
+  color: var(--text-color-secondary);
+}
+
+.live-step-background {
+  flex: 0 0 auto;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  background: var(--surface-ground);
+  font-size: 0.68rem;
+  color: var(--text-color-secondary);
+}
+
+.live-steps-empty {
+  margin: 0;
+  padding: 0.4rem 0.6rem 0.5rem 2rem;
+  border-top: 1px solid var(--surface-border);
+  font-size: 0.78rem;
+  color: var(--text-color-secondary);
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+}
+
+.live-icon-pending { color: var(--text-color-secondary); }
+.live-icon-running { color: var(--p-blue-600, #2563eb); }
+.live-icon-passed { color: var(--p-green-600, #16a34a); }
+.live-icon-failed { color: var(--p-red-600, #dc2626); }
+.live-icon-skipped { color: var(--text-color-secondary); }
+.live-icon-interrupted { color: var(--p-orange-600, #ea580c); }
 
 .summary-bar {
   display: flex;

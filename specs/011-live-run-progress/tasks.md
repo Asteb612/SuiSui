@@ -128,16 +128,16 @@ executing scenario is identified and visually distinguished from completed and n
 
 ### Tests for User Story 2
 
-- [ ] T031 [P] [US2] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for parallel execution: with several `testStart` events and no `testEnd`, **all** of them appear in `running` (FR-009); a `testEnd` removes only that one; interleaved step events from two tests do not cross-contaminate
-- [ ] T032 [P] [US2] Write a failing test in `apps/desktop/app/__tests__/liveRunProgress.test.ts` asserting each `Scenario Outline` example row is tracked as its own scenario execution keyed by its own `testId` (FR-010)
+- [x] T031 [P] [US2] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts` for parallel execution: with several `testStart` events and no `testEnd`, **all** of them appear in `running` (FR-009); a `testEnd` removes only that one; interleaved step events from two tests do not cross-contaminate
+- [x] T032 [P] [US2] Write a failing test in `apps/desktop/app/__tests__/liveRunProgress.test.ts` asserting each `Scenario Outline` example row is tracked as its own scenario execution keyed by its own `testId` (FR-010)
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Render a live scenario list in `apps/desktop/app/components/RunResultsPanel.vue` showing each scenario's name, owning feature, and current status, updating as events arrive (FR-007)
-- [ ] T034 [US2] Visually distinguish executing scenarios from completed and not-yet-started ones in `apps/desktop/app/components/RunResultsPanel.vue`, highlighting **every** running scenario, not just one (FR-008, FR-009)
-- [ ] T035 [US2] Allow selecting a scenario in the live list in `apps/desktop/app/components/RunResultsPanel.vue` to see its steps and live statuses without opening it in the editor (FR-011)
-- [ ] T036 [US2] Confirm and guard the no-auto-navigation rule in `apps/desktop/app/pages/index.vue`: run progress must never change the editor's selected feature or scenario (FR-013)
-- [ ] T037 [US2] Extend `apps/desktop/e2e/live-run-progress.spec.ts` with the US2 journey: a multi-scenario run identifies the executing scenario, shows finished ones with outcomes, exposes the running scenario's steps from the run view, and leaves the editor selection untouched
+- [x] T033 [US2] Render a live scenario list in `apps/desktop/app/components/RunResultsPanel.vue` showing each scenario's name, owning feature, and current status, updating as events arrive (FR-007)
+- [x] T034 [US2] Visually distinguish executing scenarios from completed and not-yet-started ones in `apps/desktop/app/components/RunResultsPanel.vue`, highlighting **every** running scenario, not just one (FR-008, FR-009)
+- [x] T035 [US2] Allow selecting a scenario in the live list in `apps/desktop/app/components/RunResultsPanel.vue` to see its steps and live statuses without opening it in the editor (FR-011)
+- [x] T036 [US2] Confirm and guard the no-auto-navigation rule in `apps/desktop/app/pages/index.vue`: run progress must never change the editor's selected feature or scenario (FR-013)
+- [x] T037 [US2] Extend `apps/desktop/e2e/live-run-progress.spec.ts` with the US2 journey: a multi-scenario run identifies the executing scenario, shows finished ones with outcomes, exposes the running scenario's steps from the run view, and leaves the editor selection untouched
 
 **Checkpoint**: US1 and US2 both work independently.
 
@@ -152,14 +152,14 @@ shows that step as running with a visibly increasing elapsed time.
 
 ### Tests for User Story 3
 
-- [ ] T038 [P] [US3] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts`: a running step exposes its elapsed time derived from `startedAt`; a step that never completes stays `running` and is never auto-marked passed (FR-015); stopping a run marks in-flight steps `interrupted` and leaves unreached steps unmarked rather than failed (FR-020)
+- [x] T038 [P] [US3] Write failing tests in `apps/desktop/app/__tests__/liveRunProgress.test.ts`: a running step exposes its elapsed time derived from `startedAt`; a step that never completes stays `running` and is never auto-marked passed (FR-015); stopping a run marks in-flight steps `interrupted` and leaves unreached steps unmarked rather than failed (FR-020)
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] Show per-step elapsed time for the running step in `apps/desktop/app/components/RunResultsPanel.vue`, driven by a single shared ticker rather than a timer per step (FR-014)
-- [ ] T040 [US3] Surface the longest-running step prominently in `apps/desktop/app/components/RunResultsPanel.vue` so a stalled run is attributable without reading the log (US3 scenario 2, SC-007)
-- [ ] T041 [US3] Handle stop and crash in `apps/desktop/app/stores/runner.ts`: mark in-flight steps and scenarios `interrupted` (never `failed`), leave unreached steps unmarked, and ensure a died run settles with nothing `running`, until T038 passes (FR-020, FR-021)
-- [ ] T042 [US3] Extend `apps/desktop/e2e/live-run-progress.spec.ts` with the US3 journey: a slow step shows a climbing elapsed time, and stopping mid-step leaves it marked interrupted rather than failed
+- [x] T039 [US3] Show per-step elapsed time for the running step in `apps/desktop/app/components/RunResultsPanel.vue`, driven by a single shared ticker rather than a timer per step (FR-014)
+- [x] T040 [US3] Surface the longest-running step prominently in `apps/desktop/app/components/RunResultsPanel.vue` so a stalled run is attributable without reading the log (US3 scenario 2, SC-007)
+- [x] T041 [US3] Handle stop and crash in `apps/desktop/app/stores/runner.ts`: mark in-flight steps and scenarios `interrupted` (never `failed`), leave unreached steps unmarked, and ensure a died run settles with nothing `running`, until T038 passes (FR-020, FR-021)
+- [x] T042 [US3] Extend `apps/desktop/e2e/live-run-progress.spec.ts` with the US3 journey: a slow step shows a climbing elapsed time, and stopping mid-step leaves it marked interrupted rather than failed
 
 **Checkpoint**: All three user stories work independently.
 

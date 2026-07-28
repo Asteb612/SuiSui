@@ -302,6 +302,24 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
+    /**
+     * Every scenario the current run has touched, ordered for display.
+     *
+     * Running first — that is what the viewer is looking for — then the rest in
+     * the order they started, so the list reads as the run progressed rather than
+     * jumping around as statuses land.
+     */
+    liveScenarios(): ScenarioExecution[] {
+      const running = new Set(this.currentScope.live.running)
+
+      return Object.values(this.currentScope.live.scenarios).sort((a, b) => {
+        const aRunning = running.has(a.testId)
+        const bRunning = running.has(b.testId)
+        if (aRunning !== bRunning) return aRunning ? -1 : 1
+        return (a.startedAt ?? 0) - (b.startedAt ?? 0)
+      })
+    },
+
     /** Live execution record for a scenario, if it ran in the current run. */
     executionFor(): (
       relativePath: string,
