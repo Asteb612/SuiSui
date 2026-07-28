@@ -359,6 +359,9 @@ See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), an
 
 ## Active Technologies
 
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Reuses `parseFeatureOutline` + `IFileWatcher` (feature 009) and `RunnerService.runBatch({ tags })` (feature 002) (010-tag-management)
+- No persisted storage: the tag index is in-memory and session-scoped. Bulk edits write directly to the user's `.feature` files — the only persistent effect, and the main risk of the feature (010-tag-management)
+
 - TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x. **No new runtime dependency** — file watching uses Node's built-in `fs.watch` (recursive), not `chokidar` (009-global-search)
 - No persisted storage: the search index is in-memory and session-scoped, rebuilt on workspace open; nothing is written to `.app/` or to settings (009-global-search)
 
