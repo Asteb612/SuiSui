@@ -332,7 +332,35 @@ See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md), [doc/SERVICES.md](doc/SERVICES.m
 (`recorder:*`), and [doc/FRONTEND.md](doc/FRONTEND.md) (`useRecorderStore` +
 recorder components).
 
+## Global Search (feature 009)
+
+Header Ctrl/Cmd+K search across the workspace. Scope is **names and tags only** —
+feature-file names, feature names, scenario names, and tags. **Step text is
+deliberately not indexed** (a documented narrowing of issue #88); `SearchResultType`
+is the reserved extension point.
+
+- **Index**: `SearchIndexService` (main process) builds a flat in-memory row list on
+  workspace open using `parseFeatureOutline()` — a names-and-tags line scanner in
+  `@suisui/shared`, not a Gherkin parser, and it never throws so one malformed file
+  can't take down the index. Normalized text is precomputed at index time; queries are
+  a linear scan. **Nothing is persisted** — no cache to invalidate.
+- **Freshness**: `IFileWatcher` seam over recursive `fs.watch` (250 ms debounce),
+  with `FakeFileWatcher` for tests. Best-effort by design: workspace open rebuilds,
+  a watcher error triggers one full rescan. Unsaved edits to the open feature are
+  overlaid **in the renderer** from Pinia state, not pushed to main per keystroke.
+- **Matching** (`@suisui/shared/search/matcher`): literal (never a RegExp — FR-010 and
+  an injection surface), case/accent-insensitive, all tokens required in any order.
+  `normalize()` **must preserve length** — `MatchRange` offsets index the original text.
+- **IPC**: `search:query|getStatus` + `search:indexStatus` push. `requestId` is echoed
+  so the renderer discards superseded responses; debouncing alone doesn't guarantee that.
+
+See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), and
+[doc/FRONTEND.md](doc/FRONTEND.md).
+
 ## Active Technologies
+
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x. **No new runtime dependency** — file watching uses Node's built-in `fs.watch` (recursive), not `chokidar` (009-global-search)
+- No persisted storage: the search index is in-memory and session-scoped, rebuilt on workspace open; nothing is written to `.app/` or to settings (009-global-search)
 
 - TypeScript 5.x (strict) on Node.js 21.x (repo/tests use 22) + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x; **new (main-process only)**: `electron-updater` 6.x — the companion consumer of the update metadata `electron-builder` 25.1.8 already emits; reuses `SettingsService`, the typed-IPC + adapter-seam patterns, and the existing GitHub-Releases distribution infra (008-auto-update)
 - Update preferences persisted in `AppSettings` JSON via `SettingsService`; in-memory `UpdateState` in the main `UpdateService` + renderer `update` store; downloads cached by `electron-updater` (008-auto-update)

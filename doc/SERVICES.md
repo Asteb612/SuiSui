@@ -547,3 +547,32 @@ Self-update, deterministic-first and behind a seam (Constitution III).
 Wiring: `main.ts` sets the emitter (broadcasts `UpdateState` to all windows) and calls
 `init().then(checkOnStartup)`; `handlers.ts` registers the `update:*` invoke handlers
 (a `FakeUpdaterAdapter` + dev capability in test mode).
+
+## Search index service (`SearchIndexService`, feature 009-global-search)
+
+Powers the header Ctrl/Cmd+K search over **feature-file names, feature names,
+scenario names, and tags**. Step text is deliberately not indexed.
+
+- **`SearchIndexService`** (`electron/services/SearchIndexService.ts`) builds a flat
+  in-memory `SearchIndexRow[]` when a workspace opens, scanning `.feature` files with
+  `parseFeatureOutline()` from `@suisui/shared` (a names-and-tags line scanner, _not_ a
+  Gherkin parser — it never throws, so one malformed file cannot take down the index).
+  Normalized text is precomputed at index time; queries are a linear scan, which is
+  microseconds at workspace scale (~2,200 rows).
+- **Freshness**: a `byFile` map lets a watcher event re-index a single file. Incremental
+  updates deliberately do **not** flip `state` back to `'building'` — they complete in
+  milliseconds and surfacing them would only flicker the UI.
+- **`IFileWatcher`** (`electron/services/FileWatcher.ts`) is the seam over
+  `fs.watch(dir, { recursive: true })`, debounced/coalesced at 250 ms. `NodeFileWatcher`
+  is the production adapter; `FakeFileWatcher` (in `electron/__tests__/fakes/`) drives
+  change events synchronously so freshness tests never sleep (Constitution III).
+  Recursive watching is best-effort — correctness never depends on it: workspace open
+  rebuilds from scratch, and a watcher error triggers one full rescan rather than a crash.
+- **No persistence.** The index is session-scoped and rebuilt on workspace open, so there
+  is no stale-cache-across-restarts failure mode (unlike `StepCatalogService`, whose
+  on-disk cache exists because AST analysis is expensive).
+- **DI**: the constructor takes an optional `IFileWatcher` and an `IWorkspaceLocator`
+  (the narrow slice of `WorkspaceService` it needs), per Principle IV.
+
+The workspace root always comes from `WorkspaceService`, never the renderer; results carry
+relative paths only.

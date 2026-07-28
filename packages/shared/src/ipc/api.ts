@@ -22,6 +22,7 @@ import type {
   LocatorValidationResult,
 } from '../types/recorder'
 import type { UpdateState, UpdatePreferences } from '../types/update'
+import type { SearchResponse, SearchIndexStatus } from '../types/search'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -190,6 +191,21 @@ export interface ElectronAPI {
     setPreferences: (prefs: Partial<UpdatePreferences>) => Promise<UpdatePreferences>
     /** Subscribe to state-change pushes; returns an unsubscribe fn. */
     onStateChanged: (callback: (state: UpdateState) => void) => () => void
+  }
+
+  search: {
+    /**
+     * Query the workspace search index (feature 009).
+     *
+     * `requestId` is echoed back in the response so the caller can discard
+     * results for a superseded query. An empty or whitespace-only `text`
+     * resolves to an empty result set without scanning.
+     */
+    query: (requestId: number, text: string) => Promise<SearchResponse>
+    /** Current index state — used on mount to render the correct initial UI. */
+    getStatus: () => Promise<SearchIndexStatus>
+    /** Subscribe to index-state pushes; returns an unsubscribe fn. */
+    onIndexStatus: (callback: (status: SearchIndexStatus) => void) => () => void
   }
 }
 

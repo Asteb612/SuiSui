@@ -186,6 +186,17 @@ const api: ElectronAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.UPDATE_STATE_CHANGED, listener)
     },
   },
+
+  search: {
+    query: (requestId, text) => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_QUERY, requestId, text),
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.SEARCH_GET_STATUS),
+    onIndexStatus: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) =>
+        callback(status)
+      ipcRenderer.on(IPC_CHANNELS.SEARCH_INDEX_STATUS, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.SEARCH_INDEX_STATUS, listener)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
