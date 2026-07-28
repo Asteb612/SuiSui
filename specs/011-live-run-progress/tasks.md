@@ -176,7 +176,7 @@ shows that step as running with a visibly increasing elapsed time.
 - [x] T049 [P] Add a Live Run Progress section to `CLAUDE.md` noting the sentinel-stripping rule, ordinal+title step matching, the set-valued `running`, and that the reporter must never fail a run
 - [x] T050 Verify accessibility of the live run UI in `apps/desktop/app/components/RunResultsPanel.vue` and `StepRow.vue`: step status is conveyed by more than colour, and run progress is announced to assistive tech without spamming on every event
 - [x] T051 Walk the manual verification table in quickstart.md, then run `pnpm lint; echo "exit=$?"`, `pnpm typecheck; echo "exit=$?"`, `pnpm test; echo "exit=$?"`, and `pnpm build && pnpm test:e2e`
-- [ ] T052 Update GitHub issue #77: tick the two criteria that were already met, note what this feature added, and record anything deliberately excluded (debugging controls, persisted timings, live progress for runs started outside the app)
+- [x] T052 Update GitHub issue #77: tick the two criteria that were already met, note what this feature added, and record anything deliberately excluded (debugging controls, persisted timings, live progress for runs started outside the app)
 
 ---
 
