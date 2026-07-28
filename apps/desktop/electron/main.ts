@@ -7,7 +7,7 @@ import { IPC_CHANNELS } from '@suisui/shared'
 import { registerIpcHandlers } from './ipc/handlers'
 import { runDepCheck, printDepCheckReport } from './utils/depChecker'
 import { stripBillingEnv } from './services/ai/billingEnv'
-import { getUpdateService } from './services'
+import { getUpdateService, getSearchIndexService } from './services'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
@@ -166,6 +166,25 @@ function initAutoUpdate() {
     .catch((err) => console.warn('[AutoUpdate] init failed:', err))
 }
 
+/**
+ * Wire global search: push index-state changes to all windows, and build the
+ * index once for a workspace that was already open at startup (a restored
+ * workspace never goes through the WORKSPACE_SET handler).
+ */
+function initSearchIndex() {
+  const searchIndexService = getSearchIndexService()
+  searchIndexService.onStatusChange((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.SEARCH_INDEX_STATUS, status)
+      }
+    }
+  })
+  void searchIndexService
+    .rebuild()
+    .catch((err) => console.warn('[Search] initial index build failed:', err))
+}
+
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
@@ -256,6 +275,7 @@ app.whenReady().then(() => {
   createWindow()
   setupAutoReload()
   initAutoUpdate()
+  initSearchIndex()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

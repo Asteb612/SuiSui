@@ -1035,3 +1035,27 @@ marker, and diagnostics badges. Filtering logic is the pure
 
 All updater logic is main-process only; the renderer only ever sees the serializable
 `UpdateState` via `window.api.update`.
+
+## Global search (renderer, feature 009-global-search)
+
+- **`GlobalSearch.vue`** sits in the `<header>` of `pages/index.vue` and is rendered only
+  when a workspace is open (otherwise a disabled hint explains why). It owns the
+  Ctrl/Cmd+K `window` keydown listener, which **yields** when focus is in another
+  text input or a modal dialog is open — an Electron `globalShortcut` could not express
+  that, since it fires regardless of focus.
+- **`useSearchStore`** (`stores/search.ts`) holds query, results, index status, active
+  index, and the type filter. `setQuery` debounces at 120 ms; `runQuery` stamps a
+  monotonic `requestSeq` and discards any response that is not the latest (FR-029).
+  The counter lives in **state, not module scope** — module scope leaks between store
+  instances and silently discards every response in tests.
+- **Unsaved-edit overlay**: the main-process index reflects _saved_ content. When
+  `scenarioStore.isDirty`, the store drops indexed rows for the open feature and
+  re-derives them from live Pinia state using the same shared `matchText`. Exclusion
+  happens **before** re-adding, or a renamed scenario appears under both names.
+- **Highlighting** slices display text on `MatchRange` offsets; the component never
+  re-runs matching.
+- Results reset when the workspace changes, so results from a previous workspace are
+  never selectable.
+- Activation is emitted upward (`@activate`) and handled in `pages/index.vue`: open the
+  feature, then select `scenarioIndex` for scenario results. A vanished target shows a
+  non-fatal message instead of clearing the editor.

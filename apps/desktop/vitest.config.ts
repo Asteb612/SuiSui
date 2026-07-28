@@ -42,6 +42,9 @@ export default defineConfig({
         // Type-only seam + electron-wiring factory — no unit-testable logic.
         'electron/services/update/IUpdaterAdapter.ts',
         'electron/services/update/getUpdateService.ts',
+        // Real recursive fs.watch adapter — OS-dependent and timing-flaky; the
+        // service is tested against FakeFileWatcher instead (Constitution III).
+        'electron/services/FileWatcher.ts',
       ],
       // Baseline guardrails (set just below current coverage) so PRs
       // can't silently regress. Ratchet these up as coverage improves.

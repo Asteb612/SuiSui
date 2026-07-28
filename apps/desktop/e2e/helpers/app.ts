@@ -20,7 +20,13 @@ export interface AppContext {
  */
 export async function launchApp(
   workspacePath?: string,
-  extraEnv?: Record<string, string>
+  extraEnv?: Record<string, string>,
+  /**
+   * Reuse an existing Electron userData dir instead of a fresh one. Lets a test
+   * relaunch the app and exercise the restore-from-settings path, which is how
+   * real users open the app but which workspace selection never covers.
+   */
+  reuseUserDataDir?: string
 ): Promise<AppContext> {
   const mainPath = path.resolve(__dirname, '../../dist-electron/main.js')
 
@@ -38,7 +44,7 @@ export async function launchApp(
   // developer's persisted workspace/settings (which would skip the welcome screen)
   // and never pollute real app data. In CI userData is already clean; this makes
   // local runs deterministic too.
-  const userDataDir = mkdtempSync(path.join(tmpdir(), 'suisui-e2e-'))
+  const userDataDir = reuseUserDataDir ?? mkdtempSync(path.join(tmpdir(), 'suisui-e2e-'))
 
   const app = await electron.launch({
     args: [`--user-data-dir=${userDataDir}`, '--no-sandbox', mainPath],

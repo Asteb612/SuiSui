@@ -14,6 +14,7 @@ export * from './types/ai'
 export * from './types/step-catalog'
 export * from './types/recorder'
 export * from './types/update'
+export * from './types/search'
 export * from './recorder/locatorSelector'
 
 // Catalog (backward-compat adapter added in US1)
@@ -22,6 +23,9 @@ export * from './catalog/adapter'
 // Patterns
 export * from './patterns/processor'
 export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } from '@suisui/step-regex'
+
+// Search (feature 009)
+export * from './search'
 
 // Validation
 export * from './validation/gitToken'

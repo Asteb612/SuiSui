@@ -28,6 +28,7 @@ import {
   UpdateService,
   FakeUpdaterAdapter,
   getUpdateService,
+  getSearchIndexService,
 } from '../services'
 import type {
   GitWorkspaceParams,
@@ -97,6 +98,10 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_GET, async () => {
     logger.debug('WORKSPACE_GET called')
     const result = await workspaceService.get()
+    // This is how a workspace restored from settings first materializes, so it
+    // is also where the search index first learns it has something to index.
+    // `ensureBuilt` no-ops once the current workspace is already indexed.
+    ensureSearchIndex()
     logger.debug('WORKSPACE_GET completed', { hasWorkspace: result !== null })
     return result
   })
@@ -104,6 +109,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_SET, async (_event, path: string, gitRoot?: string) => {
     logger.info('WORKSPACE_SET called', { path, gitRoot })
     const result = await workspaceService.set(path, gitRoot)
+    rebuildSearchIndex()
     logger.info('WORKSPACE_SET completed', { path, isValid: result.isValid })
     return result
   })
@@ -153,6 +159,7 @@ export function registerIpcHandlers(
     }
 
     const workspace = await workspaceService.get()
+    rebuildSearchIndex()
     logger.info('Workspace selected successfully', { workspacePath, workspaceName: workspace?.name })
     return { workspace, validation, selectedPath: workspacePath }
   })
@@ -167,6 +174,7 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.WORKSPACE_INIT, async (_event, path: string) => {
     logger.info('WORKSPACE_INIT called', { path })
     const result = await workspaceService.init(path)
+    rebuildSearchIndex()
     logger.info('WORKSPACE_INIT completed', { path, workspaceName: result.name })
     return result
   })
@@ -703,7 +711,42 @@ export function registerIpcHandlers(
     updateService.setPreferences(validateUpdatePreferences(prefs))
   )
 
+  // Global search (feature 009). The workspace root comes from WorkspaceService,
+  // never the renderer; the renderer supplies only a request id and query text.
+  const searchIndexService = getSearchIndexService()
+
+  ipcMain.handle(IPC_CHANNELS.SEARCH_QUERY, async (_event, requestId: unknown, text: unknown) => {
+    if (typeof requestId !== 'number' || !Number.isFinite(requestId)) {
+      throw new Error('search.query: requestId must be a finite number')
+    }
+    if (typeof text !== 'string') {
+      throw new Error('search.query: text must be a string')
+    }
+    return searchIndexService.search(requestId, text)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SEARCH_GET_STATUS, async () => searchIndexService.getStatus())
+
   logger.info('IPC handlers registered', { isTestMode })
+}
+
+/**
+ * Kick a search-index rebuild after the workspace changed.
+ *
+ * Fire-and-forget on purpose: the workspace handler must not wait on indexing,
+ * and the renderer learns the index is ready from the SEARCH_INDEX_STATUS push.
+ */
+function rebuildSearchIndex(): void {
+  void getSearchIndexService()
+    .rebuild()
+    .catch((error) => logger.warn('Search index rebuild failed', { error: String(error) }))
+}
+
+/** Build the index only if it does not already reflect the current workspace. */
+function ensureSearchIndex(): void {
+  void getSearchIndexService()
+    .ensureBuilt()
+    .catch((error) => logger.warn('Search index build failed', { error: String(error) }))
 }
 
 /** Coerce untrusted renderer input into a clean `Partial<UpdatePreferences>`. */

@@ -123,6 +123,13 @@ export const IPC_CHANNELS = {
 
   // Auto-update: main -> renderer push (webContents.send)
   UPDATE_STATE_CHANGED: 'update:stateChanged',
+
+  // Global search: request/response (invoke)
+  SEARCH_QUERY: 'search:query',
+  SEARCH_GET_STATUS: 'search:getStatus',
+
+  // Global search: main -> renderer push (webContents.send)
+  SEARCH_INDEX_STATUS: 'search:indexStatus',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

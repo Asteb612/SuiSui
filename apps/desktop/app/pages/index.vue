@@ -7,7 +7,10 @@ import { useGitWorkspaceStore } from '~/stores/gitWorkspace'
 import { useRunnerStore, GLOBAL_SCOPE } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useRecorderStore } from '~/stores/recorder'
+import { useSearchStore } from '~/stores/search'
+import type { SearchResult } from '@suisui/shared'
 import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
+import GlobalSearch from '~/components/GlobalSearch.vue'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
@@ -16,6 +19,7 @@ const gitWorkspaceStore = useGitWorkspaceStore()
 const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
 const recorderStore = useRecorderStore()
+const searchStore = useSearchStore()
 const showGitClone = ref(false)
 const showBddFolderSelect = ref(false)
 const bddCandidates = ref<string[]>([])
@@ -273,6 +277,65 @@ async function initializeWorkspace() {
 function cancelInit() {
   workspaceStore.clearPending()
 }
+
+/**
+ * Navigate to a search result: open its feature, and for a scenario result select
+ * that scenario. The feature watcher above reloads the editor, so scenario
+ * selection has to wait for that load to finish.
+ */
+async function handleSearchActivate(result: SearchResult) {
+  const feature = workspaceStore.features.find((f) => f.relativePath === result.relativePath)
+  if (!feature) {
+    // The file vanished between indexing and activation — say so rather than
+    // clearing the editor out from under the user (FR-027).
+    searchStore.reset()
+    workspaceStore.error = `“${result.relativePath}” could not be opened — it may have been moved or deleted.`
+    return
+  }
+
+  activeView.value = 'editor'
+
+  if (workspaceStore.selectedFeature?.relativePath !== result.relativePath) {
+    // Select and let the `selectedFeature` watcher do the loading. Loading it
+    // here as well would race that watcher, whose later `parseGherkin` resets
+    // `activeScenarioIndex` to 0 — landing on the wrong scenario.
+    workspaceStore.selectFeature(feature)
+    await waitForFeatureLoaded(result.relativePath)
+  }
+
+  if (result.type === 'scenario' && result.scenarioIndex !== undefined) {
+    scenarioStore.setActiveScenario(result.scenarioIndex)
+  }
+}
+
+/** Resolve once the scenario store reflects `relativePath`, or bail out after 5s. */
+function waitForFeatureLoaded(relativePath: string): Promise<void> {
+  if (scenarioStore.currentFeaturePath === relativePath) return Promise.resolve()
+
+  return new Promise((resolve) => {
+    let timer: ReturnType<typeof setTimeout>
+    const stop = watch(
+      () => scenarioStore.currentFeaturePath,
+      (path) => {
+        if (path !== relativePath) return
+        clearTimeout(timer)
+        stop()
+        resolve()
+      }
+    )
+    // Safety valve: a failed load must never leave this promise pending.
+    timer = setTimeout(() => {
+      stop()
+      resolve()
+    }, 5000)
+  })
+}
+
+// Results from a previous workspace must never stay selectable.
+watch(
+  () => workspaceStore.workspace?.path,
+  () => searchStore.reset()
+)
 </script>
 
 <template>
@@ -286,6 +349,20 @@ function cancelInit() {
         SuiSui
       </h1>
       <span class="subtitle">BDD Test Builder</span>
+      <GlobalSearch
+        v-if="workspaceStore.hasWorkspace"
+        class="header-search"
+        @activate="handleSearchActivate"
+      />
+      <span
+        v-else
+        class="header-search-disabled"
+        data-testid="global-search-disabled"
+        title="Open a workspace to search features and scenarios"
+      >
+        <i class="pi pi-search" />
+        Open a workspace to search
+      </span>
       <div class="header-spacer" />
       <Button
         icon="pi pi-question-circle"
@@ -955,6 +1032,21 @@ function cancelInit() {
 
 .header-spacer {
   flex: 1;
+}
+
+.header-search {
+  margin-left: 1.25rem;
+  -webkit-app-region: no-drag;
+}
+
+.header-search-disabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 1.25rem;
+  font-size: 0.75rem;
+  opacity: 0.45;
+  cursor: default;
 }
 
 .content {

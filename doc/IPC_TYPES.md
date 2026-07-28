@@ -682,3 +682,29 @@ Types (`@suisui/shared`, `types/update.ts` — the SSoT, since they cross IPC):
 `UpdateInfo`, `UpdateProgress`, `UpdateError`+`UpdateErrorCode`, `UpdaterCapability`,
 `UpdatePreferences` (+`DEFAULT_UPDATE_PREFERENCES`), and `UpdateState`. `AppSettings`
 gains `updatePreferences?` and `lastSeenVersion?`.
+
+## Search channels (`search:*`, feature 009-global-search)
+
+| Channel              | Direction       | Signature                                                         |
+| -------------------- | --------------- | ----------------------------------------------------------------- |
+| `search:query`       | invoke          | `query(requestId: number, text: string): Promise<SearchResponse>` |
+| `search:getStatus`   | invoke          | `getStatus(): Promise<SearchIndexStatus>`                         |
+| `search:indexStatus` | main → renderer | `onIndexStatus(cb): () => void` (returns unsubscribe)             |
+
+Types live in `packages/shared/src/types/search.ts`: `SearchResult`, `SearchResponse`,
+`SearchIndexStatus`, `SearchResultType` (`'feature' | 'scenario'`), `MatchedField`,
+`MatchRange`, `FeatureOutline`, and `MAX_SEARCH_RESULTS` (100).
+
+Notes:
+
+- **`requestId` is echoed back** so the renderer can discard a superseded response.
+  Debouncing alone does not prevent out-of-order resolution — the id check is the actual
+  correctness mechanism.
+- **`MatchRange` offsets index the original display text**, so `normalize()` in
+  `@suisui/shared/search/matcher` must preserve length. A transform that collapses
+  characters (`ß` → `ss`) silently corrupts highlighting for non-ASCII text.
+- **There is no `search:rebuild` channel** on purpose: the workspace handlers
+  (`WORKSPACE_SET` / `WORKSPACE_SELECT` / `WORKSPACE_INIT`) trigger a rebuild internally
+  and the renderer learns the index is ready from the `search:indexStatus` push.
+- The renderer supplies only `requestId` and `text`, both validated at the handler
+  boundary. Query text is matched literally and never compiled into a RegExp.
