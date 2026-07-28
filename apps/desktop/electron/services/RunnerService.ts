@@ -1,7 +1,4 @@
 import type {
-  RunResult,
-  RunOptions,
-  RunStatus,
   BatchRunOptions,
   BatchRunResult,
   WorkspaceTestInfo,
@@ -18,9 +15,10 @@ import path from 'node:path'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import { createLogger } from '../utils/logger'
-import { parseBddgenErrors, getErrorSummary } from '../utils/bddgenErrorParser'
+import { parseBddgenErrors } from '../utils/bddgenErrorParser'
 import { parseFeatureMetadata } from '../utils/gherkinMetadata'
 import { parsePlaywrightJsonReport } from '../utils/playwrightReport'
+import { checkBrowsers, describeMissingBrowsers } from './playwrightBrowsers'
 
 const logger = createLogger('RunnerService')
 
@@ -123,6 +121,13 @@ const debugRunner = process.env.SUISUI_DEBUG_RUNNER === '1'
 const RUN_IDLE_TIMEOUT_MS = 15 * 60 * 1000
 
 /**
+ * Browser downloads are hundreds of megabytes over a CDN; a slow connection can
+ * legitimately take many minutes, so this is far more generous than a run's own
+ * idle window.
+ */
+const BROWSER_INSTALL_TIMEOUT_MS = 20 * 60 * 1000
+
+/**
  * Escapes special regex characters in a string for use in Playwright's --grep option
  */
 function escapeRegex(str: string): string {
@@ -197,6 +202,86 @@ export class RunnerService {
       return candidate
     }
 
+    return null
+  }
+
+  /**
+   * Make sure the workspace's Playwright browsers are present, installing them
+   * if they are not.
+   *
+   * Returns `null` when the run may proceed, or an error result when the
+   * browsers are missing and could not be installed.
+   *
+   * Auto-installing matches how npm dependencies are already handled above, but
+   * this download is large and slow, so it is announced on the run log first —
+   * a run that appears to hang for several minutes with no explanation is worse
+   * than a slow one the user understands.
+   */
+  private async ensureBrowsers(
+    workspacePath: string,
+    playwrightCliPath: string | null,
+    onOutput?: (stream: 'stdout' | 'stderr', data: string) => void,
+  ): Promise<BatchRunResult | null> {
+    const status = checkBrowsers(workspacePath)
+
+    if (status.undetectable) {
+      logger.info('Skipping the Playwright browser check', { reason: status.undetectable })
+      return null
+    }
+    if (!status.needsInstall) return null
+
+    const summary = describeMissingBrowsers(status)
+    logger.info('Installing Playwright browsers before the run', {
+      missing: status.missing.map((b) => `${b.name}-${b.revision}`),
+    })
+    onOutput?.('stdout', `${summary}\nDownloading them now — this can take a few minutes.\n`)
+
+    if (!playwrightCliPath) {
+      return {
+        status: 'error',
+        featureResults: [],
+        summary: { total: 0, passed: 0, failed: 0, skipped: 0, features: 0 },
+        duration: 0,
+        stdout: '',
+        stderr: `${summary}\nPlaywright was not found in this workspace, so they cannot be installed automatically. Run "npx playwright install" in the workspace.`,
+        errors: [],
+      }
+    }
+
+    const nodePath = await getNodeService().getNodePath()
+    if (!nodePath) {
+      return {
+        status: 'error',
+        featureResults: [],
+        summary: { total: 0, passed: 0, failed: 0, skipped: 0, features: 0 },
+        duration: 0,
+        stdout: '',
+        stderr: `${summary}\nNode.js was not found, so they cannot be installed automatically. Run "npx playwright install" in the workspace.`,
+        errors: [],
+      }
+    }
+
+    const names = [...new Set(status.missing.map((b) => b.name))]
+
+    const result = await this.commandRunner.exec(
+      nodePath,
+      [playwrightCliPath, 'install', ...names],
+      { cwd: workspacePath, timeout: BROWSER_INSTALL_TIMEOUT_MS },
+    )
+
+    if (result.code !== 0) {
+      return {
+        status: 'error',
+        featureResults: [],
+        summary: { total: 0, passed: 0, failed: 0, skipped: 0, features: 0 },
+        duration: 0,
+        stdout: result.stdout,
+        stderr: `${summary}\nAutomatic installation failed. Run "npx playwright install" in the workspace.\n${result.stderr}`,
+        errors: [],
+      }
+    }
+
+    onOutput?.('stdout', 'Playwright browsers installed.\n')
     return null
   }
 
@@ -383,6 +468,12 @@ export class RunnerService {
     const workspaceNodeModules = path.join(workspacePath, 'node_modules')
     const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
     const bddgenCliPath = this.resolveBddgenCliPath(workspacePath)
+
+    // Browsers are pinned per Playwright version, so upgrading Playwright — an
+    // ordinary npm change — silently invalidates them. Caught here rather than
+    // letting Playwright fail mid-run with a raw "Executable doesn't exist".
+    const browserFailure = await this.ensureBrowsers(workspacePath, playwrightCliPath, onOutput)
+    if (browserFailure) return browserFailure
 
     const startTime = Date.now()
 
@@ -607,280 +698,6 @@ export class RunnerService {
     // Both: use lookaheads for AND logic across filter types
     const tagPattern = tags!.map((t) => `@${escapeRegex(t)}`).join('|')
     return `(?=.*(${tagPattern}))(?=.*${escapeRegex(nameFilter!)})`
-  }
-
-  private async run(options: RunOptions): Promise<RunResult> {
-    const workspaceService = getWorkspaceService()
-    const workspacePath = workspaceService.getPath()
-
-    if (!workspacePath) {
-      logger.error('No workspace selected')
-      return {
-        status: 'error',
-        exitCode: 1,
-        stdout: '',
-        stderr: 'No workspace selected',
-        duration: 0,
-      }
-    }
-
-    // Check and install dependencies if needed
-    const depService = getDependencyService()
-    const depStatus = await depService.checkStatus(workspacePath)
-
-    if (depStatus.needsInstall) {
-      logger.info('Installing dependencies before run', {
-        reason: depStatus.reason,
-        workspacePath,
-      })
-
-      const installResult = await depService.install(workspacePath)
-      if (!installResult.success) {
-        logger.error('Dependency installation failed', undefined, {
-          error: installResult.error,
-        })
-        return {
-          status: 'error',
-          exitCode: 1,
-          stdout: installResult.stdout,
-          stderr: installResult.error || 'Failed to install dependencies',
-          duration: installResult.duration,
-        }
-      }
-
-      logger.info('Dependencies installed successfully', {
-        duration: installResult.duration,
-      })
-    }
-
-    // Resolve the feature file path for both bddgen and playwright
-    let featurePath: string | undefined
-    let specPath: string | undefined
-
-    if (options.featurePath) {
-      const featuresDir = await workspaceService.getFeaturesDir(workspacePath)
-      const normalizedFeaturesDir = featuresDir.replace(/\\/g, '/').replace(/\/+$/, '')
-      const normalized = options.featurePath.replace(/\\/g, '/')
-      const isInFeaturesDir = normalizedFeaturesDir
-        ? normalized.startsWith(`${normalizedFeaturesDir}/`)
-        : false
-
-      // Ensure the path starts with the configured features dir
-      featurePath = isInFeaturesDir ? normalized : `${normalizedFeaturesDir}/${normalized}`
-
-      // Convert to the generated spec file path:
-      // <featuresDir>/auth/login.feature -> .features-gen/<featuresDir>/auth/login.feature.spec.js
-      specPath = `.features-gen/${featurePath.replace(/\.feature$/, '.feature.spec.js')}`
-    }
-
-    // Build playwright args
-    const playwrightArgs = ['test']
-
-    if (options.mode === 'ui') {
-      playwrightArgs.push('--ui')
-    }
-
-    // Add the generated spec file path to playwright args
-    if (specPath) {
-      playwrightArgs.push(specPath)
-    }
-
-    // Escape special regex characters in scenario name for --grep
-    if (options.scenarioName) {
-      const escapedName = escapeRegex(options.scenarioName)
-      playwrightArgs.push('--grep', escapedName)
-    }
-
-    // Use only workspace binaries
-    const workspaceNodeModules = path.join(workspacePath, 'node_modules')
-    const playwrightCliPath = this.resolvePlaywrightCliPath(workspacePath)
-    const bddgenCliPath = this.resolveBddgenCliPath(workspacePath)
-
-    const normalizedBaseUrl =
-      options.baseUrl && !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(options.baseUrl)
-        ? `https://${options.baseUrl}`
-        : options.baseUrl
-
-    // Set up environment with workspace's node_modules
-    const pathParts = []
-    if (fs.existsSync(path.join(workspaceNodeModules, '.bin'))) {
-      pathParts.push(path.join(workspaceNodeModules, '.bin'))
-    }
-    if (process.env.PATH) {
-      pathParts.push(process.env.PATH)
-    }
-
-    const env: Record<string, string> = {
-      ...getVariablesService().resolveEnv(),
-      ...(normalizedBaseUrl ? { BASE_URL: normalizedBaseUrl } : {}),
-      ...(featurePath ? { FEATURE: featurePath } : {}),
-      NODE_PATH: workspaceNodeModules,
-      PATH: pathParts.join(path.delimiter),
-    }
-
-    if (debugRunner) {
-      logger.warn('Debug: Starting test run', {
-        mode: options.mode,
-        workspacePath,
-        playwrightArgs,
-        featurePath,
-        specPath,
-        scenarioName: options.scenarioName,
-        baseUrl: normalizedBaseUrl,
-        env: { FEATURE: featurePath, BASE_URL: normalizedBaseUrl },
-        workspaceNodeModules,
-        playwrightCliPath,
-        bddgenCliPath,
-        nodeExec: process.execPath,
-      })
-    } else {
-      logger.info('Starting test run', {
-        mode: options.mode,
-        workspacePath,
-        featurePath,
-        scenarioName: options.scenarioName,
-        baseUrl: options.baseUrl,
-      })
-    }
-
-    const startTime = Date.now()
-
-    if (!bddgenCliPath) {
-      logger.error('bddgen CLI not found', undefined, {
-        workspacePath,
-        workspaceNodeModules,
-      })
-      return {
-        status: 'error',
-        exitCode: 1,
-        stdout: '',
-        stderr: 'bddgen CLI not found. Please install playwright-bdd in your workspace.',
-        duration: 0,
-      }
-    }
-
-    // Use embedded Node.js runtime instead of Electron's process.execPath
-    const nodeService = getNodeService()
-    const nodeExec = await nodeService.getNodePath()
-
-    if (!nodeExec) {
-      logger.error('Node.js runtime not found')
-      return {
-        status: 'error',
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Node.js runtime not available. Please restart the application.',
-        duration: 0,
-      }
-    }
-
-    // Add embedded Node.js bin directory to PATH
-    const nodeDir = path.dirname(nodeExec)
-    if (!pathParts.includes(nodeDir)) {
-      pathParts.unshift(nodeDir)
-      env.PATH = pathParts.join(path.delimiter)
-    }
-
-    // Run bddgen to generate spec files
-    // The FEATURE env var is read by playwright.config.ts to filter which features to generate
-    const bddgenResult = await this.commandRunner.exec(nodeExec, [bddgenCliPath], {
-      cwd: workspacePath,
-      timeout: 60000,
-      env,
-    })
-
-    if (bddgenResult.code !== 0) {
-      const parsedErrors = parseBddgenErrors(bddgenResult.stdout, bddgenResult.stderr)
-      const errorSummary = getErrorSummary(parsedErrors)
-
-      logger.error('bddgen generation failed', undefined, {
-        exitCode: bddgenResult.code,
-        errorSummary,
-        errorCount: parsedErrors.length,
-        stdoutLength: bddgenResult.stdout.length,
-        stderrLength: bddgenResult.stderr.length,
-      })
-
-      if (debugRunner) {
-        logger.warn('Debug: bddgen error details', {
-          stdout: bddgenResult.stdout,
-          stderr: bddgenResult.stderr,
-          parsedErrors,
-        })
-      }
-
-      return {
-        status: 'error',
-        exitCode: bddgenResult.code,
-        stdout: bddgenResult.stdout,
-        stderr: bddgenResult.stderr || 'bddgen generation failed',
-        duration: Date.now() - startTime,
-        errors: parsedErrors,
-      }
-    }
-
-    if (!playwrightCliPath) {
-      logger.error('Playwright CLI not found', undefined, {
-        workspacePath,
-        workspaceNodeModules,
-      })
-      return {
-        status: 'error',
-        exitCode: 1,
-        stdout: '',
-        stderr: 'Playwright CLI not found. Please install @playwright/test in your workspace.',
-        duration: Date.now() - startTime,
-      }
-    }
-
-    // Run playwright test
-    const result = await this.commandRunner.exec(nodeExec, [playwrightCliPath, ...playwrightArgs], {
-      cwd: workspacePath,
-      // As above: bound by silence, not by elapsed time. A single spec can
-      // legitimately run long once retries and a generous per-test timeout are
-      // in play.
-      timeout: 0,
-      idleTimeout: options.mode === 'ui' ? 0 : RUN_IDLE_TIMEOUT_MS,
-      env,
-    })
-
-    const duration = Date.now() - startTime
-
-    if (debugRunner) {
-      logger.warn('Debug: Playwright run completed', {
-        exitCode: result.code,
-        duration,
-        stdoutLength: result.stdout.length,
-        stderrLength: result.stderr.length,
-        stdoutSnippet: result.stdout.slice(0, 2000),
-        stderrSnippet: result.stderr.slice(0, 2000),
-      })
-    } else {
-      logger.info('Playwright run completed', {
-        exitCode: result.code,
-        duration,
-        stdoutLength: result.stdout.length,
-        stderrLength: result.stderr.length,
-      })
-    }
-
-    if (result.stderr) {
-      logger.warn('Playwright run stderr', { stderr: result.stderr })
-    }
-
-    let status: RunStatus = 'passed'
-    if (result.code !== 0) {
-      status = result.stderr.includes('Error') ? 'error' : 'failed'
-    }
-
-    return {
-      status,
-      exitCode: result.code,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      duration,
-      reportPath: this.findReportPath(result.stdout),
-    }
   }
 
   private findReportPath(stdout: string): string | undefined {
