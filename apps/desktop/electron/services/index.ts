@@ -41,3 +41,5 @@ export * from './update/getUpdateService'
 export * from './FileWatcher'
 export * from './SearchIndexService'
 export * from './TagService'
+
+export * from './RunHistoryService'

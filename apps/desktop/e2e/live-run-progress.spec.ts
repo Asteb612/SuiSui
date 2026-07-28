@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import fs from 'node:fs'
 import path from 'node:path'
 import { launchApp, closeApp, type AppContext } from './helpers/app'
 import { copyFixture, cleanupFixture } from './helpers/fixtures'
@@ -160,5 +161,66 @@ test.describe('Live run progress — run view', () => {
     await expect(window.locator('[data-testid="live-status-running"]')).toHaveCount(0, {
       timeout: 25_000,
     })
+  })
+})
+
+/**
+ * The previous run's statuses must outlive the window. Locating the failing step
+ * is the point of the after-run view, and that need does not end at a reload.
+ */
+test.describe('Live run progress — persisted across a reload', () => {
+  let workspacePath: string
+
+  test.beforeAll(async () => {
+    workspacePath = await copyFixture('with-features')
+  })
+
+  test.afterAll(async () => {
+    await cleanupFixture(workspacePath)
+  })
+
+  test('restores the failing step after the app is restarted', async () => {
+    // First launch: run, and let the snapshot be written.
+    const first = await launchApp(workspacePath, {
+      TEST_RUN_PROGRESS_FIXTURE: FIXTURE,
+      TEST_RUN_PROGRESS_INTERVAL_MS: '80',
+    })
+
+    await first.window.locator(`${SEL.featureTreeFile}[data-path="login.feature"]`).click()
+    await expect(first.window.locator(SEL.scenarioBuilder)).toContainText('Given')
+    await first.window.locator(SEL.quickRunBtn).click()
+    await first.window.locator(SEL.backToEditorBtn).click()
+    await expect(first.window.locator(FAILED)).toHaveCount(1, { timeout: 20_000 })
+
+    // The snapshot is written fire-and-forget once the run settles, so wait for
+    // it rather than for a fixed delay — closing the app mid-write would leave
+    // nothing to restore and make this test race the very thing it verifies.
+    const snapshot = path.join(workspacePath, '.app', 'last-run.json')
+    await expect
+      .poll(() => fs.existsSync(snapshot), { timeout: 15_000 })
+      .toBe(true)
+
+    const userDataDir = first.userDataDir
+    await closeApp(first)
+
+    // Second launch: reuse the user data so the workspace is restored from
+    // settings, exactly as reopening the app does. `workspacePath` is omitted on
+    // purpose — passing it makes the helper wait for a welcome screen that a
+    // restored workspace never shows. No scripted run this time.
+    const second = await launchApp(undefined, {}, userDataDir)
+    await second.window
+      .locator('[data-testid="status-bar"]')
+      .filter({ hasText: workspacePath })
+      .waitFor({ timeout: 30_000 })
+
+    await second.window.locator(`${SEL.featureTreeFile}[data-path="login.feature"]`).click()
+    await expect(second.window.locator(SEL.scenarioBuilder)).toContainText('Given')
+
+    // The outcome of the run that happened BEFORE the restart is still shown.
+    await expect(second.window.locator(FAILED)).toHaveCount(1, { timeout: 15_000 })
+    await expect(second.window.locator(PASSED)).toHaveCount(3)
+    await expect(second.window.locator(RUNNING)).toHaveCount(0)
+
+    await closeApp(second)
   })
 })

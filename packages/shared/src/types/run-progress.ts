@@ -124,3 +124,25 @@ export const PROGRESS_SENTINEL = '@@SUISUI_PROGRESS@@'
 export function emptyLiveRunState(): LiveRunState {
   return { scenarios: {}, running: [], available: false, reconciled: false }
 }
+
+/**
+ * Last-run state persisted to `<workspace>/.app/` so the editor can still show
+ * which step failed after a reload.
+ *
+ * Only the EXECUTION facts are stored. The authored step list is deliberately
+ * NOT persisted: it is re-read from the feature files on restore, so a file
+ * edited since the run is reflected rather than shown against a stale snapshot.
+ * Where the two disagree the existing title guard drops the status, which is the
+ * behaviour we want — no status beats a status on the wrong step.
+ */
+export interface PersistedRunSnapshot {
+  /** Bumped when the shape changes; an older or unknown version is discarded. */
+  version: number
+  /** Epoch ms the run finished, for display and for ageing the snapshot out. */
+  savedAt: number
+  /** Which run scope produced it (GLOBAL_SCOPE, or a feature path quick-run). */
+  scopeId: string
+  live: LiveRunState
+}
+
+export const RUN_SNAPSHOT_VERSION = 1

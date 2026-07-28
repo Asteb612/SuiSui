@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseProgressLine, stripFeaturesDir } from '@suisui/shared'
-import type { BulkTagRequest, Scenario, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
+import type { LiveRunState, BulkTagRequest, Scenario, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -30,6 +30,7 @@ import {
   getUpdateService,
   getSearchIndexService,
   getTagService,
+  getRunHistoryService,
 } from '../services'
 import type {
   GitWorkspaceParams,
@@ -306,6 +307,17 @@ export function registerIpcHandlers(
   })
 
   // Runner handlers
+  ipcMain.handle(
+    IPC_CHANNELS.RUNNER_SAVE_LAST_RUN,
+    async (_event, live: LiveRunState, scopeId: string) => {
+      await getRunHistoryService().save(live, scopeId, Date.now())
+    },
+  )
+
+  ipcMain.handle(IPC_CHANNELS.RUNNER_GET_LAST_RUN, async () => {
+    return getRunHistoryService().load()
+  })
+
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
     // Resolved once per run so every progress event can be reported in the
     // renderer's path namespace. Best-effort: without it paths pass through

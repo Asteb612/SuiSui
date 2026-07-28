@@ -24,8 +24,14 @@ const LOGIN_FEATURE = `Feature: Login
 
 const featuresReadMock = vi.fn()
 
+/** Stand-in for the on-disk snapshot under `<workspace>/.app/`. */
+const saveLastRunMock = vi.fn()
+const getLastRunMock = vi.fn()
+
 beforeEach(() => {
   featuresReadMock.mockResolvedValue(LOGIN_FEATURE)
+  saveLastRunMock.mockResolvedValue(undefined)
+  getLastRunMock.mockResolvedValue(null)
   setActivePinia(createPinia())
   vi.clearAllMocks()
   pushProgress = null
@@ -53,6 +59,8 @@ beforeEach(() => {
         pushProgress = cb
         return unsubscribeProgress
       }),
+      saveLastRun: saveLastRunMock,
+      getLastRun: getLastRunMock,
     },
     settings: { get: vi.fn().mockResolvedValue({}), set: vi.fn() },
     workspace: { getBaseUrl: vi.fn().mockResolvedValue(null) },
@@ -847,5 +855,132 @@ describe('statuses persist after the run so the failing step can be found', () =
     const steps = store.liveStepsFor(LOGIN, VALID)!
     expect(steps[1]).toMatchObject({ status: 'failed', error: 'kaboom' })
     expect(store.live.available).toBe(true)
+  })
+})
+
+describe('the previous run survives a reload', () => {
+  const failedRun = () =>
+    runWith(store(), [
+      testStart('a1', { relativePath: LOGIN, title: VALID }),
+      stepEnd(0, 'Given the application is running', 'passed'),
+      stepEnd(1, 'When I log in', 'failed', 'kaboom'),
+      { type: 'testEnd', testId: 'a1', status: 'failed', durationMs: 30, at: 40 },
+    ])
+
+  let current: ReturnType<typeof useRunnerStore> | null = null
+  const store = () => (current ??= useRunnerStore())
+
+  beforeEach(() => {
+    current = null
+  })
+
+  it('saves the finished run', async () => {
+    const s = store()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await failedRun()
+
+    expect(saveLastRunMock).toHaveBeenCalledTimes(1)
+    const [live, scopeId] = saveLastRunMock.mock.calls[0]!
+    expect(scopeId).toBe(GLOBAL_SCOPE)
+    expect(live.scenarios.a1.steps[1]).toMatchObject({ status: 'failed', error: 'kaboom' })
+  })
+
+  it('saves a plain object, not a reactive proxy', async () => {
+    // Reactive objects cannot be structured-cloned across IPC.
+    const s = store()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await failedRun()
+
+    const [live] = saveLastRunMock.mock.calls[0]!
+    expect(() => structuredClone(live)).not.toThrow()
+  })
+
+  it('restores the failing step after a reload', async () => {
+    const s = store()
+    getLastRunMock.mockResolvedValue({
+      version: 1,
+      savedAt: Date.now(),
+      scopeId: GLOBAL_SCOPE,
+      live: {
+        available: true,
+        reconciled: true,
+        running: [],
+        scenarios: {
+          a1: {
+            testId: 'a1',
+            relativePath: LOGIN,
+            title: VALID,
+            status: 'failed',
+            attempt: 0,
+            steps: {
+              0: { index: 0, title: 'Given the application is running', status: 'passed' },
+              1: { index: 1, title: 'When I log in', status: 'failed', error: 'kaboom' },
+            },
+          },
+        },
+      },
+    })
+
+    await s.restoreLastRun()
+
+    const steps = s.liveStepsFor(LOGIN, VALID)
+    expect(steps, 'restored run must be renderable in the editor').not.toBeNull()
+    expect(steps!.map((step) => step.status)).toEqual(['passed', 'failed', 'skipped', 'skipped'])
+    expect(steps![1]!.error).toBe('kaboom')
+  })
+
+  it('re-reads the step list from disk, so edits since the run are respected', async () => {
+    const s = store()
+    getLastRunMock.mockResolvedValue({
+      version: 1,
+      savedAt: Date.now(),
+      scopeId: GLOBAL_SCOPE,
+      live: {
+        available: true,
+        reconciled: true,
+        running: [],
+        scenarios: {
+          a1: {
+            testId: 'a1',
+            relativePath: LOGIN,
+            title: VALID,
+            status: 'passed',
+            attempt: 0,
+            steps: { 0: { index: 0, title: 'Given the application is running', status: 'passed' } },
+          },
+        },
+      },
+    })
+
+    await s.restoreLastRun()
+
+    expect(featuresReadMock).toHaveBeenCalled()
+    // 4 steps come from the CURRENT file, not from the snapshot (which had 1).
+    expect(s.liveStepsFor(LOGIN, VALID)).toHaveLength(4)
+  })
+
+  it('does nothing when there is no snapshot', async () => {
+    const s = store()
+    getLastRunMock.mockResolvedValue(null)
+
+    await s.restoreLastRun()
+
+    expect(s.live.available).toBe(false)
+  })
+
+  it('does not throw when the snapshot cannot be read', async () => {
+    const s = store()
+    getLastRunMock.mockRejectedValue(new Error('EACCES'))
+
+    await expect(s.restoreLastRun()).resolves.toBeUndefined()
+    expect(s.live.available).toBe(false)
+  })
+
+  it('never clobbers a run that is in flight', async () => {
+    const s = store()
+    s.isRunning = true
+    await s.restoreLastRun()
+
+    expect(getLastRunMock).not.toHaveBeenCalled()
   })
 })

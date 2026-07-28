@@ -54,6 +54,8 @@ const api: ElectronAPI = {
     offRunnerLog: () => {
       ipcRenderer.removeAllListeners(IPC_CHANNELS.RUNNER_LOG)
     },
+    saveLastRun: (live, scopeId) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_SAVE_LAST_RUN, live, scopeId),
+    getLastRun: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_LAST_RUN),
     onProgress: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) =>
         callback(progress)

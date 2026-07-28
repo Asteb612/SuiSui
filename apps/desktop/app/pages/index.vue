@@ -212,6 +212,10 @@ async function loadWorkspaceDependencies() {
   }
   if (!isMounted.value) return
   await runnerStore.loadBaseUrl()
+  if (!isMounted.value) return
+  // Bring back the previous run's step statuses, so a reload does not lose
+  // which step failed.
+  await runnerStore.restoreLastRun()
 }
 
 watch(

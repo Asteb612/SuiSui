@@ -472,6 +472,52 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
+    /** Save the finished run so its statuses survive a reload. */
+    async persistLastRun(scopeId: string, live: LiveRunState) {
+      try {
+        // De-proxy: reactive objects cannot be structured-cloned across IPC.
+        await window.api.runner.saveLastRun(JSON.parse(JSON.stringify(live)), scopeId)
+      } catch {
+        // Best-effort only.
+      }
+    },
+
+    /**
+     * Restore the previous run's statuses on workspace open.
+     *
+     * The authored step lists are deliberately NOT restored from the snapshot —
+     * they are re-read from the feature files, so edits made since the run are
+     * respected. Where a step no longer matches, the title guard drops its
+     * status rather than showing it against the wrong step.
+     */
+    async restoreLastRun() {
+      if (this.isRunning) return
+
+      let snapshot: Awaited<ReturnType<typeof window.api.runner.getLastRun>>
+      try {
+        snapshot = await window.api.runner.getLastRun()
+      } catch {
+        return
+      }
+      if (!snapshot) return
+
+      const scopeId = snapshot.scopeId
+      if (!this.scopes[scopeId]) {
+        this.scopes[scopeId] = emptyScope(scopeId !== GLOBAL_SCOPE)
+      }
+      this.scopes[scopeId]!.live = snapshot.live
+      // Nothing else has run yet on a fresh load, so showing the restored scope
+      // is what the user expects to see.
+      this.activeScope = scopeId
+
+      // Re-derive the step lists from the CURRENT files.
+      await Promise.all(
+        Object.values(snapshot.live.scenarios).map((scenario) =>
+          this.ensureAuthoredSteps(scenario.relativePath, scenario.title),
+        ),
+      )
+    },
+
     /** Select which scope the runner view displays (GLOBAL_SCOPE or a feature path). */
     setActiveScope(scope: string) {
       this.activeScope = scope
@@ -672,6 +718,9 @@ export const useRunnerStore = defineStore('runner', {
         if (s.batchResult) {
           s.live = applyReportOutcomes(s.live, reportedOutcomes(s.batchResult))
         }
+        // Outlives the window: finding the failing step is still the need after a
+        // reload. Fire-and-forget — a failed write must not affect the run.
+        void this.persistLastRun(scope, s.live)
         stopRequested = false
         this.isRunning = false
         s.startedAt = 0

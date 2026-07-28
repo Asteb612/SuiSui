@@ -38,6 +38,8 @@ export const IPC_CHANNELS = {
   RUNNER_LOG: 'runner:log',
   /** Live per-step execution progress (feature 011): main -> renderer push. */
   RUNNER_PROGRESS: 'runner:progress',
+  RUNNER_SAVE_LAST_RUN: 'runner:saveLastRun',
+  RUNNER_GET_LAST_RUN: 'runner:getLastRun',
   DEPS_LOG: 'deps:log',
 
   // Settings

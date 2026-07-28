@@ -22,7 +22,7 @@ import type {
   LocatorValidationResult,
 } from '../types/recorder'
 import type { UpdateState, UpdatePreferences } from '../types/update'
-import type { RunProgressEvent } from '../types/run-progress'
+import type { RunProgressEvent, LiveRunState, PersistedRunSnapshot } from '../types/run-progress'
 import type { SearchResponse, SearchIndexStatus } from '../types/search'
 import type { TagIndex, BulkTagRequest, BulkTagResult } from '../types/tags'
 
@@ -87,6 +87,10 @@ export interface ElectronAPI {
      * from the feature file — a step present there with no event is pending.
      */
     onProgress: (callback: (event: RunProgressEvent) => void) => () => void
+    /** Persist the finished run's per-step outcomes under `<workspace>/.app/`. */
+    saveLastRun: (live: LiveRunState, scopeId: string) => Promise<void>
+    /** The last run's outcomes, or null when there is none to restore. */
+    getLastRun: () => Promise<PersistedRunSnapshot | null>
   }
 
   settings: {
