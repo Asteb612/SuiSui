@@ -22,6 +22,7 @@ import type {
   LocatorValidationResult,
 } from '../types/recorder'
 import type { UpdateState, UpdatePreferences } from '../types/update'
+import type { RunProgressEvent } from '../types/run-progress'
 import type { SearchResponse, SearchIndexStatus } from '../types/search'
 import type { TagIndex, BulkTagRequest, BulkTagResult } from '../types/tags'
 
@@ -81,6 +82,13 @@ export interface ElectronAPI {
     showReport: (scope: string) => Promise<string>
     onRunnerLog: (callback: (line: string) => void) => void
     offRunnerLog: () => void
+    /**
+     * Subscribe to live execution progress; returns an unsubscribe fn.
+     *
+     * Events describe only what CHANGED. The full step list for a scenario comes
+     * from the feature file — a step present there with no event is pending.
+     */
+    onProgress: (callback: (event: RunProgressEvent) => void) => () => void
   }
 
   settings: {

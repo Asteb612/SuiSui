@@ -1,6 +1,6 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
-import { IPC_CHANNELS } from '@suisui/shared'
+import { IPC_CHANNELS, parseProgressLine } from '@suisui/shared'
 import type { BulkTagRequest, Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
@@ -328,8 +328,21 @@ export function registerIpcHandlers(
       buf += data
       let nl: number
       while ((nl = buf.indexOf('\n')) !== -1) {
-        emit(buf.slice(0, nl))
+        const line = buf.slice(0, nl)
         buf = buf.slice(nl + 1)
+
+        // Structured progress events (feature 011) are forwarded on their own
+        // channel and MUST NOT reach the log panel — otherwise the readable run
+        // log becomes a wall of JSON.
+        const progress = parseProgressLine(line)
+        if (progress) {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, progress)
+          }
+          continue
+        }
+
+        emit(line)
       }
     }
     try {
@@ -410,8 +423,21 @@ export function registerIpcHandlers(
       buf += data
       let nl: number
       while ((nl = buf.indexOf('\n')) !== -1) {
-        emit(buf.slice(0, nl))
+        const line = buf.slice(0, nl)
         buf = buf.slice(nl + 1)
+
+        // Structured progress events (feature 011) are forwarded on their own
+        // channel and MUST NOT reach the log panel — otherwise the readable run
+        // log becomes a wall of JSON.
+        const progress = parseProgressLine(line)
+        if (progress) {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, progress)
+          }
+          continue
+        }
+
+        emit(line)
       }
     }
     try {

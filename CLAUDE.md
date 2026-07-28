@@ -380,6 +380,8 @@ See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), an
 [doc/FRONTEND.md](doc/FRONTEND.md).
 
 ## Active Technologies
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22. The reporter itself is plain CommonJS JavaScript, executed by the **workspace's** Playwright, not by the app. + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Uses the workspace's existing `@playwright/test` reporter API (`onTestBegin`/`onStepBegin`/`onStepEnd`/`onTestEnd`) and `playwright-bdd` (≥8.x), which wraps every Gherkin step in `test.step(textWithKeyword, …)`. (011-live-run-progress)
+- None persisted. Live run state is in-memory in the renderer and discarded when a new run starts. The reporter file is a generated artifact under `<workspace>/.app/` (already git-ignored), rewritten on each run. (011-live-run-progress)
 
 - TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Reuses `parseFeatureOutline` + `IFileWatcher` (feature 009) and `RunnerService.runBatch({ tags })` (feature 002) (010-tag-management)
 - No persisted storage: the tag index is in-memory and session-scoped. Bulk edits write directly to the user's `.feature` files — the only persistent effect, and the main risk of the feature (010-tag-management)

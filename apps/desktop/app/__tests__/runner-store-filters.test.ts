@@ -15,6 +15,8 @@ vi.stubGlobal('window', {
       stop: vi.fn(),
       onRunnerLog: vi.fn(),
       offRunnerLog: vi.fn(),
+      // Live progress subscription (feature 011); returns an unsubscribe fn.
+      onProgress: vi.fn(() => vi.fn()),
       showReport: vi.fn().mockResolvedValue('http://127.0.0.1:9323/global/'),
     },
   },

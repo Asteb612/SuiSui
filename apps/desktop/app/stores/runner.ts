@@ -7,8 +7,26 @@ import type {
   WorkspaceTestInfo,
   RunConfiguration,
   BatchRunOptions,
+  LiveRunState,
 } from '@suisui/shared'
-import { DEFAULT_RUN_CONFIGURATION } from '@suisui/shared'
+import {
+  DEFAULT_RUN_CONFIGURATION,
+  applyProgressEvent,
+  emptyLiveRunState,
+  reconcileLiveRun,
+} from '@suisui/shared'
+
+/**
+ * Unsubscribe handle for the live-progress push (one subscription at a time).
+ * Module-scoped so it never lands in reactive state.
+ */
+let unsubscribeProgress: (() => void) | null = null
+
+/**
+ * Set when the user stops a run, so in-flight steps settle as `interrupted`
+ * rather than `failed` — they stopped it, they did not break it.
+ */
+let stopRequested = false
 
 /** The global filters runner. Per-spec quick-runs use their feature path as the scope id. */
 export const GLOBAL_SCOPE = 'global'
@@ -81,6 +99,14 @@ interface RunScope {
   /** Live per-test progress while the run is in flight. */
   progress: RunProgress
   /**
+   * Live per-STEP execution state (feature 011).
+   *
+   * Complements `progress`, which is aggregate counters: this is what is running
+   * right now and how each step of it went. Stays `available: false` when no
+   * progress events arrive, in which case the UI falls back to the counters.
+   */
+  live: LiveRunState
+  /**
    * When the in-flight run started, as an epoch ms stamp; 0 when idle.
    *
    * Owned by the store rather than the panel because the panel is mounted by a
@@ -103,6 +129,7 @@ function emptyScope(singleRun = false): RunScope {
     reportLoading: false,
     singleRun,
     progress: emptyProgress(),
+    live: emptyLiveRunState(),
     startedAt: 0,
   }
 }
@@ -141,6 +168,10 @@ export const useRunnerStore = defineStore('runner', {
     },
     errors(): RunError[] {
       return this.currentScope.errors
+    },
+    /** Live per-step execution state for the displayed scope (feature 011). */
+    live(): LiveRunState {
+      return this.currentScope.live
     },
     batchResult(): BatchRunResult | null {
       return this.currentScope.batchResult
@@ -340,6 +371,9 @@ export const useRunnerStore = defineStore('runner', {
       s.reportUrl = ''
       s.reportLoading = false
       s.progress = emptyProgress()
+      // A new run must never show anything from the previous one.
+      s.live = emptyLiveRunState()
+      stopRequested = false
       s.logs = [`Starting batch ${opts.headed ? 'headed' : mode} test run...`]
       s.errors = []
 
@@ -351,6 +385,13 @@ export const useRunnerStore = defineStore('runner', {
         // Strip ANSI so the log panel (a <pre>) is clean; the parser strips too.
         s.logs.push(stripAnsi(line))
         updateProgressFromLine(s.progress, line)
+      })
+
+      // Live per-step events arrive on their own channel; structured events are
+      // filtered out of the log stream in the main process.
+      unsubscribeProgress?.()
+      unsubscribeProgress = window.api.runner.onProgress((event) => {
+        s.live = applyProgressEvent(s.live, event)
       })
 
       try {
@@ -403,6 +444,11 @@ export const useRunnerStore = defineStore('runner', {
         s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
       } finally {
         window.api.runner.offRunnerLog()
+        unsubscribeProgress?.()
+        unsubscribeProgress = null
+        // Nothing may be left showing `running` once the run is over.
+        s.live = reconcileLiveRun(s.live, stopRequested ? 'stopped' : 'completed')
+        stopRequested = false
         this.isRunning = false
         s.startedAt = 0
         // Integrate Playwright's HTML report directly in the results panel, scoped to
@@ -511,6 +557,7 @@ export const useRunnerStore = defineStore('runner', {
     },
 
     async stop() {
+      stopRequested = true
       try {
         await window.api.runner.stop()
         this.isRunning = false

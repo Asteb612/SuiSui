@@ -23,6 +23,42 @@ import { parseFeatureMetadata } from '../utils/gherkinMetadata'
 import { parsePlaywrightJsonReport } from '../utils/playwrightReport'
 
 const logger = createLogger('RunnerService')
+
+/** Where SuiSui's progress reporter is written inside the workspace. */
+const PROGRESS_REPORTER_FILE = 'suisui-progress-reporter.cjs'
+
+/**
+ * Source of the progress reporter asset.
+ * In development: electron/assets/…  In production: dist-electron/assets/…
+ */
+function progressReporterAssetPath(): string {
+  return path.join(__dirname, '..', 'assets', PROGRESS_REPORTER_FILE)
+}
+
+/**
+ * Copy the progress reporter into the workspace so the workspace's own
+ * Playwright can load it, and return its absolute path.
+ *
+ * Best-effort by design: a progress indicator must never be able to stop
+ * someone running their tests. On any failure this returns null and the caller
+ * simply omits it from the --reporter chain, leaving the run exactly as it was
+ * before this feature existed.
+ *
+ * Rewritten on every run so an app upgrade can never leave a stale reporter.
+ */
+export function provisionProgressReporter(workspacePath: string): string | null {
+  try {
+    const target = path.join(workspacePath, '.app', PROGRESS_REPORTER_FILE)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.copyFileSync(progressReporterAssetPath(), target)
+    return target
+  } catch (error) {
+    logger.warn('Could not provision the live-progress reporter; running without it', {
+      error: String(error),
+    })
+    return null
+  }
+}
 const debugRunner = process.env.SUISUI_DEBUG_RUNNER === '1'
 
 /**
@@ -445,7 +481,14 @@ export class RunnerService {
     } else {
       // `list` streams per-test progress to stdout live (so the UI can show real-time
       // status); `json` (→ file) is parsed for results; `html` builds the report.
-      playwrightArgs.push('--reporter=list,json,html')
+      // SuiSui's own reporter (feature 011) adds per-STEP events, which none of
+      // the built-in reporters expose while a run is in flight.
+      const progressReporter = provisionProgressReporter(workspacePath)
+      playwrightArgs.push(
+        progressReporter
+          ? `--reporter=list,json,html,${progressReporter}`
+          : '--reporter=list,json,html'
+      )
       // Headed: show the browser so the run can be watched (replay).
       if (options.headed) {
         playwrightArgs.push('--headed')
