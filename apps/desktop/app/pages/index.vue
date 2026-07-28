@@ -419,34 +419,34 @@ async function handleRunTag(tag: string) {
       <div class="header-workflows">
         <Button
           v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
-          label="Run Tests"
+          v-tooltip.bottom="'Configure and run tests'"
           icon="pi pi-play"
           size="small"
           severity="success"
-          title="Configure and run tests"
+          aria-label="Run tests"
           data-testid="run-tests-btn"
           @click="enterRunView"
         />
         <Button
           v-if="workspaceStore.hasWorkspace"
-          :label="recorderStore.isRecording ? 'Recording…' : 'Record'"
+          v-tooltip.bottom="recorderStore.isRecording ? 'Recording — open the recorder' : 'Start a recording'"
           icon="pi pi-circle-fill"
           outlined
           size="small"
           :severity="recorderStore.isRecording ? 'danger' : 'secondary'"
           :class="{ 'is-recording': recorderStore.isRecording }"
-          title="Start a recording"
+          :aria-label="recorderStore.isRecording ? 'Recording in progress' : 'Start a recording'"
           data-testid="record-btn-global"
           @click="showRecorder = true"
         />
         <Button
           v-if="workspaceStore.hasWorkspace && activeView !== 'tags'"
-          label="Tags"
+          v-tooltip.bottom="'Browse and manage tags across the workspace'"
           icon="pi pi-tags"
           outlined
           size="small"
           severity="secondary"
-          title="Browse and manage tags across the workspace"
+          aria-label="Tags"
           data-testid="tags-btn"
           @click="enterTagView"
         />
@@ -465,6 +465,7 @@ async function handleRunTag(tag: string) {
       <!-- Secondary application controls, separated from the workflows above. -->
       <Button
         v-if="workspaceStore.hasWorkspace"
+        v-tooltip.bottom="workspaceStore.workspace?.path"
         :label="workspaceStore.workspace?.name || 'Workspace'"
         icon="pi pi-chevron-down"
         icon-pos="right"
@@ -473,27 +474,26 @@ async function handleRunTag(tag: string) {
         severity="secondary"
         class="workspace-switcher"
         aria-haspopup="true"
-        :title="workspaceStore.workspace?.path"
         data-testid="change-workspace-btn"
         @click="showChangeWorkspaceMenu"
       />
       <Button
+        v-tooltip.bottom="'Settings'"
         icon="pi pi-cog"
         text
         size="small"
         severity="secondary"
         aria-label="Settings"
-        title="Settings"
         data-testid="settings-btn"
         @click="showSettingsDialog = true"
       />
       <Button
+        v-tooltip.bottom="'Help'"
         icon="pi pi-question-circle"
         text
         size="small"
         severity="secondary"
         aria-label="Help"
-        title="Help"
         data-testid="help-btn"
         @click="showHelpDialog = true"
       />
