@@ -46,18 +46,30 @@ async function setup(tags: string[] = []) {
   return utils
 }
 
+/**
+ * Find one element, failing loudly if it is missing.
+ *
+ * Note `container` from testing-library is an `Element`, not an `HTMLElement` —
+ * hence the explicit typing here rather than casts at every call site.
+ */
+function el<T extends HTMLElement = HTMLElement>(container: Element, selector: string): T {
+  const found = container.querySelector(selector)
+  if (!found) throw new Error(`Expected to find "${selector}" in the rendered output`)
+  return found as T
+}
+
 /** Open the inline editor and focus it, which populates suggestions. */
-async function startEditing(container: HTMLElement) {
-  await fireEvent.click(container.querySelector('.add-tag-btn') as HTMLElement)
+async function startEditing(container: Element) {
+  await fireEvent.click(el(container, '.add-tag-btn'))
   // The component focuses the field after a tick, so let that settle before
   // querying for it.
   await new Promise((resolve) => setTimeout(resolve, 0))
-  const input = container.querySelector('[data-testid="autocomplete-input"]') as HTMLInputElement
+  const input = el<HTMLInputElement>(container, '[data-testid="autocomplete-input"]')
   await fireEvent.focus(input)
   return input
 }
 
-function suggestionTexts(container: HTMLElement): string[] {
+function suggestionTexts(container: Element): string[] {
   return [...container.querySelectorAll('[data-testid="autocomplete-suggestions"] li')].map(
     (li) => li.textContent?.trim() ?? ''
   )
@@ -93,7 +105,7 @@ describe('TagsEditor — choosing an existing tag', () => {
     const { container, emitted } = await setup(['smoke'])
     await startEditing(container)
 
-    await fireEvent.click(container.querySelector('[data-testid="suggestion-critical"]') as HTMLElement)
+    await fireEvent.click(el(container, '[data-testid="suggestion-critical"]'))
     expect(emitted()['update:tags']?.[0]).toEqual([['smoke', 'critical']])
   })
 })
