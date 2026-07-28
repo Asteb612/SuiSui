@@ -28,6 +28,9 @@ export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } fr
 // Search (feature 009)
 export * from './search'
 
+// Tags (feature 010)
+export * from './tags'
+
 // Validation
 export * from './validation/gitToken'
 

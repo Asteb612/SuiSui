@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import type { TagUsage } from '@suisui/shared'
 import { useTagsStore } from '~/stores/tags'
+import BulkTagDialog from '~/components/BulkTagDialog.vue'
 
 const emit = defineEmits<{
   open: [usage: TagUsage]
@@ -23,6 +24,17 @@ onUnmounted(() => {
 // detail pane.
 function selectTag(name: string) {
   tagsStore.selectTag(name)
+}
+
+const showBulkDialog = ref(false)
+
+const allSelected = () =>
+  tagsStore.selectedUsages.length > 0 &&
+  tagsStore.selectedScenarioIds.length === tagsStore.selectedUsages.length
+
+function toggleSelectAll() {
+  if (allSelected()) tagsStore.clearScenarioSelection()
+  else tagsStore.selectAllVisibleScenarios()
 }
 </script>
 
@@ -141,20 +153,56 @@ function selectTag(name: string) {
               {{ tagsStore.selectedSummary?.scenarioCount ?? 0 }} scenario(s)
             </span>
           </h4>
-          <Button
-            label="Run this tag"
-            icon="pi pi-play"
-            size="small"
-            severity="success"
-            :disabled="(tagsStore.selectedSummary?.scenarioCount ?? 0) === 0"
-            :title="
-              (tagsStore.selectedSummary?.scenarioCount ?? 0) === 0
-                ? 'No scenarios carry this tag, so there is nothing to run'
-                : 'Run every scenario carrying this tag'
-            "
-            data-testid="tag-run-btn"
-            @click="emit('runTag', tagsStore.selectedTag)"
-          />
+          <div class="detail-actions">
+            <Button
+              label="Bulk edit"
+              icon="pi pi-tag"
+              size="small"
+              outlined
+              :disabled="!tagsStore.hasSelection"
+              :title="
+                tagsStore.hasSelection
+                  ? 'Add or remove a tag across the selected scenarios'
+                  : 'Select one or more scenarios first'
+              "
+              data-testid="tag-bulk-btn"
+              @click="showBulkDialog = true"
+            />
+            <Button
+              label="Run this tag"
+              icon="pi pi-play"
+              size="small"
+              severity="success"
+              :disabled="(tagsStore.selectedSummary?.scenarioCount ?? 0) === 0"
+              :title="
+                (tagsStore.selectedSummary?.scenarioCount ?? 0) === 0
+                  ? 'No scenarios carry this tag, so there is nothing to run'
+                  : 'Run every scenario carrying this tag'
+              "
+              data-testid="tag-run-btn"
+              @click="emit('runTag', tagsStore.selectedTag)"
+            />
+          </div>
+        </div>
+
+        <div
+          v-if="tagsStore.selectedUsages.length > 0"
+          class="selection-bar"
+        >
+          <label class="select-all">
+            <input
+              type="checkbox"
+              :checked="allSelected()"
+              data-testid="tag-select-all"
+              @change="toggleSelectAll"
+            >
+            Select all
+          </label>
+          <span
+            v-if="tagsStore.hasSelection"
+            class="selection-count"
+            data-testid="tag-selection-count"
+          >{{ tagsStore.selectedScenarioIds.length }} selected</span>
         </div>
 
         <div
@@ -174,9 +222,19 @@ function selectTag(name: string) {
             :key="usage.id"
             class="usage-row"
             :data-testid="`tag-usage-${usage.id}`"
-            @click="emit('open', usage)"
           >
-            <span class="usage-main">
+            <input
+              type="checkbox"
+              class="usage-check"
+              :checked="tagsStore.selectedScenarioIds.includes(usage.id)"
+              :aria-label="`Select ${usage.scenarioName || 'untitled scenario'}`"
+              :data-testid="`tag-select-${usage.id}`"
+              @change="tagsStore.toggleScenario(usage.id)"
+            >
+            <span
+              class="usage-main"
+              @click="emit('open', usage)"
+            >
               <span class="usage-name">
                 {{ usage.scenarioName || '(untitled scenario)' }}
               </span>
@@ -199,6 +257,8 @@ function selectTag(name: string) {
         </ul>
       </template>
     </section>
+
+    <BulkTagDialog v-model:visible="showBulkDialog" />
   </div>
 </template>
 
@@ -343,11 +403,39 @@ function selectTag(name: string) {
   background: rgb(59 130 246 / 8%);
 }
 
+.usage-check {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 0.75rem;
+  color: var(--text-color-secondary);
+}
+
+.select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
 .usage-main {
   display: flex;
   flex-direction: column;
   min-width: 0;
   flex: 1;
+  cursor: pointer;
 }
 
 .usage-name {

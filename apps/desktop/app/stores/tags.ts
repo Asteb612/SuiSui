@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
-import type { TagIndex, TagSummary, TagUsage } from '@suisui/shared'
+import type {
+  BulkTagOperation,
+  BulkTagResult,
+  TagIndex,
+  TagSummary,
+  TagUsage,
+} from '@suisui/shared'
+import { isValidTagName, normalizeTagName } from '@suisui/shared'
 import { useScenarioStore } from './scenario'
 
 export type TagSortMode = 'count' | 'alpha'
@@ -11,6 +18,18 @@ interface TagsStoreState {
   sortMode: TagSortMode
   /** `TagUsage.id`s selected for a bulk operation. */
   selectedScenarioIds: string[]
+  /** Outcome of the last bulk operation, for the summary panel. */
+  lastResult: BulkTagResult | null
+  isApplying: boolean
+}
+
+/** What a pending bulk operation would actually do (FR-019). */
+export interface BulkTagPreview {
+  willChange: number
+  filesAffected: number
+  alreadySatisfied: number
+  /** remove: inherited from the feature, so not removable here (FR-021). */
+  blocked: number
 }
 
 const EMPTY_INDEX: TagIndex = {
@@ -32,6 +51,8 @@ export const useTagsStore = defineStore('tags', {
     tagFilter: '',
     sortMode: 'count',
     selectedScenarioIds: [],
+    lastResult: null,
+    isApplying: false,
   }),
 
   getters: {
@@ -74,6 +95,28 @@ export const useTagsStore = defineStore('tags', {
     removableSelection(): TagUsage[] {
       return this.selectedUsages.filter(
         (usage) => usage.origin === 'direct' && this.selectedScenarioIds.includes(usage.id)
+      )
+    },
+
+    selectedUsageObjects(): TagUsage[] {
+      const chosen = new Set(this.selectedScenarioIds)
+      return this.selectedUsages.filter((usage) => chosen.has(usage.id))
+    },
+
+    hasSelection(): boolean {
+      return this.selectedScenarioIds.length > 0
+    },
+
+    /**
+     * True when an operation would write to the feature currently open with
+     * unsaved changes. Writing there would silently fight the editor buffer —
+     * whichever saves last wins — so the caller must confirm first (FR-025).
+     */
+    conflictsWithUnsavedEditor(): boolean {
+      const scenarioStore = useScenarioStore()
+      if (!scenarioStore.isDirty || !scenarioStore.currentFeaturePath) return false
+      return this.selectedUsageObjects.some(
+        (usage) => usage.relativePath === scenarioStore.currentFeaturePath
       )
     },
   },
@@ -132,6 +175,81 @@ export const useTagsStore = defineStore('tags', {
       this.selectedScenarioIds = this.selectedScenarioIds.filter((id) => alive.has(id))
     },
 
+    /**
+     * What an operation would do, computed from the index the renderer already
+     * holds — no round-trip, and it cannot disagree with what is on screen.
+     */
+    previewBulk(operation: BulkTagOperation, rawTag: string): BulkTagPreview {
+      const tag = normalizeTagName(rawTag)
+      const empty: BulkTagPreview = {
+        willChange: 0,
+        filesAffected: 0,
+        alreadySatisfied: 0,
+        blocked: 0,
+      }
+      if (!isValidTagName(tag)) return empty
+
+      const files = new Set<string>()
+      let willChange = 0
+      let alreadySatisfied = 0
+      let blocked = 0
+
+      for (const usage of this.selectedUsageObjects) {
+        const carriedDirectly = (this.index.usages[tag] ?? []).some(
+          (candidate) => candidate.id === usage.id && candidate.origin === 'direct'
+        )
+        const carriedAtAll = (this.index.usages[tag] ?? []).some(
+          (candidate) => candidate.id === usage.id
+        )
+
+        if (operation === 'add') {
+          if (carriedAtAll) alreadySatisfied++
+          else {
+            willChange++
+            files.add(usage.relativePath)
+          }
+          continue
+        }
+
+        if (!carriedAtAll) alreadySatisfied++
+        else if (!carriedDirectly) blocked++
+        else {
+          willChange++
+          files.add(usage.relativePath)
+        }
+      }
+
+      return { willChange, filesAffected: files.size, alreadySatisfied, blocked }
+    },
+
+    async applyBulk(operation: BulkTagOperation, rawTag: string): Promise<BulkTagResult | null> {
+      const tag = normalizeTagName(rawTag)
+      if (!isValidTagName(tag) || this.selectedScenarioIds.length === 0) return null
+
+      this.isApplying = true
+      try {
+        const result = await window.api.tags.applyBulk({
+          operation,
+          tag,
+          targets: this.selectedUsageObjects.map((usage) => ({
+            relativePath: usage.relativePath,
+            scenarioIndex: usage.scenarioIndex,
+          })),
+        })
+        // The service returns the rebuilt index, so counts never lag (FR-026).
+        this.index = result.index
+        this.lastResult = result
+        this.pruneSelection()
+        return result
+      } finally {
+        this.isApplying = false
+      }
+    },
+
+    clearLastResult() {
+      this.lastResult = null
+    },
+
     /** Workspace changed or closed — nothing from the old one may linger. */
     reset() {
       this.index = { ...EMPTY_INDEX }
@@ -139,6 +257,8 @@ export const useTagsStore = defineStore('tags', {
       this.tagFilter = ''
       this.sortMode = 'count'
       this.selectedScenarioIds = []
+      this.lastResult = null
+      this.isApplying = false
     },
   },
 })

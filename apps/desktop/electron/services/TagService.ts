@@ -1,12 +1,15 @@
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import type {
+  BulkTagRequest,
+  BulkTagResult,
   FeatureOutline,
   TagIndex,
   TagSummary,
   TagUsage,
+  TagWriteOutcome,
 } from '@suisui/shared'
-import { parseFeatureOutline } from '@suisui/shared'
+import { parseFeatureOutline, requireTagName, spliceTag } from '@suisui/shared'
 import type { IFileWatcher } from './FileWatcher'
 import { NodeFileWatcher } from './FileWatcher'
 import type { IWorkspaceLocator } from './SearchIndexService'
@@ -314,6 +317,231 @@ export class TagService {
   /** Re-read specific files after a write, then re-aggregate. */
   async refreshFiles(relativePaths: string[]): Promise<void> {
     await this.applyChanges(relativePaths)
+  }
+
+  // ------------------------------------------------------------- bulk editing
+
+  /**
+   * Add or remove one tag across many scenarios.
+   *
+   * Three properties make this safe enough to run without an undo stack:
+   *  1. edits are line splices, so nothing but the tag line can change;
+   *  2. edits within a file are applied BOTTOM-UP, so an inserted line cannot
+   *     shift the positions of targets still to be processed;
+   *  3. every written file is re-read and re-parsed, and a file that no longer
+   *     parses is reported as failed rather than left silently corrupted.
+   */
+  async applyBulk(request: BulkTagRequest): Promise<BulkTagResult> {
+    const tag = requireTagName(request.tag)
+    const featuresDir = this.featuresDir
+    const outcomes: TagWriteOutcome[] = []
+    const touched = new Set<string>()
+
+    if (!featuresDir) {
+      return this.finishBulk(request, tag, outcomes, touched)
+    }
+
+    // Group by file so each file is read and written exactly once.
+    const byFile = new Map<string, number[]>()
+    for (const target of request.targets) {
+      const list = byFile.get(target.relativePath) ?? []
+      list.push(target.scenarioIndex)
+      byFile.set(target.relativePath, list)
+    }
+
+    for (const [relativePath, scenarioIndexes] of byFile) {
+      await this.applyToFile(featuresDir, relativePath, scenarioIndexes, tag, request.operation, outcomes, touched)
+    }
+
+    if (touched.size > 0) {
+      await this.applyChanges([...touched])
+    }
+
+    return this.finishBulk(request, tag, outcomes, touched)
+  }
+
+  private async applyToFile(
+    featuresDir: string,
+    relativePath: string,
+    scenarioIndexes: number[],
+    tag: string,
+    operation: BulkTagRequest['operation'],
+    outcomes: TagWriteOutcome[],
+    touched: Set<string>
+  ): Promise<void> {
+    const indexed = this.files.get(relativePath)
+    if (!indexed) {
+      for (const scenarioIndex of scenarioIndexes) {
+        outcomes.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: '',
+          status: 'failed',
+          reason: 'This feature file is no longer part of the workspace.',
+        })
+      }
+      return
+    }
+
+    const fullPath = path.join(featuresDir, relativePath)
+    let lines: string[]
+    try {
+      // Split on /\n/, NOT /\r?\n/: the latter consumes `\r`, so rejoining
+      // would rewrite every line of a CRLF file.
+      lines = (await fs.readFile(fullPath, 'utf-8')).split(/\n/)
+    } catch (error) {
+      for (const scenarioIndex of scenarioIndexes) {
+        outcomes.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: indexed.outline.scenarios[scenarioIndex]?.name ?? '',
+          status: 'failed',
+          reason: `Could not read the file: ${String(error)}`,
+        })
+      }
+      return
+    }
+
+    const pending: TagWriteOutcome[] = []
+    let anyChange = false
+
+    // BOTTOM-UP: a splice can insert or delete a line, shifting every position
+    // below it. Descending order keeps the not-yet-applied positions valid.
+    for (const scenarioIndex of [...scenarioIndexes].sort((a, b) => b - a)) {
+      const scenario = indexed.outline.scenarios[scenarioIndex]
+      if (!scenario || scenario.line === undefined) {
+        pending.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: scenario?.name ?? '',
+          status: 'failed',
+          reason: 'This scenario is no longer present in the file.',
+        })
+        continue
+      }
+
+      const base = {
+        relativePath,
+        scenarioIndex,
+        scenarioName: scenario.name,
+      }
+
+      const carriesDirectly = scenario.tags.includes(tag)
+      const inherited = indexed.outline.tags.includes(tag)
+
+      if (operation === 'remove' && !carriesDirectly && inherited) {
+        pending.push({
+          ...base,
+          status: 'skipped',
+          reason: `@${tag} is declared on the feature, so it cannot be removed from a single scenario.`,
+        })
+        continue
+      }
+
+      const result = spliceTag({
+        lines,
+        scenarioLine: scenario.line,
+        ...(scenario.tagLine === undefined ? {} : { tagLine: scenario.tagLine }),
+        tag,
+        operation,
+      })
+
+      if (!result.changed) {
+        pending.push({ ...base, status: 'unchanged' })
+        continue
+      }
+
+      lines = result.lines
+      anyChange = true
+      pending.push({ ...base, status: 'changed' })
+    }
+
+    if (!anyChange) {
+      outcomes.push(...pending)
+      return
+    }
+
+    try {
+      await fs.writeFile(fullPath, lines.join('\n'), 'utf-8')
+    } catch (error) {
+      outcomes.push(
+        ...pending.map((outcome) =>
+          outcome.status === 'changed'
+            ? { ...outcome, status: 'failed' as const, reason: `Could not write the file: ${String(error)}` }
+            : outcome
+        )
+      )
+      return
+    }
+
+    touched.add(relativePath)
+
+    const verification = await this.verifyWrite(featuresDir, relativePath, tag, operation, pending)
+    outcomes.push(...verification)
+  }
+
+  /**
+   * Re-read and re-parse a file we just wrote (SC-009).
+   *
+   * There is no undo, so "we believe the splice was correct" is not enough: a
+   * file that no longer parses, or that does not show the change we intended,
+   * is reported as failed rather than left silently broken.
+   */
+  private async verifyWrite(
+    featuresDir: string,
+    relativePath: string,
+    tag: string,
+    operation: BulkTagRequest['operation'],
+    pending: TagWriteOutcome[]
+  ): Promise<TagWriteOutcome[]> {
+    const fail = (reason: string) =>
+      pending.map((outcome) =>
+        outcome.status === 'changed' ? { ...outcome, status: 'failed' as const, reason } : outcome
+      )
+
+    let content: string
+    try {
+      content = await fs.readFile(path.join(featuresDir, relativePath), 'utf-8')
+    } catch (error) {
+      return fail(`Could not re-read the file after writing: ${String(error)}`)
+    }
+
+    const outline = parseFeatureOutline(content)
+    if (outline.hasParseErrors) {
+      return fail('The file could not be parsed after the change, so it was left as written — please review it.')
+    }
+
+    for (const outcome of pending) {
+      if (outcome.status !== 'changed') continue
+      const scenario = outline.scenarios[outcome.scenarioIndex]
+      if (!scenario) {
+        return fail('The file no longer has the expected scenarios after the change.')
+      }
+      const carries = scenario.tags.includes(tag) || outline.tags.includes(tag)
+      if (operation === 'add' ? !carries : carries) {
+        return fail('The change did not take effect as expected.')
+      }
+    }
+
+    return pending
+  }
+
+  private finishBulk(
+    request: BulkTagRequest,
+    tag: string,
+    outcomes: TagWriteOutcome[],
+    touched: Set<string>
+  ): BulkTagResult {
+    const changed = outcomes.filter((outcome) => outcome.status === 'changed')
+    return {
+      operation: request.operation,
+      tag,
+      outcomes,
+      changedCount: changed.length,
+      filesChanged: touched.size,
+      failedCount: outcomes.filter((outcome) => outcome.status === 'failed').length,
+      index: this.index,
+    }
   }
 
   // -------------------------------------------------------------------- notify

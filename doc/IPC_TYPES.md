@@ -708,3 +708,27 @@ Notes:
   and the renderer learns the index is ready from the `search:indexStatus` push.
 - The renderer supplies only `requestId` and `text`, both validated at the handler
   boundary. Query text is matched literally and never compiled into a RegExp.
+
+## Tag channels (`tags:*`, feature 010-tag-management)
+
+| Channel | Direction | Signature |
+| --- | --- | --- |
+| `tags:getIndex` | invoke | `getIndex(): Promise<TagIndex>` |
+| `tags:applyBulk` | invoke | `applyBulk(request: BulkTagRequest): Promise<BulkTagResult>` |
+| `tags:indexChanged` | main → renderer | `onIndexChanged(cb): () => void` (returns unsubscribe) |
+
+Types live in `packages/shared/src/types/tags.ts`: `TagSummary`, `TagUsage`, `TagOrigin`,
+`TagIndex`, `BulkTagRequest`, `BulkTagResult`, `TagWriteOutcome`.
+
+Notes:
+
+- `getIndex` ships **usages with the index**, so the detail list can never disagree with
+  the count beside it, and clicking a tag costs no round-trip.
+- `applyBulk` returns the **rebuilt index** alongside the outcomes, so displayed counts
+  cannot lag the change that produced them.
+- `applyBulk` is the only write-capable channel here. Its validator rejects an invalid tag
+  name **before any file is touched** (a name with whitespace would split into two tags on
+  the next parse; one with `#` would comment out the rest of the line), and rejects any
+  `relativePath` that is absolute or escapes the features directory.
+- There is deliberately **no `tags:runTag`** — running a tag reuses the existing
+  tag-filtered batch run.

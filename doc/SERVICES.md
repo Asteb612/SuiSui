@@ -576,3 +576,28 @@ scenario names, and tags**. Step text is deliberately not indexed.
 
 The workspace root always comes from `WorkspaceService`, never the renderer; results carry
 relative paths only.
+
+## Tag service (`TagService`, feature 010-tag-management)
+
+Workspace-wide tag index plus the only bulk write path in the app.
+
+- **Index**: scans `.feature` files with `parseFeatureOutline` and keeps
+  feature-level inheritance **explicit** — `parseFeatureMetadata` (used by the run
+  view) flattens it and so cannot answer "is this tag removable here?". A scenario
+  carrying a tag both directly and by inheritance yields one usage, `origin: 'direct'`.
+- **Freshness**: reuses the `IFileWatcher` seam. Wired to `WORKSPACE_GET` as well as
+  SET/SELECT/INIT, so a workspace restored from settings is indexed too.
+- **`applyBulk`** adds/removes one tag across many scenarios. Three properties make it
+  safe enough to ship without an undo stack:
+  1. **Line splices only** (`@suisui/shared/tags/tagSplice`) — nothing but the tag line
+     changes. Never reuse `scenarioStore.toGherkin()`: it regenerates whole files,
+     dropping comments and reformatting steps.
+  2. **Bottom-up within each file** — an inserted tag line shifts every position below
+     it, so targets are applied in descending `scenarioIndex` order. Top-down would
+     silently tag the wrong scenarios.
+  3. **Re-parse after write** — every modified file is re-read and re-parsed; one that
+     no longer parses is reported `failed` rather than left corrupted.
+- **Partial failure** is reported per target (`changed`/`unchanged`/`skipped`/`failed`),
+  with **no rollback** — git is the recovery path.
+- Content is split on `/\n/`, **not** `/\r?\n/`: the latter consumes `\r`, so rejoining
+  would rewrite every line of a CRLF file.

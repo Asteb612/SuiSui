@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { launchApp, closeApp, type AppContext } from './helpers/app'
 import { copyFixture, cleanupFixture } from './helpers/fixtures'
 
@@ -173,5 +175,120 @@ test.describe('Tag Management', () => {
     await expect(window.locator('body')).toContainText('Test Runner')
 
     await openTagView(window)
+  })
+})
+
+/**
+ * Bulk editing writes to the user's .feature files, so these assertions check
+ * the files on disk, not just the UI.
+ */
+test.describe('Tag Management — bulk editing', () => {
+  let ctx: AppContext
+  let workspacePath: string
+
+  const featureFile = (relative: string) =>
+    path.join(workspacePath, 'features', relative)
+
+  test.beforeAll(async () => {
+    workspacePath = await copyFixture('tags')
+    ctx = await launchApp(workspacePath)
+    await openTagView(ctx.window)
+  })
+
+  test.afterAll(async () => {
+    await closeApp(ctx)
+    await cleanupFixture(workspacePath)
+  })
+
+  test('adds a tag across scenarios in two files and updates counts', async () => {
+    const { window } = ctx
+    const before = readFileSync(featureFile('login.feature'), 'utf-8')
+
+    await window.locator(tagRow('smoke')).click()
+    await window.locator('[data-testid="tag-select-all"]').click()
+    await expect(window.locator('[data-testid="tag-selection-count"]')).toContainText('4 selected')
+
+    await window.locator('[data-testid="tag-bulk-btn"]').click()
+    await expect(window.locator('[data-testid="bulk-tag-dialog"]')).toBeVisible()
+
+    await window.locator('[data-testid="bulk-tag-input"]').fill('release')
+    await expect(window.locator('[data-testid="bulk-preview-count"]')).toHaveText('4')
+    await expect(window.locator('[data-testid="bulk-preview-files"]')).toHaveText('2')
+
+    await window.locator('[data-testid="bulk-apply"]').click()
+    await expect(window.locator('[data-testid="bulk-outcome"]')).toContainText('Changed 4')
+    await window.locator('[data-testid="bulk-close"]').click()
+
+    // Counts refresh with no manual action (FR-026).
+    await expect(window.locator(tagCount('release'))).toHaveText('4')
+
+    // Only tag lines changed (FR-023): appended to the existing line, so the
+    // file keeps exactly the same number of lines.
+    const after = readFileSync(featureFile('login.feature'), 'utf-8')
+    expect(after).toContain('@smoke @critical @release')
+    expect(after.split('\n').length).toBe(before.split('\n').length)
+  })
+
+  test('rejects an invalid tag name before writing', async () => {
+    const { window } = ctx
+    await window.locator(tagRow('billing')).click()
+    await window.locator('[data-testid="tag-select-all"]').click()
+    await window.locator('[data-testid="tag-bulk-btn"]').click()
+
+    await window.locator('[data-testid="bulk-tag-input"]').fill('two words')
+    await expect(window.locator('[data-testid="bulk-tag-invalid"]')).toBeVisible()
+    await expect(window.locator('[data-testid="bulk-apply"]')).toBeDisabled()
+
+    await window.locator('[data-testid="bulk-close"]').click()
+  })
+
+  test('reports scenarios that inherit a tag as not individually removable', async () => {
+    const { window } = ctx
+    // @billing is declared at feature level on payment.feature.
+    await window.locator(tagRow('billing')).click()
+    await window.locator('[data-testid="tag-select-all"]').click()
+    await window.locator('[data-testid="tag-bulk-btn"]').click()
+
+    await window.locator('[data-testid="bulk-op-remove"]').click()
+    await window.locator('[data-testid="bulk-tag-input"]').fill('billing')
+
+    await expect(window.locator('[data-testid="bulk-preview-blocked"]')).toContainText('inherit')
+    await expect(window.locator('[data-testid="bulk-apply"]')).toBeDisabled()
+
+    await window.locator('[data-testid="bulk-close"]').click()
+  })
+
+  test('add then remove restores the file byte-for-byte', async () => {
+    const { window } = ctx
+    // Round-trip on a fresh tag. Note this must be add-then-remove: removing an
+    // existing tag and re-adding it legitimately moves it to the end of its tag
+    // line, so only this direction can assert exact equality.
+    const original = readFileSync(featureFile('login.feature'), 'utf-8')
+
+    await window.locator(tagRow('auth')).click()
+    await window.locator('[data-testid="tag-select-all"]').click()
+
+    // Add — covers both the "append to existing tag line" and "insert a new tag
+    // line" paths, since login.feature has scenarios of both kinds.
+    await window.locator('[data-testid="tag-bulk-btn"]').click()
+    await window.locator('[data-testid="bulk-tag-input"]').fill('roundtrip')
+    await window.locator('[data-testid="bulk-apply"]').click()
+    await expect(window.locator('[data-testid="bulk-outcome"]')).toContainText('Changed 3')
+    await window.locator('[data-testid="bulk-close"]').click()
+
+    const tagged = readFileSync(featureFile('login.feature'), 'utf-8')
+    expect(tagged).not.toBe(original)
+    expect(tagged).toContain('@roundtrip')
+
+    // Remove it again.
+    await window.locator(tagRow('roundtrip')).click()
+    await window.locator('[data-testid="tag-select-all"]').click()
+    await window.locator('[data-testid="tag-bulk-btn"]').click()
+    await window.locator('[data-testid="bulk-op-remove"]').click()
+    await window.locator('[data-testid="bulk-tag-input"]').fill('roundtrip')
+    await window.locator('[data-testid="bulk-apply"]').click()
+    await window.locator('[data-testid="bulk-close"]').click()
+
+    expect(readFileSync(featureFile('login.feature'), 'utf-8')).toBe(original)
   })
 })
