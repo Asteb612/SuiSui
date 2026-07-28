@@ -412,6 +412,8 @@ async function handleRunTag(tag: string) {
         <i class="pi pi-search" />
         Open a workspace to search
       </span>
+      <div class="header-spacer" />
+
       <!-- Primary workflows. Both open something in-page, so neither carries an
            external-window affordance. -->
       <div class="header-actions">
@@ -450,7 +452,10 @@ async function handleRunTag(tag: string) {
         />
       </div>
 
-      <div class="header-spacer" />
+      <span
+        class="header-divider"
+        aria-hidden="true"
+      />
 
       <span
         class="header-divider"
@@ -1152,13 +1157,22 @@ async function handleRunTag(tag: string) {
   flex: 1;
   min-height: 0;
 /* Primary workflows, grouped tightly so they read as one unit distinct from the
-   application controls on the right. */
+   application controls beside them. */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-left: 0.5rem;
   -webkit-app-region: no-drag;
+}
+
+/* Carries the separation between workflows and application controls, so the two
+   groups can sit together on the right instead of being pushed apart by an
+   empty middle. */
+.header-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.15rem 0.25rem;
+  background: var(--surface-border);
 }
 
 /* The record dot stays neutral until a recording is actually running — a
