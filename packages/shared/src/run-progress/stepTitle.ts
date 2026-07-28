@@ -55,3 +55,40 @@ export function stepTitleMatches(authored: string, reported: string): boolean {
     return false
   }
 }
+
+/**
+ * Convert a reporter-emitted feature path into the namespace the editor uses.
+ *
+ * The reporter derives its path from the GENERATED spec, so it is relative to
+ * the workspace root and includes the features directory
+ * (`features/login.feature`). The editor — and `features.read` — work relative
+ * to the features directory itself (`login.feature`).
+ *
+ * Getting this wrong is silent: nothing throws, the lookup simply never matches
+ * and the editor shows no statuses at all. The features directory is
+ * configurable, so the caller must supply it; the main process knows it and the
+ * renderer does not, which is why this is applied before the event is pushed.
+ */
+export function stripFeaturesDir(relativePath: string, featuresDir: string): string {
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\.\//, '')
+  const dir = featuresDir.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
+
+  if (!dir) return normalized
+
+  const prefix = `${dir}/`
+  return normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized
+}
+
+/**
+ * Do two feature paths refer to the same file?
+ *
+ * Tolerant of the two namespaces above, so a lookup still succeeds if one side
+ * was not normalized — matching on a full path segment boundary, never a bare
+ * substring, so `cart/checkout.feature` cannot match `my-cart/checkout.feature`.
+ */
+export function featurePathsMatch(a: string, b: string): boolean {
+  const x = a.replace(/\\/g, '/').replace(/^\.\//, '')
+  const y = b.replace(/\\/g, '/').replace(/^\.\//, '')
+  if (x === y) return true
+  return x.endsWith(`/${y}`) || y.endsWith(`/${x}`)
+}

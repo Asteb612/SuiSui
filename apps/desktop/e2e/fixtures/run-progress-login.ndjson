@@ -1,12 +1,12 @@
 @@SUISUI_PROGRESS@@{"type":"runStart","totalTests":1}
-@@SUISUI_PROGRESS@@{"type":"testStart","testId":"e2e-login-1","relativePath":"login.feature","title":"Successful login","attempt":0,"at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":0,"title":"Given I am on the \"login\" page","at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":0,"title":"Given I am on the \"login\" page","status":"passed","durationMs":20,"at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","status":"passed","durationMs":20,"at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","status":"passed","durationMs":20,"at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":3,"title":"And I click on \"[type='submit']\"","at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":3,"title":"And I click on \"[type='submit']\"","status":"failed","durationMs":20,"error":"locator resolved to 0 elements","at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"e2e-login-1","status":"failed","durationMs":120,"at":1785244623057}
-@@SUISUI_PROGRESS@@{"type":"runEnd","at":1785244623057}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"e2e-login-1","relativePath":"features/login.feature","title":"Successful login","attempt":0,"at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":0,"title":"Given I am on the \"login\" page","at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":0,"title":"Given I am on the \"login\" page","status":"passed","durationMs":20,"at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","status":"passed","durationMs":20,"at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","status":"passed","durationMs":20,"at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-login-1","index":3,"title":"And I click on \"[type='submit']\"","at":1785249948066}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-login-1","index":3,"title":"And I click on \"[type='submit']\"","status":"failed","durationMs":20,"error":"locator resolved to 0 elements","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"e2e-login-1","status":"failed","durationMs":120,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"runEnd","at":1785249948067}

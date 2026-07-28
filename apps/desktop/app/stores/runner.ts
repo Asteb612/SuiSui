@@ -23,6 +23,7 @@ import {
   parseFeatureSteps,
   authoredStepsFor,
   stepTitleMatches,
+  featurePathsMatch,
   resolvePattern,
 } from '@suisui/shared'
 import { useScenarioStore } from './scenario'
@@ -111,7 +112,9 @@ function authoredFromEditor(
   relativePath: string,
   scenarioTitle: string,
 ): AuthoredSteps | null {
-  if (editor.currentFeaturePath !== relativePath) return null
+  if (!editor.currentFeaturePath || !featurePathsMatch(editor.currentFeaturePath, relativePath)) {
+    return null
+  }
 
   // An outline row reports its substituted title, so exact first, tolerant second.
   const scenario =
@@ -160,7 +163,7 @@ function findExecution(
   let best: ScenarioExecution | undefined
 
   for (const execution of Object.values(live.scenarios)) {
-    if (execution.relativePath !== relativePath) continue
+    if (!featurePathsMatch(execution.relativePath, relativePath)) continue
     if (execution.title !== scenarioTitle && !stepTitleMatches(scenarioTitle, execution.title)) {
       continue
     }
@@ -292,10 +295,18 @@ export const useRunnerStore = defineStore('runner', {
       return (relativePath: string, scenarioTitle: string) => {
         if (!live.available) return null
 
-        const authored = authoredCache[authoredKey(relativePath, scenarioTitle)]
+        // Resolve the execution FIRST, then key the authored cache off ITS path.
+        // The cache was filled from the reporter's namespace, so keying off the
+        // caller's would miss and silently render nothing.
+        const execution = findExecution(live, relativePath, scenarioTitle)
+        const key = execution
+          ? authoredKey(execution.relativePath, execution.title)
+          : authoredKey(relativePath, scenarioTitle)
+
+        const authored = authoredCache[key]
         if (!authored) return null
 
-        return mergeLiveSteps(authored, findExecution(live, relativePath, scenarioTitle))
+        return mergeLiveSteps(authored, execution)
       }
     },
 
@@ -439,12 +450,25 @@ export const useRunnerStore = defineStore('runner', {
         return
       }
 
-      try {
-        const content = await window.api.features.read(relativePath)
-        const authored = authoredStepsFor(parseFeatureSteps(content), scenarioTitle)
-        if (authored) this.authoredSteps[key] = authored
-      } catch {
-        // Unreadable or renamed mid-run — leave it absent.
+      // `features.read` resolves relative to the features dir. The main process
+      // normalizes progress paths into that namespace, but if it could not
+      // resolve the configured dir the path still carries it — so try the
+      // de-prefixed form too rather than silently showing no steps.
+      const candidates = [relativePath]
+      const firstSlash = relativePath.indexOf('/')
+      if (firstSlash > 0) candidates.push(relativePath.slice(firstSlash + 1))
+
+      for (const candidate of candidates) {
+        try {
+          const content = await window.api.features.read(candidate)
+          const authored = authoredStepsFor(parseFeatureSteps(content), scenarioTitle)
+          if (authored) {
+            this.authoredSteps[key] = authored
+            return
+          }
+        } catch {
+          // Unreadable under this form — try the next, then give up quietly.
+        }
       }
     },
 

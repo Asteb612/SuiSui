@@ -776,3 +776,76 @@ describe('runner store — stuck and interrupted runs (US3)', () => {
     expect(store.live.scenarios['a1']!.steps[0]!.status).not.toBe('running')
   })
 })
+
+describe('feature path namespaces reach the editor (regression)', () => {
+  // The reporter emits a path relative to the WORKSPACE root
+  // ("features/login.feature"); the editor uses one relative to the features dir
+  // ("login.feature"). When these did not reconcile, the editor silently showed
+  // no statuses at all — nothing threw, the lookup just never matched.
+  const REPORTER_PATH = 'features/login.feature'
+  const EDITOR_PATH = 'login.feature'
+
+  it('resolves steps when the event still carries the workspace-relative path', async () => {
+    const store = useRunnerStore()
+    store.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(store, [
+      testStart('a1', { relativePath: REPORTER_PATH, title: VALID }),
+      stepEnd(0, 'Given the application is running', 'passed'),
+      stepEnd(1, 'When I log in', 'failed', 'boom'),
+      { type: 'testEnd', testId: 'a1', status: 'failed', durationMs: 30, at: 40 },
+    ])
+
+    // Looked up the way the editor asks for it.
+    const steps = store.liveStepsFor(EDITOR_PATH, VALID)
+    expect(steps, 'editor lookup must resolve across path namespaces').not.toBeNull()
+    expect(steps!.map((s) => s.status)).toEqual(['passed', 'failed', 'skipped', 'skipped'])
+  })
+
+  it('still resolves when the event was normalized in the main process', async () => {
+    const store = useRunnerStore()
+    store.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(store, [
+      testStart('a1', { relativePath: EDITOR_PATH, title: VALID }),
+      stepEnd(1, 'When I log in', 'failed', 'boom'),
+      { type: 'testEnd', testId: 'a1', status: 'failed', durationMs: 30, at: 40 },
+    ])
+
+    expect(store.liveStepsFor(EDITOR_PATH, VALID)).not.toBeNull()
+  })
+
+  it('does not conflate same-named features in different folders', async () => {
+    const store = useRunnerStore()
+    store.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(store, [
+      testStart('a1', { relativePath: 'features/admin/login.feature', title: VALID }),
+    ])
+
+    expect(store.liveStepsFor('public/login.feature', VALID)).toBeNull()
+  })
+})
+
+describe('statuses persist after the run so the failing step can be found', () => {
+  it('keeps step statuses in the editor once the run has finished', async () => {
+    // The during-run animation is the lesser half; locating the failing step
+    // afterwards is the point.
+    const store = useRunnerStore()
+    store.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(store, [
+      testStart('a1', { relativePath: LOGIN, title: VALID }),
+      stepEnd(0, 'Given the application is running', 'passed'),
+      stepEnd(1, 'When I log in', 'failed', 'kaboom'),
+      { type: 'testEnd', testId: 'a1', status: 'failed', durationMs: 30, at: 40 },
+    ])
+
+    expect(store.isRunning).toBe(false)
+    expect(store.live.reconciled).toBe(true)
+
+    const steps = store.liveStepsFor(LOGIN, VALID)!
+    expect(steps[1]).toMatchObject({ status: 'failed', error: 'kaboom' })
+    expect(store.live.available).toBe(true)
+  })
+})

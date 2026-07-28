@@ -1,6 +1,6 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
-import { IPC_CHANNELS, parseProgressLine } from '@suisui/shared'
+import { IPC_CHANNELS, parseProgressLine, stripFeaturesDir } from '@suisui/shared'
 import type { BulkTagRequest, Scenario, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
@@ -307,6 +307,17 @@ export function registerIpcHandlers(
 
   // Runner handlers
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
+    // Resolved once per run so every progress event can be reported in the
+    // renderer's path namespace. Best-effort: without it paths pass through
+    // unchanged, which is no worse than before.
+    let featuresDirForRun = ''
+    try {
+      const wsPath = getWorkspaceService().getPath()
+      if (wsPath) featuresDirForRun = await getWorkspaceService().getFeaturesDir(wsPath)
+    } catch {
+      featuresDirForRun = ''
+    }
+
     // Buffer across chunks so each RUNNER_LOG is a COMPLETE line — the live `list`
     // reporter is parsed for progress in the renderer, so split lines must not leak.
     let buf = ''
@@ -329,7 +340,15 @@ export function registerIpcHandlers(
         const progress = parseProgressLine(line)
         if (progress) {
           if (!event.sender.isDestroyed()) {
-            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, progress)
+            // The reporter's path comes from the generated spec and includes the
+            // features directory; the renderer works relative to that directory.
+            // Normalizing here (where the configured dir is known) rather than in
+            // the renderer, which cannot know it.
+            const normalized =
+              progress.type === 'testStart' && featuresDirForRun
+                ? { ...progress, relativePath: stripFeaturesDir(progress.relativePath, featuresDirForRun) }
+                : progress
+            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, normalized)
           }
           continue
         }

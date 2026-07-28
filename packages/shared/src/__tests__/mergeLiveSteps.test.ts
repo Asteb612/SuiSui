@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stepTitleMatches } from '../run-progress/stepTitle'
+import { stepTitleMatches, stripFeaturesDir, featurePathsMatch } from '../run-progress/stepTitle'
 import { mergeLiveSteps, type AuthoredSteps } from '../run-progress/mergeLiveSteps'
 import { applyProgressEvent, applyReportOutcomes } from '../run-progress/liveRunReducer'
 import { emptyLiveRunState, type ScenarioExecution } from '../types/run-progress'
@@ -216,5 +216,62 @@ describe('applyReportOutcomes', () => {
     ])
 
     expect(reconciled.scenarios['t1']!.status).not.toBe('failed')
+  })
+})
+
+describe('feature path namespaces', () => {
+  it('strips the features dir so the reporter path matches the editor path', () => {
+    // The reporter derives its path from the generated spec (relative to the
+    // workspace root); the editor works relative to the features dir. Without
+    // this the lookup silently never matches and NO statuses are shown.
+    expect(stripFeaturesDir('features/login.feature', 'features')).toBe('login.feature')
+    expect(stripFeaturesDir('features/cart/checkout.feature', 'features')).toBe(
+      'cart/checkout.feature',
+    )
+  })
+
+  it('honours a non-default features dir', () => {
+    expect(stripFeaturesDir('tests/e2e/login.feature', 'tests/e2e')).toBe('login.feature')
+  })
+
+  it('leaves a path alone when it does not start with the features dir', () => {
+    expect(stripFeaturesDir('login.feature', 'features')).toBe('login.feature')
+    expect(stripFeaturesDir('other/login.feature', 'features')).toBe('other/login.feature')
+  })
+
+  it('does not strip a directory that merely shares a prefix', () => {
+    expect(stripFeaturesDir('features-old/login.feature', 'features')).toBe(
+      'features-old/login.feature',
+    )
+  })
+
+  it('normalizes Windows separators and a leading ./', () => {
+    expect(stripFeaturesDir('features\\login.feature', 'features')).toBe('login.feature')
+    expect(stripFeaturesDir('./features/login.feature', './features')).toBe('login.feature')
+  })
+
+  it('passes the path through when no features dir is known', () => {
+    expect(stripFeaturesDir('features/login.feature', '')).toBe('features/login.feature')
+  })
+})
+
+describe('featurePathsMatch', () => {
+  it('matches identical paths', () => {
+    expect(featurePathsMatch('login.feature', 'login.feature')).toBe(true)
+  })
+
+  it('matches across the two namespaces', () => {
+    expect(featurePathsMatch('features/login.feature', 'login.feature')).toBe(true)
+    expect(featurePathsMatch('login.feature', 'features/login.feature')).toBe(true)
+  })
+
+  it('only matches on a full segment boundary', () => {
+    // A bare substring match would conflate these two different files.
+    expect(featurePathsMatch('my-cart/checkout.feature', 'cart/checkout.feature')).toBe(false)
+    expect(featurePathsMatch('features/mylogin.feature', 'login.feature')).toBe(false)
+  })
+
+  it('does not match different files that share a basename', () => {
+    expect(featurePathsMatch('features/a/login.feature', 'features/b/login.feature')).toBe(false)
   })
 })
