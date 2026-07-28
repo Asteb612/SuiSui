@@ -9,7 +9,6 @@ import { getWorkspaceService } from './WorkspaceService'
 import { getDependencyService } from './DependencyService'
 import { getNodeService } from './NodeService'
 import { getVariablesService } from './VariablesService'
-import type { ChildProcess } from 'node:child_process'
 import http from 'node:http'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -170,7 +169,15 @@ function sanitizeReportScope(scope: string): string {
 
 export class RunnerService {
   private commandRunner: ICommandRunner
-  private currentProcess: ChildProcess | null = null
+  /**
+   * Cancels the in-flight run.
+   *
+   * Replaces a `ChildProcess` handle that was never actually assigned, so Stop
+   * silently did nothing while Playwright kept running. The run is a TREE — the
+   * CLI spawns workers which spawn browsers — so cancellation goes through
+   * CommandRunner's process-group kill rather than signalling one process.
+   */
+  private runAbort: AbortController | null = null
   private reportServer: http.Server | null = null
 
   constructor(commandRunner?: ICommandRunner) {
@@ -552,12 +559,18 @@ export class RunnerService {
       totalTimeoutMs: 0,
     })
 
+    // Stop must work during generation too — bddgen on a large suite is not
+    // instant, and a user who pressed Stop expects everything to stop.
+    this.runAbort = new AbortController()
+    const runSignal = this.runAbort.signal
+
     // Run bddgen to generate all spec files (no FEATURE env var)
     const bddgenResult = await this.commandRunner.exec(nodeExec, [bddgenCliPath], {
       cwd: workspacePath,
       timeout: 60000,
       env,
       onOutput,
+      signal: runSignal,
     })
 
     if (bddgenResult.code !== 0) {
@@ -647,8 +660,12 @@ export class RunnerService {
         idleTimeout: options.mode === 'ui' ? 0 : RUN_IDLE_TIMEOUT_MS,
         env,
         onOutput,
+        signal: runSignal,
       },
     )
+
+    // The run is over; a later Stop must not abort a controller nobody owns.
+    this.runAbort = null
 
     const duration = Date.now() - startTime
 
@@ -706,10 +723,10 @@ export class RunnerService {
   }
 
   async stop(): Promise<void> {
-    if (this.currentProcess) {
-      this.currentProcess.kill('SIGTERM')
-      this.currentProcess = null
-    }
+    // Aborting takes down the whole process group (CLI, workers, browsers), then
+    // escalates to SIGKILL after a grace period — the same path a timeout uses.
+    this.runAbort?.abort()
+    this.runAbort = null
   }
 }
 

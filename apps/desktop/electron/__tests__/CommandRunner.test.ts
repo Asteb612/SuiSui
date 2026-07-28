@@ -215,3 +215,72 @@ describe('CommandRunner (real spawn)', () => {
     20000,
   )
 })
+
+describe('CommandRunner (real spawn) > cancellation', () => {
+  it('kills a running command when the caller aborts', async () => {
+    const runner = new CommandRunner()
+    const controller = new AbortController()
+
+    setTimeout(() => controller.abort(), 200)
+
+    const result = await runner.exec('node', ['-e', 'setTimeout(() => {}, 60000)'], {
+      timeout: 0,
+      signal: controller.signal,
+    })
+
+    expect(result.cancelled).toBe(true)
+    expect(result.code).toBe(-1)
+  }, 20000)
+
+  it('kills the whole process tree, not just the direct child', async () => {
+    // A test run is a tree: the Playwright CLI spawns workers which spawn
+    // browsers. Signalling only the process we hold a handle to is exactly the
+    // bug this replaced — Stop appeared to work while tests kept running.
+    const runner = new CommandRunner()
+    const controller = new AbortController()
+
+    const marker = path.join(os.tmpdir(), `suisui-cancel-${process.pid}-${Date.now()}.txt`)
+    // Parent spawns a grandchild that would write the marker after 3s.
+    const script = `
+      const { spawn } = require('node:child_process')
+      spawn(process.execPath, ['-e', 'setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 3000)'], { stdio: 'ignore' })
+      console.log('spawned')
+      setTimeout(() => {}, 60000)
+    `
+
+    const started = Date.now()
+    setTimeout(() => controller.abort(), 500)
+    await runner.exec('node', ['-e', script], { timeout: 0, signal: controller.signal })
+
+    // Wait past the grandchild's deadline.
+    await new Promise((r) => setTimeout(r, 3500 - (Date.now() - started) + 500))
+
+    expect(fs.existsSync(marker), 'grandchild survived the cancellation').toBe(false)
+  }, 25000)
+
+  it('reports a normal completion as not cancelled', async () => {
+    const runner = new CommandRunner()
+    const controller = new AbortController()
+
+    const result = await runner.exec('node', ['-e', 'console.log("done")'], {
+      timeout: 5000,
+      signal: controller.signal,
+    })
+
+    expect(result.cancelled).toBeUndefined()
+    expect(result.code).toBe(0)
+  }, 15000)
+
+  it('does not start a command whose signal is already aborted', async () => {
+    const runner = new CommandRunner()
+    const controller = new AbortController()
+    controller.abort()
+
+    const result = await runner.exec('node', ['-e', 'setTimeout(() => {}, 60000)'], {
+      timeout: 0,
+      signal: controller.signal,
+    })
+
+    expect(result.cancelled).toBe(true)
+  }, 15000)
+})
