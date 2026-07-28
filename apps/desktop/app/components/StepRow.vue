@@ -277,26 +277,15 @@ function handleDragEnd() {
 
 /* --- Live run status (feature 011) --- */
 
-/* A left border marks the row's outcome without tinting the text. `running` also
-   gets a background so the executing step is findable at a glance in a long
-   scenario — that is the whole point of watching a run. */
+/* The status icon carries the outcome. Only the executing row and a failure get
+   a background, so the eye lands on them in a long scenario without the whole
+   list becoming striped. */
 .step-row.live-running {
   background: rgba(59, 130, 246, 0.08);
-  box-shadow: inset 3px 0 0 var(--p-blue-500, #3b82f6);
-}
-
-.step-row.live-passed {
-  box-shadow: inset 3px 0 0 var(--p-green-500, #22c55e);
 }
 
 .step-row.live-failed {
   background: rgba(220, 53, 69, 0.06);
-  box-shadow: inset 3px 0 0 var(--p-red-500, #ef4444);
-}
-
-.step-row.live-skipped,
-.step-row.live-interrupted {
-  box-shadow: inset 3px 0 0 var(--surface-border);
 }
 
 /* Pending steps are deliberately dimmed rather than badged, so the steps that

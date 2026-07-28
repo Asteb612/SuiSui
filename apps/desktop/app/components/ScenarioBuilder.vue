@@ -1867,31 +1867,19 @@ function selectScenario(index: number) {
 }
 
 /* --- Live run status (feature 011) ---
-   Applies to both scenario steps and Background steps. Status is carried by an
-   icon and an accessible label; these rules only reinforce it. */
+   Applies to both scenario steps and Background steps. The status ICON and its
+   accessible label carry the outcome; these rules only help the eye land on the
+   two rows that matter — what is executing, and what failed. Passed and skipped
+   rows are left unstyled so a finished scenario is not a wall of colour. */
 
 .step-item.live-running,
 .precondition-item.live-running {
   background: rgba(59, 130, 246, 0.1);
-  box-shadow: inset 3px 0 0 var(--p-blue-500, #3b82f6);
-}
-
-.step-item.live-passed,
-.precondition-item.live-passed {
-  box-shadow: inset 3px 0 0 var(--p-green-500, #22c55e);
 }
 
 .step-item.live-failed,
 .precondition-item.live-failed {
   background: rgba(220, 53, 69, 0.07);
-  box-shadow: inset 3px 0 0 var(--p-red-500, #ef4444);
-}
-
-.step-item.live-skipped,
-.step-item.live-interrupted,
-.precondition-item.live-skipped,
-.precondition-item.live-interrupted {
-  box-shadow: inset 3px 0 0 var(--surface-border);
 }
 
 /* Steps still to come are dimmed so the run's actual position stands out. */
