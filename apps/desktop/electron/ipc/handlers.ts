@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
-import { IPC_CHANNELS } from '@suisui/shared'
-import type { BulkTagRequest, Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
+import { IPC_CHANNELS, parseProgressLine, stripFeaturesDir } from '@suisui/shared'
+import type { LiveRunState, BulkTagRequest, Scenario, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -30,6 +30,7 @@ import {
   getUpdateService,
   getSearchIndexService,
   getTagService,
+  getRunHistoryService,
 } from '../services'
 import type {
   GitWorkspaceParams,
@@ -306,15 +307,29 @@ export function registerIpcHandlers(
   })
 
   // Runner handlers
-  ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_HEADLESS, async (_event, options?: Partial<RunOptions>) => {
-    return runnerService.runHeadless(options)
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.RUNNER_SAVE_LAST_RUN,
+    async (_event, live: LiveRunState, scopeId: string) => {
+      await getRunHistoryService().save(live, scopeId, Date.now())
+    },
+  )
 
-  ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_UI, async (_event, options?: Partial<RunOptions>) => {
-    return runnerService.runUI(options)
+  ipcMain.handle(IPC_CHANNELS.RUNNER_GET_LAST_RUN, async () => {
+    return getRunHistoryService().load()
   })
 
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
+    // Resolved once per run so every progress event can be reported in the
+    // renderer's path namespace. Best-effort: without it paths pass through
+    // unchanged, which is no worse than before.
+    let featuresDirForRun = ''
+    try {
+      const wsPath = getWorkspaceService().getPath()
+      if (wsPath) featuresDirForRun = await getWorkspaceService().getFeaturesDir(wsPath)
+    } catch {
+      featuresDirForRun = ''
+    }
+
     // Buffer across chunks so each RUNNER_LOG is a COMPLETE line — the live `list`
     // reporter is parsed for progress in the renderer, so split lines must not leak.
     let buf = ''
@@ -328,8 +343,29 @@ export function registerIpcHandlers(
       buf += data
       let nl: number
       while ((nl = buf.indexOf('\n')) !== -1) {
-        emit(buf.slice(0, nl))
+        const line = buf.slice(0, nl)
         buf = buf.slice(nl + 1)
+
+        // Structured progress events (feature 011) are forwarded on their own
+        // channel and MUST NOT reach the log panel — otherwise the readable run
+        // log becomes a wall of JSON.
+        const progress = parseProgressLine(line)
+        if (progress) {
+          if (!event.sender.isDestroyed()) {
+            // The reporter's path comes from the generated spec and includes the
+            // features directory; the renderer works relative to that directory.
+            // Normalizing here (where the configured dir is known) rather than in
+            // the renderer, which cannot know it.
+            const normalized =
+              progress.type === 'testStart' && featuresDirForRun
+                ? { ...progress, relativePath: stripFeaturesDir(progress.relativePath, featuresDirForRun) }
+                : progress
+            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, normalized)
+          }
+          continue
+        }
+
+        emit(line)
       }
     }
     try {
@@ -410,8 +446,21 @@ export function registerIpcHandlers(
       buf += data
       let nl: number
       while ((nl = buf.indexOf('\n')) !== -1) {
-        emit(buf.slice(0, nl))
+        const line = buf.slice(0, nl)
         buf = buf.slice(nl + 1)
+
+        // Structured progress events (feature 011) are forwarded on their own
+        // channel and MUST NOT reach the log panel — otherwise the readable run
+        // log becomes a wall of JSON.
+        const progress = parseProgressLine(line)
+        if (progress) {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC_CHANNELS.RUNNER_PROGRESS, progress)
+          }
+          continue
+        }
+
+        emit(line)
       }
     }
     try {

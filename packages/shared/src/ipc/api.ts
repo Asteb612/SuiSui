@@ -2,7 +2,7 @@ import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions, StepSourceLocation } from '../types/step-catalog'
 import type { ValidationResult } from '../types/validation'
-import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
+import type { BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
 import type { WorkspaceVariable } from '../types/variables'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
@@ -22,6 +22,7 @@ import type {
   LocatorValidationResult,
 } from '../types/recorder'
 import type { UpdateState, UpdatePreferences } from '../types/update'
+import type { RunProgressEvent, LiveRunState, PersistedRunSnapshot } from '../types/run-progress'
 import type { SearchResponse, SearchIndexStatus } from '../types/search'
 import type { TagIndex, BulkTagRequest, BulkTagResult } from '../types/tags'
 
@@ -69,8 +70,6 @@ export interface ElectronAPI {
   }
 
   runner: {
-    runHeadless: (options?: Partial<RunOptions>) => Promise<RunResult>
-    runUI: (options?: Partial<RunOptions>) => Promise<RunResult>
     runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
     getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>
@@ -81,6 +80,17 @@ export interface ElectronAPI {
     showReport: (scope: string) => Promise<string>
     onRunnerLog: (callback: (line: string) => void) => void
     offRunnerLog: () => void
+    /**
+     * Subscribe to live execution progress; returns an unsubscribe fn.
+     *
+     * Events describe only what CHANGED. The full step list for a scenario comes
+     * from the feature file — a step present there with no event is pending.
+     */
+    onProgress: (callback: (event: RunProgressEvent) => void) => () => void
+    /** Persist the finished run's per-step outcomes under `<workspace>/.app/`. */
+    saveLastRun: (live: LiveRunState, scopeId: string) => Promise<void>
+    /** The last run's outcomes, or null when there is none to restore. */
+    getLastRun: () => Promise<PersistedRunSnapshot | null>
   }
 
   settings: {

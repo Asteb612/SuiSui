@@ -42,6 +42,12 @@ export default defineConfig({
         // Type-only seam + electron-wiring factory — no unit-testable logic.
         'electron/services/update/IUpdaterAdapter.ts',
         'electron/services/update/getUpdateService.ts',
+        // Live-progress reporter: executes only INSIDE the workspace's Playwright
+        // process, never in this one. It is covered by replaying a real capture of
+        // its output through the parser and reducer (see
+        // electron/__tests__/progressReplay.test.ts and its fixtures/README.md),
+        // which is how it is exercised without running Playwright (Constitution III).
+        'electron/assets/suisui-progress-reporter.cjs',
         // Real recursive fs.watch adapter — OS-dependent and timing-flaky; the
         // service is tested against FakeFileWatcher instead (Constitution III).
         'electron/services/FileWatcher.ts',

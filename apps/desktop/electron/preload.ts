@@ -43,8 +43,6 @@ const api: ElectronAPI = {
   },
 
   runner: {
-    runHeadless: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_HEADLESS, options),
-    runUI: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_UI, options),
     runBatch: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_BATCH, options),
     getWorkspaceTests: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS),
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),
@@ -55,6 +53,14 @@ const api: ElectronAPI = {
     },
     offRunnerLog: () => {
       ipcRenderer.removeAllListeners(IPC_CHANNELS.RUNNER_LOG)
+    },
+    saveLastRun: (live, scopeId) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_SAVE_LAST_RUN, live, scopeId),
+    getLastRun: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_LAST_RUN),
+    onProgress: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) =>
+        callback(progress)
+      ipcRenderer.on(IPC_CHANNELS.RUNNER_PROGRESS, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.RUNNER_PROGRESS, listener)
     },
   },
 

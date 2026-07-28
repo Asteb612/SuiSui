@@ -378,8 +378,36 @@ and bulk add/remove. **The only feature that writes to many user `.feature` file
 
 See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), and
 [doc/FRONTEND.md](doc/FRONTEND.md).
+## Live Run Progress (feature 011)
+
+Per-step pass/fail shown **while a run is in flight**, from a custom Playwright reporter
+that runs inside the **workspace's** Playwright, not the app.
+
+- **The reporter must never break a run.** Every callback is wrapped, stdout write
+  failures are swallowed, and if the file can't be provisioned it is simply omitted from
+  `--reporter` and the run proceeds unchanged (FR-019).
+- **Sentinel lines never reach the log.** The `RUNNER_RUN_BATCH` handler parses each
+  complete line; a parsed event is pushed on `runner:progress` and `continue`d. Only a
+  line _starting_ with `@@SUISUI_PROGRESS@@` counts, so test output can't forge events.
+- **Step matching is ordinal + title.** playwright-bdd reports locations against the
+  generated spec, not the `.feature`. Title comparison is `stepTitleMatches()`, NOT
+  equality — a `Scenario Outline` is authored with `<placeholders>` and reported
+  substituted. On mismatch the update is **dropped**.
+- **`live.running` is a SET.** Parallel runs have several tests in flight at once.
+- **A failure ends the step stream.** Playwright emits nothing for the steps after a
+  failing one, so "skipped" is a display decision, not something the reducer can read.
+- **`test.id` shares a per-file prefix** — compare ids whole.
+- **Tests never run Playwright.** A real capture is replayed through the real parser and
+  reducer (`electron/__tests__/fixtures/README.md`); E2E replays it through the
+  production stdout path under `APP_TEST_MODE`.
+
+See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md)
+(`runner:progress`), and [doc/FRONTEND.md](doc/FRONTEND.md).
 
 ## Active Technologies
+
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22. The reporter itself is plain CommonJS JavaScript, executed by the **workspace's** Playwright, not by the app. + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Uses the workspace's existing `@playwright/test` reporter API (`onTestBegin`/`onStepBegin`/`onStepEnd`/`onTestEnd`) and `playwright-bdd` (≥8.x), which wraps every Gherkin step in `test.step(textWithKeyword, …)`. (011-live-run-progress)
+- None persisted. Live run state is in-memory in the renderer and discarded when a new run starts. The reporter file is a generated artifact under `<workspace>/.app/` (already git-ignored), rewritten on each run. (011-live-run-progress)
 
 - TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Reuses `parseFeatureOutline` + `IFileWatcher` (feature 009) and `RunnerService.runBatch({ tags })` (feature 002) (010-tag-management)
 - No persisted storage: the tag index is in-memory and session-scoped. Bulk edits write directly to the user's `.feature` files — the only persistent effect, and the main risk of the feature (010-tag-management)

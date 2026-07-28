@@ -31,13 +31,15 @@ export const IPC_CHANNELS = {
   VALIDATE_SCENARIO: 'validate:scenario',
 
   // Runner
-  RUNNER_RUN_HEADLESS: 'runner:runHeadless',
-  RUNNER_RUN_UI: 'runner:runUI',
   RUNNER_RUN_BATCH: 'runner:runBatch',
   RUNNER_GET_WORKSPACE_TESTS: 'runner:getWorkspaceTests',
   RUNNER_STOP: 'runner:stop',
   RUNNER_SHOW_REPORT: 'runner:showReport',
   RUNNER_LOG: 'runner:log',
+  /** Live per-step execution progress (feature 011): main -> renderer push. */
+  RUNNER_PROGRESS: 'runner:progress',
+  RUNNER_SAVE_LAST_RUN: 'runner:saveLastRun',
+  RUNNER_GET_LAST_RUN: 'runner:getLastRun',
   DEPS_LOG: 'deps:log',
 
   // Settings

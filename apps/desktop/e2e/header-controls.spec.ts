@@ -58,3 +58,56 @@ test.describe('Header quick actions', () => {
     await expect(window.locator(SEL.executionSelector)).toHaveCount(0)
   })
 })
+
+/**
+ * The header actions are icon-only, so the hover tooltip is the ONLY way to
+ * learn what they do. If it regresses the header becomes unlabelled glyphs.
+ */
+test.describe('Header: icon-only actions', () => {
+  let ctx: AppContext
+  let workspacePath: string
+
+  test.beforeAll(async () => {
+    workspacePath = await copyFixture('with-features')
+    ctx = await launchApp(workspacePath)
+  })
+
+  test.afterAll(async () => {
+    await closeApp(ctx)
+    await cleanupFixture(workspacePath)
+  })
+
+  const ACTIONS: Array<[string, string]> = [
+    ['run-tests-btn', 'Configure and run tests'],
+    ['record-btn-global', 'Start a recording'],
+    ['tags-btn', 'Browse and manage tags'],
+    ['settings-btn', 'Settings'],
+    ['help-btn', 'Help'],
+  ]
+
+  for (const [testId, label] of ACTIONS) {
+    test(`${testId} reveals its label on hover`, async () => {
+      const { window } = ctx
+
+      await window.locator(`[data-testid="${testId}"]`).hover()
+      const tooltip = window.locator('.p-tooltip')
+
+      await expect(tooltip).toBeVisible()
+      await expect(tooltip).toContainText(label)
+      // toBeVisible() does not check opacity, so assert it is actually painted.
+      await expect(tooltip).toHaveCSS('opacity', '1')
+
+      // Move away so the next hover starts clean.
+      await window.locator('.title').hover()
+    })
+  }
+
+  test('every icon-only action carries an accessible name', async () => {
+    const { window } = ctx
+
+    for (const [testId] of ACTIONS) {
+      const name = await window.locator(`[data-testid="${testId}"]`).getAttribute('aria-label')
+      expect(name, testId).toBeTruthy()
+    }
+  })
+})

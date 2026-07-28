@@ -1,0 +1,20 @@
+@@SUISUI_PROGRESS@@{"type":"runStart","totalTests":2}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"e2e-ok","relativePath":"features/login.feature","title":"Successful login","attempt":0,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"e2e-bad","relativePath":"features/login.feature","title":"Failed login","attempt":0,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-bad","index":0,"title":"Given I am on the \"login\" page","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-bad","index":0,"title":"Given I am on the \"login\" page","status":"passed","durationMs":5,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-bad","index":1,"title":"And I fill \"[name='password']\" with \"wrong\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":0,"title":"Given I am on the \"login\" page","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":0,"title":"Given I am on the \"login\" page","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":1,"title":"When I fill \"[name='username']\" with \"admin\"","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":2,"title":"And I fill \"[name='password']\" with \"secret\"","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":3,"title":"And I click on \"[type='submit']\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":3,"title":"And I click on \"[type='submit']\"","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":4,"title":"Then I should see \"Welcome\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":4,"title":"Then I should see \"Welcome\"","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"e2e-ok","index":5,"title":"And the URL should contain \"/dashboard\"","at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"e2e-ok","index":5,"title":"And the URL should contain \"/dashboard\"","status":"passed","durationMs":20,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"e2e-ok","status":"passed","durationMs":400,"at":1785249948067}
+@@SUISUI_PROGRESS@@{"type":"runEnd","at":1785249948067}

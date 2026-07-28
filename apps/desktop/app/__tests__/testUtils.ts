@@ -474,7 +474,7 @@ export function createInitialStoreState(overrides: Record<string, Record<string,
       baseUrl: 'http://localhost:3000',
       activeScope: 'global',
       // Run output is scoped (global runner + per-spec). Flat runner overrides
-      // (status/logs/lastResult/…) are applied to the active 'global' scope, which is
+      // (status/logs/…) are applied to the active 'global' scope, which is
       // what the store's getters read.
       scopes: {
         global: {
@@ -482,7 +482,6 @@ export function createInitialStoreState(overrides: Record<string, Record<string,
           logs: [],
           errors: [],
           batchResult: null,
-          lastResult: null,
           showResults: false,
           reportUrl: '',
           reportLoading: false,

@@ -10,7 +10,8 @@ import StepAddDialog from './StepAddDialog.vue'
 import { parseTableValue } from '~/utils/tableUtils'
 import { useThrottle } from '~/composables/useThrottle'
 import { stripAnchors, parseSegments as sharedParseSegments, getOutlinePlaceholder } from '@suisui/shared'
-import type { ScenarioStep, StepDefinition, PatternSegment } from '@suisui/shared'
+import type { ScenarioStep, StepDefinition, PatternSegment, LiveStepDisplay } from '@suisui/shared'
+import { statusPresentation } from '~/utils/runStatus'
 
 interface TableRow {
   [key: string]: string
@@ -21,7 +22,7 @@ interface StepGroup {
   steps: ScenarioStep[]
 }
 
-type ViewMode = 'read' | 'edit' | 'run'
+type ViewMode = 'read' | 'edit'
 
 const props = withDefaults(
   defineProps<{
@@ -42,63 +43,6 @@ defineEmits<{
 const scenarioStore = useScenarioStore()
 const runnerStore = useRunnerStore()
 
-// Runner status colors
-const statusColors: Record<string, string> = {
-  idle: 'var(--text-color-secondary)',
-  running: 'var(--primary-color)',
-  passed: '#10b981',
-  failed: '#dc3545',
-  error: '#dc3545',
-}
-
-// Runner actions
-function runHeadless() {
-  runnerStore.runHeadless(
-    scenarioStore.currentFeaturePath ?? undefined,
-    scenarioStore.scenario.name || undefined
-  )
-}
-
-function runUI() {
-  runnerStore.runUI(
-    scenarioStore.currentFeaturePath ?? undefined,
-    scenarioStore.scenario.name || undefined
-  )
-}
-
-function stopRun() {
-  runnerStore.stop()
-}
-
-function clearLogs() {
-  runnerStore.clearLogs()
-}
-
-// Error display helpers
-function getErrorIcon(type: string): string {
-  const icons: Record<string, string> = {
-    undefined_step: 'pi pi-question-circle',
-    syntax_error: 'pi pi-code',
-    missing_decorator: 'pi pi-tag',
-    ambiguous_step: 'pi pi-clone',
-    config_error: 'pi pi-cog',
-    unknown: 'pi pi-exclamation-circle',
-  }
-  return icons[type] || 'pi pi-exclamation-circle'
-}
-
-function formatErrorType(type: string): string {
-  const labels: Record<string, string> = {
-    undefined_step: 'Undefined Step',
-    syntax_error: 'Syntax Error',
-    missing_decorator: 'Missing Decorator',
-    ambiguous_step: 'Ambiguous Step',
-    config_error: 'Configuration Error',
-    unknown: 'Error',
-  }
-  return labels[type] || 'Error'
-}
-
 // Add step dialog state
 const showAddStepDialog = ref(false)
 const addStepTarget = ref<'scenario' | 'background'>('scenario')
@@ -108,7 +52,6 @@ const addStepIndex = ref(0)
 // Mode helpers (using prop from parent)
 const isReadMode = computed(() => props.viewMode === 'read')
 const isEditMode = computed(() => props.viewMode === 'edit')
-const isRunMode = computed(() => props.viewMode === 'run')
 
 // Mode change logging (useful for debugging)
 watch(
@@ -134,6 +77,38 @@ const outlineArgOptions = computed(() => {
 })
 
 // Group steps by main keyword (Given/When/Then), hiding And/But
+/**
+ * Live per-step statuses for the scenario currently open, or null when there is
+ * nothing live to show (no run, no reporter, or a different scenario executing).
+ *
+ * Keyed by step id rather than index so the grouped rendering below — which
+ * re-buckets steps by keyword — cannot misalign statuses.
+ */
+const liveStepById = computed((): Map<string, LiveStepDisplay> => {
+  const map = new Map<string, LiveStepDisplay>()
+
+  const path = scenarioStore.currentFeaturePath
+  const name = scenarioStore.scenario.name
+  if (!path || !name) return map
+
+  const merged = runnerStore.liveStepsFor(path, name)
+  if (!merged) return map
+
+  // Reported order is background steps first, then the scenario's own.
+  const ordered = [...scenarioStore.background, ...scenarioStore.scenario.steps]
+  ordered.forEach((step, index) => {
+    const display = merged[index]
+    if (display) map.set(step.id, display)
+  })
+
+  return map
+})
+
+/** Live status for one step, or undefined when there is none to show. */
+function liveStatusFor(stepId: string): LiveStepDisplay | undefined {
+  return liveStepById.value.get(stepId)
+}
+
 const groupedSteps = computed((): StepGroup[] => {
   const groups: StepGroup[] = []
   let currentGroup: StepGroup | null = null
@@ -724,7 +699,7 @@ function selectScenario(index: number) {
 
         <!-- Add Preconditions button (edit mode, no background, not in background edit mode) -->
         <Button
-          v-if="isEditMode && !isBackgroundEditMode && scenarioStore.background.length === 0 && !isRunMode"
+          v-if="isEditMode && !isBackgroundEditMode && scenarioStore.background.length === 0"
           icon="pi pi-key"
           label="Add Preconditions"
           text
@@ -735,7 +710,7 @@ function selectScenario(index: number) {
 
         <!-- Preconditions (Background) - shown in read/edit modes -->
         <div
-          v-if="(scenarioStore.background.length > 0 || isBackgroundEditMode) && !isRunMode"
+          v-if="(scenarioStore.background.length > 0 || isBackgroundEditMode)"
           key="preconditions-section"
           class="preconditions-section"
           :class="{
@@ -792,7 +767,10 @@ function selectScenario(index: number) {
             >
               <div
                 class="precondition-item"
-                :class="{ dragging: isStepDragging(step.id) }"
+                :class="{
+                  dragging: isStepDragging(step.id),
+                  [`live-${liveStatusFor(step.id)?.status}`]: !!liveStatusFor(step.id)
+                }"
                 :draggable="isBackgroundEditMode"
                 @dragstart="handleStepDragStart($event, 'background', step.id)"
                 @dragend="handleStepDragEnd"
@@ -801,7 +779,22 @@ function selectScenario(index: number) {
                   v-if="isBackgroundEditMode"
                   class="pi pi-bars drag-handle"
                 />
-                
+
+                <!-- Live run status. The label says "background" so a step shown
+                     as executing is attributable to the Background, not the
+                     scenario body (FR-005). -->
+                <span
+                  v-if="liveStatusFor(step.id)"
+                  class="live-status"
+                  :class="`live-icon-${liveStatusFor(step.id)!.status}`"
+                  :title="`Background step — ${statusPresentation(liveStatusFor(step.id)!.status).label}`"
+                  :aria-label="`Background step — ${statusPresentation(liveStatusFor(step.id)!.status).label}`"
+                  role="img"
+                  :data-testid="`live-status-background-${liveStatusFor(step.id)!.status}`"
+                >
+                  <i :class="statusPresentation(liveStatusFor(step.id)!.status).icon" />
+                </span>
+
                 <!-- Read mode: formatted text -->
                 <span
                   v-if="!isBackgroundEditMode"
@@ -924,7 +917,6 @@ function selectScenario(index: number) {
 
         <!-- Story Section -->
         <div
-          v-if="!isRunMode"
           key="story-section"
           class="story-section"
         >
@@ -1021,7 +1013,8 @@ function selectScenario(index: number) {
                       class="step-item"
                       :class="{
                         'has-error': getStepIssues(step.id).some(i => i.severity === 'error'),
-                        dragging: isStepDragging(step.id)
+                        dragging: isStepDragging(step.id),
+                        [`live-${liveStatusFor(step.id)?.status}`]: !!liveStatusFor(step.id)
                       }"
                       :draggable="isEditMode"
                       @dragstart="handleStepDragStart($event, 'scenario', step.id)"
@@ -1031,6 +1024,19 @@ function selectScenario(index: number) {
                         v-if="isEditMode"
                         class="pi pi-bars drag-handle"
                       />
+
+                      <!-- Live run status: icon + accessible label, never colour alone. -->
+                      <span
+                        v-if="liveStatusFor(step.id)"
+                        class="live-status"
+                        :class="`live-icon-${liveStatusFor(step.id)!.status}`"
+                        :title="statusPresentation(liveStatusFor(step.id)!.status).label"
+                        :aria-label="statusPresentation(liveStatusFor(step.id)!.status).label"
+                        role="img"
+                        :data-testid="`live-status-${liveStatusFor(step.id)!.status}`"
+                      >
+                        <i :class="statusPresentation(liveStatusFor(step.id)!.status).icon" />
+                      </span>
 
                       <!-- Read mode: show formatted step text -->
                       <span
@@ -1246,221 +1252,10 @@ function selectScenario(index: number) {
           </div>
         </div>
 
-        <!-- Run Mode View -->
-        <div
-          v-if="isRunMode"
-          key="run-section"
-          class="run-section"
-        >
-          <!-- Validation Status -->
-          <div class="run-validation-section">
-            <div class="section-label">
-              <i class="pi pi-check-circle" />
-              <span>Validation</span>
-            </div>
-            <div
-              v-if="scenarioStore.isValid"
-              class="validation-success"
-            >
-              <i class="pi pi-check-circle" />
-              <span>Scenario is valid and ready to run</span>
-            </div>
-            <div
-              v-else-if="scenarioStore.errors.length > 0"
-              class="validation-errors"
-            >
-              <div
-                v-for="(issue, i) in scenarioStore.errors"
-                :key="`error-${i}`"
-                class="validation-issue error"
-              >
-                <i class="pi pi-times-circle" />
-                <span>{{ issue.message }}</span>
-              </div>
-            </div>
-            <div
-              v-else
-              class="validation-pending"
-            >
-              <i class="pi pi-info-circle" />
-              <span>Validation pending</span>
-            </div>
-          </div>
-
-          <!-- Target Info -->
-          <div class="run-target-section">
-            <div class="section-label">
-              <i class="pi pi-crosshair" />
-              <span>Target</span>
-            </div>
-            <div class="target-info">
-              <div class="target-item">
-                <span class="target-label">Feature</span>
-                <span class="target-value">{{ scenarioStore.currentFeaturePath || 'All features' }}</span>
-              </div>
-              <div class="target-item">
-                <span class="target-label">Scenario</span>
-                <span class="target-value">{{ scenarioStore.scenario.name || 'All scenarios' }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Runner Controls -->
-          <div class="run-controls-section">
-            <div class="section-label">
-              <i class="pi pi-play" />
-              <span>Test Runner</span>
-              <div class="runner-status">
-                <span
-                  class="status-dot"
-                  :style="{ backgroundColor: statusColors[runnerStore.status] }"
-                />
-                <span class="status-text">{{ runnerStore.status }}</span>
-                <span
-                  v-if="runnerStore.lastResult"
-                  class="duration"
-                >
-                  {{ runnerStore.lastResult.duration }}ms
-                </span>
-              </div>
-            </div>
-
-            <div class="base-url-field">
-              <label for="baseUrl">Base URL</label>
-              <InputText
-                id="baseUrl"
-                :model-value="runnerStore.baseUrl"
-                placeholder="http://localhost:3000"
-                :disabled="runnerStore.isRunning"
-                @update:model-value="runnerStore.setBaseUrl($event ?? '')"
-              />
-            </div>
-
-            <div class="run-buttons">
-              <Button
-                label="Run with UI"
-                icon="pi pi-desktop"
-                :disabled="runnerStore.isRunning || !scenarioStore.isValid"
-                @click="runUI"
-              />
-              <Button
-                label="Run Headless"
-                icon="pi pi-play"
-                outlined
-                :disabled="runnerStore.isRunning || !scenarioStore.isValid"
-                @click="runHeadless"
-              />
-              <Button
-                v-if="runnerStore.isRunning"
-                label="Stop"
-                icon="pi pi-stop"
-                severity="danger"
-                @click="stopRun"
-              />
-            </div>
-          </div>
-
-          <!-- Runner Errors -->
-          <div
-            v-if="runnerStore.errors.length > 0"
-            class="run-errors-section"
-          >
-            <div class="section-label">
-              <i class="pi pi-exclamation-triangle" />
-              <span>Errors</span>
-              <span class="error-count">{{ runnerStore.errors.length }} issue{{ runnerStore.errors.length > 1 ? 's' : '' }}</span>
-            </div>
-            <div class="errors-list">
-              <div
-                v-for="(error, index) in runnerStore.errors"
-                :key="index"
-                class="error-item"
-                :class="error.type"
-              >
-                <div class="error-header">
-                  <i :class="getErrorIcon(error.type)" />
-                  <span class="error-type">{{ formatErrorType(error.type) }}</span>
-                </div>
-                <div class="error-message">
-                  {{ error.message }}
-                </div>
-                <div
-                  v-if="error.file"
-                  class="error-location"
-                >
-                  <i class="pi pi-file" />
-                  {{ error.file }}{{ error.line ? `:${error.line}` : '' }}
-                </div>
-                <div
-                  v-if="error.suggestion"
-                  class="error-suggestion"
-                >
-                  <i class="pi pi-lightbulb" />
-                  {{ error.suggestion }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Steps Preview -->
-          <div class="run-steps-section">
-            <div class="section-label">
-              <i class="pi pi-list" />
-              <span>Steps to Execute</span>
-              <span class="step-count">{{ scenarioStore.scenario.steps.length }} steps</span>
-            </div>
-            <ol class="steps-list">
-              <li
-                v-for="step in scenarioStore.scenario.steps"
-                :key="step.id"
-              >
-                <template
-                  v-for="(segment, segIdx) in formatStepSegments(step)"
-                  :key="segIdx"
-                >
-                  <strong
-                    v-if="segment.type === 'strong'"
-                    :class="segment.className"
-                  >{{ segment.text }}</strong>
-                  <span v-else>{{ segment.text }}</span>
-                </template>
-              </li>
-            </ol>
-          </div>
-
-          <!-- Logs -->
-          <div class="run-logs-section">
-            <div class="section-label">
-              <i class="pi pi-file" />
-              <span>Output</span>
-              <Button
-                v-if="runnerStore.logs.length > 0"
-                icon="pi pi-trash"
-                text
-                rounded
-                size="small"
-                class="clear-logs-btn"
-                @click="clearLogs"
-              />
-            </div>
-            <div class="logs-container">
-              <div
-                v-if="runnerStore.logs.length === 0"
-                class="logs-empty"
-              >
-                Run the scenario to see output here
-              </div>
-              <pre
-                v-else
-                class="logs-content"
-              >{{ runnerStore.logs.join('\n') }}</pre>
-            </div>
-          </div>
-        </div>
 
         <!-- Examples / Variations - shown in read/edit modes -->
         <div
-          v-if="isOutline && !isRunMode"
+          v-if="isOutline"
           key="variations-section"
           class="variations-section"
         >
@@ -2070,6 +1865,42 @@ function selectScenario(index: number) {
 .step-item:hover {
   background: var(--surface-hover);
 }
+
+/* --- Live run status (feature 011) ---
+   Applies to both scenario steps and Background steps. The status ICON and its
+   accessible label carry the outcome; these rules only help the eye land on the
+   two rows that matter — what is executing, and what failed. Passed and skipped
+   rows are left unstyled so a finished scenario is not a wall of colour. */
+
+.step-item.live-running,
+.precondition-item.live-running {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.step-item.live-failed,
+.precondition-item.live-failed {
+  background: rgba(220, 53, 69, 0.07);
+}
+
+/* Steps still to come are dimmed so the run's actual position stands out. */
+.step-item.live-pending,
+.precondition-item.live-pending {
+  opacity: 0.55;
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+}
+
+.live-icon-pending { color: var(--text-color-secondary); }
+.live-icon-running { color: var(--p-blue-600, #2563eb); }
+.live-icon-passed { color: var(--p-green-600, #16a34a); }
+.live-icon-failed { color: var(--p-red-600, #dc2626); }
+.live-icon-skipped { color: var(--text-color-secondary); }
+.live-icon-interrupted { color: var(--p-orange-600, #ea580c); }
 
 .step-item.dragging {
   opacity: 0.4;

@@ -59,7 +59,13 @@ export default tseslint.config(
   },
   // Node.js scripts (.js/.cjs/.mjs) - allow require() and Node globals
   {
-    files: ['**/scripts/**/*.{js,cjs,mjs}', '**/electron/scripts/**/*.{js,cjs,mjs}'],
+    files: [
+      '**/scripts/**/*.{js,cjs,mjs}',
+      '**/electron/scripts/**/*.{js,cjs,mjs}',
+      // Assets executed by Node in another process (e.g. the Playwright
+      // progress reporter loaded by the workspace's own Playwright).
+      '**/electron/assets/**/*.{js,cjs,mjs}',
+    ],
     languageOptions: {
       globals: {
         ...globals.node,

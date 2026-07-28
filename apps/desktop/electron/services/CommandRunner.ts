@@ -98,6 +98,7 @@ export class CommandRunner implements ICommandRunner {
       let stdout = ''
       let stderr = ''
       let timedOut: 'idle' | 'total' | null = null
+      let cancelled = false
 
       /**
        * Signal the child's entire process group, falling back to the single
@@ -142,6 +143,27 @@ export class CommandRunner implements ICommandRunner {
         killTimer.unref?.()
       }
 
+      /**
+       * Cancel on request, taking the whole tree down the same way a timeout
+       * does. A bare `child.kill()` would leave the Playwright workers and their
+       * browsers running after the user pressed Stop.
+       */
+      const onAbort = (): void => {
+        if (cancelled || timedOut) return
+        cancelled = true
+        killTree('SIGTERM')
+        killTimer = setTimeout(() => {
+          killTree('SIGKILL')
+          if (child.pid !== undefined) activeGroups.delete(child.pid)
+        }, KILL_GRACE_MS)
+        killTimer.unref?.()
+      }
+
+      if (options.signal) {
+        if (options.signal.aborted) onAbort()
+        else options.signal.addEventListener('abort', onAbort, { once: true })
+      }
+
       const totalTimer =
         timeout > 0 ? setTimeout(() => triggerTimeout('total'), timeout) : null
 
@@ -162,6 +184,7 @@ export class CommandRunner implements ICommandRunner {
       const clearDeadlineTimers = (): void => {
         if (totalTimer) clearTimeout(totalTimer)
         if (idleTimer) clearTimeout(idleTimer)
+        options.signal?.removeEventListener('abort', onAbort)
       }
 
       child.stdout?.on('data', (data) => {
@@ -210,6 +233,11 @@ export class CommandRunner implements ICommandRunner {
             stderr: `${reason}\nLast output before it stopped:\n${tail}\n${stderr}`,
             timedOut,
           })
+          return
+        }
+
+        if (cancelled) {
+          resolve({ code: -1, stdout, stderr, cancelled: true })
           return
         }
 

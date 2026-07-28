@@ -9,6 +9,8 @@ export interface CommandResult {
    * Absent when the command ran to completion, however it exited.
    */
   timedOut?: 'idle' | 'total'
+  /** Set when the caller cancelled the command via `CommandOptions.signal`. */
+  cancelled?: boolean
 }
 
 export interface CommandOptions {
@@ -32,4 +34,14 @@ export interface CommandOptions {
    */
   idleTimeout?: number
   onOutput?: (stream: 'stdout' | 'stderr', data: string) => void
+  /**
+   * Cancels the command, taking down its whole process tree.
+   *
+   * Needed because a test run is a tree — the Playwright CLI spawns workers,
+   * which spawn browsers — and signalling only the process we hold a handle to
+   * leaves the rest running. Cancellation therefore goes through the same
+   * group-kill and SIGKILL escalation a timeout uses, rather than a bare
+   * `child.kill()`.
+   */
+  signal?: AbortSignal
 }

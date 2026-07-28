@@ -14,6 +14,7 @@ export * from './types/ai'
 export * from './types/step-catalog'
 export * from './types/recorder'
 export * from './types/update'
+export * from './types/run-progress'
 export * from './types/search'
 export * from './types/tags'
 export * from './recorder/locatorSelector'
@@ -30,6 +31,9 @@ export * from './search'
 
 // Tags (feature 010)
 export * from './tags'
+
+// Live run progress (feature 011)
+export * from './run-progress'
 
 // Validation
 export * from './validation/gitToken'

@@ -7,7 +7,7 @@ import { primeVueStubs, createInitialStoreState, mockScenarioSteps } from './tes
 
 function createScenarioBuilderWrapper(props: {
   editMode?: 'scenario' | 'background'
-  viewMode?: 'read' | 'edit' | 'run'
+  viewMode?: 'read' | 'edit'
 } = {}, storeOverrides: {
   scenario?: Record<string, unknown>
 } = {}) {

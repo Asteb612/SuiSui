@@ -1,0 +1,44 @@
+@@SUISUI_PROGRESS@@{"type":"runStart","totalTests":5}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","relativePath":"features/checkout.feature","title":"Buying 1 items","attempt":0,"at":1785243602504}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","relativePath":"features/checkout.feature","title":"Buying 3 items","attempt":0,"at":1785243602515}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":0,"title":"Given a cart with 1 items","at":1785243602533}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":0,"title":"Given a cart with 3 items","at":1785243602540}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":0,"title":"Given a cart with 1 items","status":"passed","durationMs":11,"at":1785243602543}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":1,"title":"When I check out","at":1785243602545}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":0,"title":"Given a cart with 3 items","status":"passed","durationMs":11,"at":1785243602551}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":1,"title":"When I check out","at":1785243602552}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":1,"title":"When I check out","status":"passed","durationMs":15,"at":1785243602560}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":2,"title":"Then the order total is 10","at":1785243602562}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":1,"title":"When I check out","status":"passed","durationMs":16,"at":1785243602568}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":2,"title":"Then the order total is 30","at":1785243602570}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","index":2,"title":"Then the order total is 10","status":"passed","durationMs":11,"at":1785243602573}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"fdef47a35295d0ab580b-6592dc09361ca027c728","status":"passed","durationMs":62,"at":1785243602575}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","relativePath":"features/checkout.feature","title":"Slow checkout","attempt":0,"at":1785243602576}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":0,"title":"Given a cart with 2 items","at":1785243602578}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","index":2,"title":"Then the order total is 30","status":"passed","durationMs":11,"at":1785243602580}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"fdef47a35295d0ab580b-439de8fab8955b164a18","status":"passed","durationMs":56,"at":1785243602582}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"06311dfec990197f7291-4b69819400eb29f6847e","relativePath":"features/login.feature","title":"Valid login","attempt":0,"at":1785243602585}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":0,"title":"Given the application is running","at":1785243602588}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":0,"title":"Given a cart with 2 items","status":"passed","durationMs":11,"at":1785243602589}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":1,"title":"When I wait a while","at":1785243602590}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":0,"title":"Given the application is running","status":"passed","durationMs":10,"at":1785243602599}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":1,"title":"And a user account exists","at":1785243602601}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":1,"title":"And a user account exists","status":"passed","durationMs":10,"at":1785243602611}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":2,"title":"When I log in with valid credentials","at":1785243602613}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":2,"title":"When I log in with valid credentials","status":"passed","durationMs":21,"at":1785243602635}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":3,"title":"Then I should see the dashboard","at":1785243602638}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-4b69819400eb29f6847e","index":3,"title":"Then I should see the dashboard","status":"passed","durationMs":10,"at":1785243602648}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"06311dfec990197f7291-4b69819400eb29f6847e","status":"passed","durationMs":62,"at":1785243602652}
+@@SUISUI_PROGRESS@@{"type":"testStart","testId":"06311dfec990197f7291-153729257b56e5edb8b6","relativePath":"features/login.feature","title":"Invalid login is rejected","attempt":0,"at":1785243602654}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":0,"title":"Given the application is running","at":1785243602657}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":0,"title":"Given the application is running","status":"passed","durationMs":11,"at":1785243602668}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":1,"title":"And a user account exists","at":1785243602670}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":1,"title":"And a user account exists","status":"passed","durationMs":10,"at":1785243602680}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":2,"title":"When I log in with invalid credentials","at":1785243602683}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"06311dfec990197f7291-153729257b56e5edb8b6","index":2,"title":"When I log in with invalid credentials","status":"failed","durationMs":20,"error":"Error: credentials rejected","at":1785243602708}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"06311dfec990197f7291-153729257b56e5edb8b6","status":"failed","durationMs":50,"at":1785243602709}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":1,"title":"When I wait a while","status":"passed","durationMs":401,"at":1785243602991}
+@@SUISUI_PROGRESS@@{"type":"stepStart","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":2,"title":"Then the order total is 20","at":1785243602992}
+@@SUISUI_PROGRESS@@{"type":"stepEnd","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","index":2,"title":"Then the order total is 20","status":"passed","durationMs":10,"at":1785243603003}
+@@SUISUI_PROGRESS@@{"type":"testEnd","testId":"fdef47a35295d0ab580b-c1c3a1aca15260d43baf","status":"passed","durationMs":426,"at":1785243603005}
+@@SUISUI_PROGRESS@@{"type":"runEnd","at":1785243603026}

@@ -31,12 +31,12 @@ const changeWorkspaceMenuRef = ref()
 
 const changeWorkspaceMenuItems = [
   {
-    label: 'Open Local Workspace',
-    icon: 'pi pi-folder',
+    label: 'Switch project…',
+    icon: 'pi pi-folder-open',
     command: () => workspaceStore.selectWorkspace(),
   },
   {
-    label: 'Clone from Git',
+    label: 'Clone from Git…',
     icon: 'pi pi-code-branch',
     command: () => { showGitClone.value = true },
   },
@@ -212,6 +212,10 @@ async function loadWorkspaceDependencies() {
   }
   if (!isMounted.value) return
   await runnerStore.loadBaseUrl()
+  if (!isMounted.value) return
+  // Bring back the previous run's step statuses, so a reload does not lose
+  // which step failed.
+  await runnerStore.restoreLastRun()
 }
 
 watch(
@@ -413,61 +417,89 @@ async function handleRunTag(tag: string) {
         Open a workspace to search
       </span>
       <div class="header-spacer" />
-      <Button
-        icon="pi pi-question-circle"
-        text
-        size="small"
-        @click="showHelpDialog = true"
+
+      <!-- Primary workflows. Both open something in-page, so neither carries an
+           external-window affordance. -->
+      <div class="header-workflows">
+        <Button
+          v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
+          v-tooltip.bottom="'Configure and run tests'"
+          icon="pi pi-play"
+          size="small"
+          severity="success"
+          aria-label="Run tests"
+          data-testid="run-tests-btn"
+          @click="enterRunView"
+        />
+        <Button
+          v-if="workspaceStore.hasWorkspace"
+          v-tooltip.bottom="recorderStore.isRecording ? 'Recording — open the recorder' : 'Start a recording'"
+          icon="pi pi-circle-fill"
+          outlined
+          size="small"
+          :severity="recorderStore.isRecording ? 'danger' : 'secondary'"
+          :class="{ 'is-recording': recorderStore.isRecording }"
+          :aria-label="recorderStore.isRecording ? 'Recording in progress' : 'Start a recording'"
+          data-testid="record-btn-global"
+          @click="showRecorder = true"
+        />
+        <Button
+          v-if="workspaceStore.hasWorkspace && activeView !== 'tags'"
+          v-tooltip.bottom="'Browse and manage tags across the workspace'"
+          icon="pi pi-tags"
+          outlined
+          size="small"
+          severity="secondary"
+          aria-label="Tags"
+          data-testid="tags-btn"
+          @click="enterTagView"
+        />
+      </div>
+
+      <span
+        class="header-divider"
+        aria-hidden="true"
       />
-      <Button
-        v-if="workspaceStore.hasWorkspace && activeView !== 'tags'"
-        label="Tags"
-        icon="pi pi-tags"
-        text
-        size="small"
-        title="Browse and manage tags across the workspace"
-        data-testid="tags-btn"
-        @click="enterTagView"
+
+      <span
+        class="header-divider"
+        aria-hidden="true"
       />
-      <Button
-        v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
-        label="Run Tests"
-        icon="pi pi-play"
-        text
-        size="small"
-        severity="success"
-        title="Open the test runner"
-        data-testid="run-tests-btn"
-        @click="enterRunView"
-      />
+
+      <!-- Secondary application controls, separated from the workflows above. -->
       <Button
         v-if="workspaceStore.hasWorkspace"
-        label="Record"
-        icon="pi pi-circle-fill"
+        v-tooltip.bottom="workspaceStore.workspace?.path"
+        :label="workspaceStore.workspace?.name || 'Workspace'"
+        icon="pi pi-chevron-down"
+        icon-pos="right"
         text
         size="small"
-        severity="danger"
-        title="Record a scenario in the browser"
-        data-testid="record-btn-global"
-        @click="showRecorder = true"
+        severity="secondary"
+        class="workspace-switcher"
+        aria-haspopup="true"
+        data-testid="change-workspace-btn"
+        @click="showChangeWorkspaceMenu"
       />
       <Button
+        v-tooltip.bottom="'Settings'"
         icon="pi pi-cog"
         text
         size="small"
+        severity="secondary"
         aria-label="Settings"
         data-testid="settings-btn"
         @click="showSettingsDialog = true"
       />
       <Button
-        v-if="workspaceStore.hasWorkspace"
-        label="Change Workspace"
-        icon="pi pi-folder"
+        v-tooltip.bottom="'Help'"
+        icon="pi pi-question-circle"
         text
         size="small"
-        aria-haspopup="true"
-        data-testid="change-workspace-btn"
-        @click="showChangeWorkspaceMenu"
+        severity="secondary"
+        aria-label="Help"
+        data-testid="help-btn"
+        @click="showHelpDialog = true"
       />
       <Menu
         ref="changeWorkspaceMenuRef"
@@ -1128,6 +1160,65 @@ async function handleRunTag(tag: string) {
 .tag-view > .tag-browser {
   flex: 1;
   min-height: 0;
+}
+
+/* Primary workflows, grouped tightly so they read as one unit distinct from the
+   application controls beside them. */
+.header-workflows {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  -webkit-app-region: no-drag;
+}
+
+/* Carries the separation between workflows and application controls, so the two
+   groups can sit together on the right instead of being pushed apart by an
+   empty middle. */
+.header-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.15rem 0.25rem;
+  background: var(--surface-border);
+}
+
+/* The record dot stays neutral until a recording is actually running — a
+   permanently red control reads as an alert rather than an affordance. */
+.header-workflows :deep(.p-button) .pi-circle-fill {
+  font-size: 0.6rem;
+}
+
+.header-workflows :deep(.p-button.is-recording) .pi-circle-fill {
+  animation: record-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes record-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header-workflows :deep(.p-button.is-recording) .pi-circle-fill {
+    animation: none;
+  }
+}
+
+/* The project selector is context, not an action — kept quieter than the
+   workflow buttons and truncated rather than allowed to push the layout. */
+.workspace-switcher {
+  max-width: 14rem;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-switcher :deep(.p-button-label) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-switcher :deep(.pi-chevron-down) {
+  font-size: 0.7rem;
+  opacity: 0.7;
 }
 
 .header-search {
