@@ -130,6 +130,13 @@ export const IPC_CHANNELS = {
 
   // Global search: main -> renderer push (webContents.send)
   SEARCH_INDEX_STATUS: 'search:indexStatus',
+
+  // Tag management: request/response (invoke)
+  TAGS_GET_INDEX: 'tags:getIndex',
+  TAGS_APPLY_BULK: 'tags:applyBulk',
+
+  // Tag management: main -> renderer push (webContents.send)
+  TAGS_INDEX_CHANGED: 'tags:indexChanged',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]

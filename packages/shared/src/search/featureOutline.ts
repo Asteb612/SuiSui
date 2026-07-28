@@ -36,13 +36,22 @@ export function parseFeatureOutline(content: string): FeatureOutline {
   }
 
   let pendingTags: string[] = []
+  /**
+   * Line index of the FIRST tag line in the current pending block. Tracked so
+   * feature 010 can splice tags in place; a block of several tag lines reports
+   * its start, so an edit never orphans the earlier lines.
+   */
+  let pendingTagLine: number | undefined
 
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trim()
+  const lines = content.split(/\r?\n/)
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!.trim()
 
     if (line.length === 0 || line.startsWith('#')) continue
 
     if (line.startsWith('@')) {
+      if (pendingTagLine === undefined) pendingTagLine = index
       for (const piece of line.split(/\s+/)) {
         if (VALID_TAG.test(piece)) {
           pendingTags.push(piece.slice(1))
@@ -55,15 +64,17 @@ export function parseFeatureOutline(content: string): FeatureOutline {
 
     const outlineMatch = SCENARIO_OUTLINE_LINE.exec(line)
     if (outlineMatch) {
-      outline.scenarios.push(makeScenario(outlineMatch[1], pendingTags, true))
+      outline.scenarios.push(makeScenario(outlineMatch[1], pendingTags, true, index, pendingTagLine))
       pendingTags = []
+      pendingTagLine = undefined
       continue
     }
 
     const scenarioMatch = SCENARIO_LINE.exec(line)
     if (scenarioMatch) {
-      outline.scenarios.push(makeScenario(scenarioMatch[1], pendingTags, false))
+      outline.scenarios.push(makeScenario(scenarioMatch[1], pendingTags, false, index, pendingTagLine))
       pendingTags = []
+      pendingTagLine = undefined
       continue
     }
 
@@ -71,12 +82,15 @@ export function parseFeatureOutline(content: string): FeatureOutline {
     if (featureMatch) {
       outline.name = (featureMatch[1] ?? '').trim()
       outline.tags = pendingTags
+      if (pendingTagLine !== undefined) outline.featureTagLine = pendingTagLine
       pendingTags = []
+      pendingTagLine = undefined
       continue
     }
 
     if (NON_SCENARIO_BLOCK.test(line)) {
       pendingTags = []
+      pendingTagLine = undefined
       continue
     }
 
@@ -92,10 +106,18 @@ export function parseFeatureOutline(content: string): FeatureOutline {
   return outline
 }
 
-function makeScenario(rawName: string | undefined, tags: string[], isOutline: boolean): ScenarioOutline {
+function makeScenario(
+  rawName: string | undefined,
+  tags: string[],
+  isOutline: boolean,
+  line: number,
+  tagLine: number | undefined
+): ScenarioOutline {
   return {
     name: (rawName ?? '').trim(),
     tags,
     isOutline,
+    line,
+    ...(tagLine === undefined ? {} : { tagLine }),
   }
 }

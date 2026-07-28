@@ -7,7 +7,7 @@ import { IPC_CHANNELS } from '@suisui/shared'
 import { registerIpcHandlers } from './ipc/handlers'
 import { runDepCheck, printDepCheckReport } from './utils/depChecker'
 import { stripBillingEnv } from './services/ai/billingEnv'
-import { getUpdateService, getSearchIndexService } from './services'
+import { getUpdateService, getSearchIndexService, getTagService } from './services'
 
 const isDev = !app.isPackaged
 const isTestMode = process.env.APP_TEST_MODE === '1'
@@ -185,6 +185,22 @@ function initSearchIndex() {
     .catch((err) => console.warn('[Search] initial index build failed:', err))
 }
 
+/**
+ * Wire the tag index: push index changes to all windows, and build once for a
+ * workspace that was already open at startup.
+ */
+function initTagIndex() {
+  const tagService = getTagService()
+  tagService.onIndexChanged((index) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send(IPC_CHANNELS.TAGS_INDEX_CHANGED, index)
+      }
+    }
+  })
+  void tagService.rebuild().catch((err) => console.warn('[Tags] initial index build failed:', err))
+}
+
 function registerAppProtocol() {
   const publicPath = path.join(__dirname, 'public')
 
@@ -276,6 +292,7 @@ app.whenReady().then(() => {
   setupAutoReload()
   initAutoUpdate()
   initSearchIndex()
+  initTagIndex()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

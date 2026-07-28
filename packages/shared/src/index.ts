@@ -15,6 +15,7 @@ export * from './types/step-catalog'
 export * from './types/recorder'
 export * from './types/update'
 export * from './types/search'
+export * from './types/tags'
 export * from './recorder/locatorSelector'
 
 // Catalog (backward-compat adapter added in US1)
@@ -26,6 +27,9 @@ export type { PatternType, PatternSegment, FormattedPattern, ArgDescription } fr
 
 // Search (feature 009)
 export * from './search'
+
+// Tags (feature 010)
+export * from './tags'
 
 // Validation
 export * from './validation/gitToken'

@@ -357,7 +357,32 @@ is the reserved extension point.
 See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), and
 [doc/FRONTEND.md](doc/FRONTEND.md).
 
+## Tag Management (feature 010)
+
+Workspace-wide tag browser (`activeView: 'tags'`) with counts, drill-down, run-by-tag,
+and bulk add/remove. **The only feature that writes to many user `.feature` files at once.**
+
+- **Scope**: bulk editing is **scenario-level only**. Feature-level tags are shown and
+  counted (via inheritance) but edited on the feature itself — changing one would
+  silently retag every scenario beneath it. Rename/merge/delete-everywhere are out of scope.
+- **Tags are case-sensitive** (`@Smoke` ≠ `@smoke`). Never lowercase for keying or matching.
+- **Counting**: a feature-level tag counts for every scenario beneath it; a scenario
+  carrying a tag both directly and by inheritance counts **once** (`origin: 'direct'` wins,
+  since that is the removable one). Removing an inherited tag is refused per scenario.
+- **Writing** (`TagService.applyBulk`): line splices via `@suisui/shared/tags/tagSplice`,
+  applied **bottom-up within each file** (an inserted line shifts every position below it),
+  then **every modified file is re-parsed** — a file that no longer parses is reported
+  `failed`. No undo: preview-and-confirm plus git are the safety net.
+- **Never** use `scenarioStore.toGherkin()` for tag writes — it regenerates whole files.
+- Split file content on `/\n/`, not `/\r?\n/`, or CRLF files get rewritten wholesale.
+
+See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), and
+[doc/FRONTEND.md](doc/FRONTEND.md).
+
 ## Active Technologies
+
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Reuses `parseFeatureOutline` + `IFileWatcher` (feature 009) and `RunnerService.runBatch({ tags })` (feature 002) (010-tag-management)
+- No persisted storage: the tag index is in-memory and session-scoped. Bulk edits write directly to the user's `.feature` files — the only persistent effect, and the main risk of the feature (010-tag-management)
 
 - TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x. **No new runtime dependency** — file watching uses Node's built-in `fs.watch` (recursive), not `chokidar` (009-global-search)
 - No persisted storage: the search index is in-memory and session-scoped, rebuilt on workspace open; nothing is written to `.app/` or to settings (009-global-search)

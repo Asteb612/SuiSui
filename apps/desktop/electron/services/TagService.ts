@@ -1,0 +1,571 @@
+import path from 'node:path'
+import fs from 'node:fs/promises'
+import type {
+  BulkTagRequest,
+  BulkTagResult,
+  FeatureOutline,
+  TagIndex,
+  TagSummary,
+  TagUsage,
+  TagWriteOutcome,
+} from '@suisui/shared'
+import { parseFeatureOutline, requireTagName, spliceTag } from '@suisui/shared'
+import type { IFileWatcher } from './FileWatcher'
+import { NodeFileWatcher } from './FileWatcher'
+import type { IWorkspaceLocator } from './SearchIndexService'
+import { getWorkspaceService } from './WorkspaceService'
+
+/** What one feature file contributes to the index. */
+interface IndexedFile {
+  relativePath: string
+  featureName: string
+  outline: FeatureOutline
+  parsed: boolean
+}
+
+function emptyIndex(): TagIndex {
+  return {
+    state: 'idle',
+    tags: [],
+    usages: {},
+    unparsedFiles: [],
+    fileCount: 0,
+    scenarioCount: 0,
+  }
+}
+
+/**
+ * Workspace-wide tag index (feature 010).
+ *
+ * Reads the same `.feature` files as the search index but keeps a different
+ * shape: usages grouped by tag, with feature-level inheritance made explicit
+ * rather than flattened. `parseFeatureMetadata` (used by the run view) flattens
+ * inheritance and cannot answer "is this tag removable here?".
+ */
+export class TagService {
+  private files = new Map<string, IndexedFile>()
+  private index: TagIndex = emptyIndex()
+  private featuresDir: string | null = null
+  private indexedWorkspacePath: string | null = null
+  private listeners = new Set<(index: TagIndex) => void>()
+  /** Serializes rebuilds so overlapping triggers cannot interleave. */
+  private pending: Promise<void> = Promise.resolve()
+
+  constructor(
+    private readonly watcher: IFileWatcher = new NodeFileWatcher(),
+    private readonly workspace: IWorkspaceLocator = getWorkspaceService()
+  ) {}
+
+  // ---------------------------------------------------------------- lifecycle
+
+  async rebuild(): Promise<void> {
+    this.setIndex({ ...this.index, state: 'building' })
+    this.pending = this.pending.then(() => this.doRebuild()).catch(() => undefined)
+    return this.pending
+  }
+
+  /**
+   * Build only if the index does not already reflect the current workspace.
+   *
+   * This is the path that matters at startup: a workspace restored from
+   * settings is only materialized when the renderer calls `workspace.get()`, so
+   * `getPath()` is still null when the app boots.
+   */
+  async ensureBuilt(): Promise<void> {
+    const current = this.workspace.getPath()
+    if (current === this.indexedWorkspacePath && this.index.state === 'ready') return
+    if (current === null && this.index.state === 'idle') return
+    return this.rebuild()
+  }
+
+  clear(): void {
+    this.watcher.close()
+    this.files.clear()
+    this.featuresDir = null
+    this.indexedWorkspacePath = null
+    this.setIndex(emptyIndex())
+  }
+
+  dispose(): void {
+    this.watcher.close()
+    this.listeners.clear()
+  }
+
+  onIndexChanged(listener: (index: TagIndex) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  getIndex(): TagIndex {
+    return this.index
+  }
+
+  /** Absolute path of a feature file, or null when it is not indexed. */
+  resolveIndexedPath(relativePath: string): string | null {
+    if (!this.featuresDir || !this.files.has(relativePath)) return null
+    return path.join(this.featuresDir, relativePath)
+  }
+
+  getIndexedFile(relativePath: string): IndexedFile | undefined {
+    return this.files.get(relativePath)
+  }
+
+  // ------------------------------------------------------------------ indexing
+
+  private async doRebuild(): Promise<void> {
+    const workspacePath = this.workspace.getPath()
+    if (!workspacePath) {
+      this.watcher.close()
+      this.files.clear()
+      this.featuresDir = null
+      this.indexedWorkspacePath = null
+      this.setIndex(emptyIndex())
+      return
+    }
+
+    const featuresDir = path.join(workspacePath, await this.workspace.getFeaturesDir(workspacePath))
+    this.featuresDir = featuresDir
+
+    await this.scanAll(featuresDir)
+    this.indexedWorkspacePath = workspacePath
+    this.startWatching(featuresDir)
+  }
+
+  /** Re-read every feature file and rebuild the index. Does not touch the watcher. */
+  private async scanAll(featuresDir: string): Promise<void> {
+    const relativePaths = await this.scan(featuresDir)
+    this.files.clear()
+    for (const relativePath of relativePaths) {
+      this.files.set(relativePath, await this.readFile(featuresDir, relativePath))
+    }
+    this.setIndex(this.aggregate('ready'))
+  }
+
+  private async scan(dir: string, prefix = ''): Promise<string[]> {
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return []
+    }
+
+    const found: string[] = []
+    for (const entry of entries) {
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+      if (entry.isDirectory()) {
+        if (entry.name === 'steps' || entry.name === 'node_modules') continue
+        found.push(...(await this.scan(path.join(dir, entry.name), relativePath)))
+      } else if (entry.name.endsWith('.feature')) {
+        found.push(relativePath)
+      }
+    }
+    return found
+  }
+
+  private async readFile(featuresDir: string, relativePath: string): Promise<IndexedFile> {
+    const fileName = path.basename(relativePath, '.feature')
+    let content: string
+    try {
+      content = await fs.readFile(path.join(featuresDir, relativePath), 'utf-8')
+    } catch {
+      return {
+        relativePath,
+        featureName: fileName,
+        outline: { name: '', tags: [], scenarios: [], hasParseErrors: true },
+        parsed: false,
+      }
+    }
+
+    const outline = parseFeatureOutline(content)
+    return {
+      relativePath,
+      featureName: outline.name || fileName,
+      outline,
+      parsed: !outline.hasParseErrors,
+    }
+  }
+
+  // --------------------------------------------------------------- aggregation
+
+  /**
+   * Collapse indexed files into tags + usages.
+   *
+   * A scenario carrying a tag both directly and by inheritance yields ONE usage
+   * with `origin: 'direct'` — the direct one is the actionable half, since an
+   * inherited tag cannot be removed at scenario level.
+   */
+  private aggregate(state: TagIndex['state']): TagIndex {
+    const usages: Record<string, TagUsage[]> = {}
+    const featureLevel = new Set<string>()
+    const scenarioLevel = new Set<string>()
+    const seen = new Set<string>()
+    let scenarioCount = 0
+    const unparsedFiles: string[] = []
+
+    for (const file of [...this.files.values()].sort((a, b) => a.relativePath.localeCompare(b.relativePath))) {
+      if (!file.parsed) unparsedFiles.push(file.relativePath)
+
+      for (const featureTag of file.outline.tags) {
+        featureLevel.add(featureTag)
+        // Ensure a feature tag with no scenarios beneath it still appears.
+        usages[featureTag] ??= []
+      }
+
+      file.outline.scenarios.forEach((scenario, scenarioIndex) => {
+        scenarioCount++
+        const direct = new Set(scenario.tags)
+
+        for (const tag of direct) {
+          scenarioLevel.add(tag)
+          this.pushUsage(usages, seen, tag, file, scenarioIndex, scenario.name, 'direct')
+        }
+        for (const tag of file.outline.tags) {
+          if (direct.has(tag)) continue // already counted as direct
+          this.pushUsage(usages, seen, tag, file, scenarioIndex, scenario.name, 'inherited')
+        }
+      })
+    }
+
+    const tags: TagSummary[] = Object.keys(usages)
+      .map((name) => ({
+        name,
+        scenarioCount: usages[name]!.length,
+        usedAtFeatureLevel: featureLevel.has(name),
+        usedAtScenarioLevel: scenarioLevel.has(name),
+        orphaned: usages[name]!.length === 0,
+      }))
+      // Deterministic: most-used first, then by name. The renderer re-sorts for
+      // its own display mode, but a stable base order keeps tests meaningful.
+      .sort((a, b) => b.scenarioCount - a.scenarioCount || a.name.localeCompare(b.name))
+
+    return {
+      state,
+      tags,
+      usages,
+      unparsedFiles,
+      fileCount: this.files.size,
+      scenarioCount,
+    }
+  }
+
+  private pushUsage(
+    usages: Record<string, TagUsage[]>,
+    seen: Set<string>,
+    tag: string,
+    file: IndexedFile,
+    scenarioIndex: number,
+    scenarioName: string,
+    origin: TagUsage['origin']
+  ): void {
+    const id = `${file.relativePath}#${scenarioIndex}`
+    const key = `${tag} ${id}`
+    if (seen.has(key)) return
+    seen.add(key)
+
+    usages[tag] ??= []
+    usages[tag]!.push({
+      id,
+      relativePath: file.relativePath,
+      featureName: file.featureName,
+      scenarioIndex,
+      scenarioName,
+      origin,
+    })
+  }
+
+  // ------------------------------------------------------------------ watching
+
+  private startWatching(featuresDir: string): void {
+    this.watcher.close()
+
+    // One-shot guard scoped to THIS attempt: a directory that can never be
+    // watched must not error -> rebuild -> re-watch -> error forever.
+    let errorHandled = false
+
+    this.watcher.watch(
+      featuresDir,
+      (relativePaths) => {
+        void this.applyChanges(relativePaths)
+      },
+      () => {
+        if (errorHandled) return
+        errorHandled = true
+        void this.scanAll(featuresDir).catch(() => undefined)
+      }
+    )
+  }
+
+  /** Incremental update. Deliberately does not flip state back to 'building'. */
+  private async applyChanges(relativePaths: string[]): Promise<void> {
+    const featuresDir = this.featuresDir
+    if (!featuresDir) return
+
+    for (const raw of relativePaths) {
+      const relativePath = raw.split(path.sep).join('/')
+      if (!relativePath.endsWith('.feature')) continue
+
+      if (await fileExists(path.join(featuresDir, relativePath))) {
+        this.files.set(relativePath, await this.readFile(featuresDir, relativePath))
+      } else {
+        this.files.delete(relativePath)
+      }
+    }
+
+    this.setIndex(this.aggregate('ready'))
+  }
+
+  /** Re-read specific files after a write, then re-aggregate. */
+  async refreshFiles(relativePaths: string[]): Promise<void> {
+    await this.applyChanges(relativePaths)
+  }
+
+  // ------------------------------------------------------------- bulk editing
+
+  /**
+   * Add or remove one tag across many scenarios.
+   *
+   * Three properties make this safe enough to run without an undo stack:
+   *  1. edits are line splices, so nothing but the tag line can change;
+   *  2. edits within a file are applied BOTTOM-UP, so an inserted line cannot
+   *     shift the positions of targets still to be processed;
+   *  3. every written file is re-read and re-parsed, and a file that no longer
+   *     parses is reported as failed rather than left silently corrupted.
+   */
+  async applyBulk(request: BulkTagRequest): Promise<BulkTagResult> {
+    const tag = requireTagName(request.tag)
+    const featuresDir = this.featuresDir
+    const outcomes: TagWriteOutcome[] = []
+    const touched = new Set<string>()
+
+    if (!featuresDir) {
+      return this.finishBulk(request, tag, outcomes, touched)
+    }
+
+    // Group by file so each file is read and written exactly once.
+    const byFile = new Map<string, number[]>()
+    for (const target of request.targets) {
+      const list = byFile.get(target.relativePath) ?? []
+      list.push(target.scenarioIndex)
+      byFile.set(target.relativePath, list)
+    }
+
+    for (const [relativePath, scenarioIndexes] of byFile) {
+      await this.applyToFile(featuresDir, relativePath, scenarioIndexes, tag, request.operation, outcomes, touched)
+    }
+
+    if (touched.size > 0) {
+      await this.applyChanges([...touched])
+    }
+
+    return this.finishBulk(request, tag, outcomes, touched)
+  }
+
+  private async applyToFile(
+    featuresDir: string,
+    relativePath: string,
+    scenarioIndexes: number[],
+    tag: string,
+    operation: BulkTagRequest['operation'],
+    outcomes: TagWriteOutcome[],
+    touched: Set<string>
+  ): Promise<void> {
+    const indexed = this.files.get(relativePath)
+    if (!indexed) {
+      for (const scenarioIndex of scenarioIndexes) {
+        outcomes.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: '',
+          status: 'failed',
+          reason: 'This feature file is no longer part of the workspace.',
+        })
+      }
+      return
+    }
+
+    const fullPath = path.join(featuresDir, relativePath)
+    let lines: string[]
+    try {
+      // Split on /\n/, NOT /\r?\n/: the latter consumes `\r`, so rejoining
+      // would rewrite every line of a CRLF file.
+      lines = (await fs.readFile(fullPath, 'utf-8')).split(/\n/)
+    } catch (error) {
+      for (const scenarioIndex of scenarioIndexes) {
+        outcomes.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: indexed.outline.scenarios[scenarioIndex]?.name ?? '',
+          status: 'failed',
+          reason: `Could not read the file: ${String(error)}`,
+        })
+      }
+      return
+    }
+
+    const pending: TagWriteOutcome[] = []
+    let anyChange = false
+
+    // BOTTOM-UP: a splice can insert or delete a line, shifting every position
+    // below it. Descending order keeps the not-yet-applied positions valid.
+    for (const scenarioIndex of [...scenarioIndexes].sort((a, b) => b - a)) {
+      const scenario = indexed.outline.scenarios[scenarioIndex]
+      if (!scenario || scenario.line === undefined) {
+        pending.push({
+          relativePath,
+          scenarioIndex,
+          scenarioName: scenario?.name ?? '',
+          status: 'failed',
+          reason: 'This scenario is no longer present in the file.',
+        })
+        continue
+      }
+
+      const base = {
+        relativePath,
+        scenarioIndex,
+        scenarioName: scenario.name,
+      }
+
+      const carriesDirectly = scenario.tags.includes(tag)
+      const inherited = indexed.outline.tags.includes(tag)
+
+      if (operation === 'remove' && !carriesDirectly && inherited) {
+        pending.push({
+          ...base,
+          status: 'skipped',
+          reason: `@${tag} is declared on the feature, so it cannot be removed from a single scenario.`,
+        })
+        continue
+      }
+
+      const result = spliceTag({
+        lines,
+        scenarioLine: scenario.line,
+        ...(scenario.tagLine === undefined ? {} : { tagLine: scenario.tagLine }),
+        tag,
+        operation,
+      })
+
+      if (!result.changed) {
+        pending.push({ ...base, status: 'unchanged' })
+        continue
+      }
+
+      lines = result.lines
+      anyChange = true
+      pending.push({ ...base, status: 'changed' })
+    }
+
+    if (!anyChange) {
+      outcomes.push(...pending)
+      return
+    }
+
+    try {
+      await fs.writeFile(fullPath, lines.join('\n'), 'utf-8')
+    } catch (error) {
+      outcomes.push(
+        ...pending.map((outcome) =>
+          outcome.status === 'changed'
+            ? { ...outcome, status: 'failed' as const, reason: `Could not write the file: ${String(error)}` }
+            : outcome
+        )
+      )
+      return
+    }
+
+    touched.add(relativePath)
+
+    const verification = await this.verifyWrite(featuresDir, relativePath, tag, operation, pending)
+    outcomes.push(...verification)
+  }
+
+  /**
+   * Re-read and re-parse a file we just wrote (SC-009).
+   *
+   * There is no undo, so "we believe the splice was correct" is not enough: a
+   * file that no longer parses, or that does not show the change we intended,
+   * is reported as failed rather than left silently broken.
+   */
+  private async verifyWrite(
+    featuresDir: string,
+    relativePath: string,
+    tag: string,
+    operation: BulkTagRequest['operation'],
+    pending: TagWriteOutcome[]
+  ): Promise<TagWriteOutcome[]> {
+    const fail = (reason: string) =>
+      pending.map((outcome) =>
+        outcome.status === 'changed' ? { ...outcome, status: 'failed' as const, reason } : outcome
+      )
+
+    let content: string
+    try {
+      content = await fs.readFile(path.join(featuresDir, relativePath), 'utf-8')
+    } catch (error) {
+      return fail(`Could not re-read the file after writing: ${String(error)}`)
+    }
+
+    const outline = parseFeatureOutline(content)
+    if (outline.hasParseErrors) {
+      return fail('The file could not be parsed after the change, so it was left as written — please review it.')
+    }
+
+    for (const outcome of pending) {
+      if (outcome.status !== 'changed') continue
+      const scenario = outline.scenarios[outcome.scenarioIndex]
+      if (!scenario) {
+        return fail('The file no longer has the expected scenarios after the change.')
+      }
+      const carries = scenario.tags.includes(tag) || outline.tags.includes(tag)
+      if (operation === 'add' ? !carries : carries) {
+        return fail('The change did not take effect as expected.')
+      }
+    }
+
+    return pending
+  }
+
+  private finishBulk(
+    request: BulkTagRequest,
+    tag: string,
+    outcomes: TagWriteOutcome[],
+    touched: Set<string>
+  ): BulkTagResult {
+    const changed = outcomes.filter((outcome) => outcome.status === 'changed')
+    return {
+      operation: request.operation,
+      tag,
+      outcomes,
+      changedCount: changed.length,
+      filesChanged: touched.size,
+      failedCount: outcomes.filter((outcome) => outcome.status === 'failed').length,
+      index: this.index,
+    }
+  }
+
+  // -------------------------------------------------------------------- notify
+
+  private setIndex(index: TagIndex): void {
+    this.index = index
+    for (const listener of this.listeners) {
+      listener(index)
+    }
+  }
+}
+
+async function fileExists(fullPath: string): Promise<boolean> {
+  try {
+    await fs.access(fullPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+let instance: TagService | null = null
+
+export function getTagService(): TagService {
+  if (!instance) instance = new TagService()
+  return instance
+}

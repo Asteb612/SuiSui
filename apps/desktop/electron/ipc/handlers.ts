@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS } from '@suisui/shared'
-import type { Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
+import type { BulkTagRequest, Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -29,11 +29,14 @@ import {
   FakeUpdaterAdapter,
   getUpdateService,
   getSearchIndexService,
+  getTagService,
 } from '../services'
 import type {
   GitWorkspaceParams,
   CommitPushOptions,
 } from '@suisui/shared'
+import pathModule from 'node:path'
+import { isValidTagName } from '@suisui/shared'
 import { createLogger } from '../utils/logger'
 
 const logger = createLogger('IPC')
@@ -99,9 +102,10 @@ export function registerIpcHandlers(
     logger.debug('WORKSPACE_GET called')
     const result = await workspaceService.get()
     // This is how a workspace restored from settings first materializes, so it
-    // is also where the search index first learns it has something to index.
+    // is also where the indexes first learn they have something to index.
     // `ensureBuilt` no-ops once the current workspace is already indexed.
     ensureSearchIndex()
+    ensureTagIndex()
     logger.debug('WORKSPACE_GET completed', { hasWorkspace: result !== null })
     return result
   })
@@ -110,6 +114,7 @@ export function registerIpcHandlers(
     logger.info('WORKSPACE_SET called', { path, gitRoot })
     const result = await workspaceService.set(path, gitRoot)
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('WORKSPACE_SET completed', { path, isValid: result.isValid })
     return result
   })
@@ -160,6 +165,7 @@ export function registerIpcHandlers(
 
     const workspace = await workspaceService.get()
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('Workspace selected successfully', { workspacePath, workspaceName: workspace?.name })
     return { workspace, validation, selectedPath: workspacePath }
   })
@@ -175,6 +181,7 @@ export function registerIpcHandlers(
     logger.info('WORKSPACE_INIT called', { path })
     const result = await workspaceService.init(path)
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('WORKSPACE_INIT completed', { path, workspaceName: result.name })
     return result
   })
@@ -727,6 +734,16 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SEARCH_GET_STATUS, async () => searchIndexService.getStatus())
 
+  // Tag management (feature 010). The workspace root comes from WorkspaceService,
+  // never the renderer; target paths are matched against indexed usages.
+  const tagService = getTagService()
+
+  ipcMain.handle(IPC_CHANNELS.TAGS_GET_INDEX, async () => tagService.getIndex())
+
+  ipcMain.handle(IPC_CHANNELS.TAGS_APPLY_BULK, async (_event, request: unknown) => {
+    return tagService.applyBulk(validateBulkTagRequest(request))
+  })
+
   logger.info('IPC handlers registered', { isTestMode })
 }
 
@@ -747,6 +764,60 @@ function ensureSearchIndex(): void {
   void getSearchIndexService()
     .ensureBuilt()
     .catch((error) => logger.warn('Search index build failed', { error: String(error) }))
+}
+
+function rebuildTagIndex(): void {
+  void getTagService()
+    .rebuild()
+    .catch((error) => logger.warn('Tag index rebuild failed', { error: String(error) }))
+}
+
+function ensureTagIndex(): void {
+  void getTagService()
+    .ensureBuilt()
+    .catch((error) => logger.warn('Tag index build failed', { error: String(error) }))
+}
+
+/**
+ * Coerce untrusted renderer input into a `BulkTagRequest`.
+ *
+ * This is the only write-capable tag channel, so validation happens BEFORE any
+ * file is touched: an invalid tag name would change what the file means on the
+ * next parse, and an unchecked path would be a traversal vector.
+ */
+function validateBulkTagRequest(value: unknown): BulkTagRequest {
+  if (!isRecord(value)) throw new Error('tags.applyBulk: request must be an object')
+
+  const { operation, tag, targets } = value
+  if (operation !== 'add' && operation !== 'remove') {
+    throw new Error("tags.applyBulk: operation must be 'add' or 'remove'")
+  }
+  if (typeof tag !== 'string' || !isValidTagName(tag)) {
+    throw new Error(`tags.applyBulk: invalid tag name ${JSON.stringify(tag)}`)
+  }
+  if (!Array.isArray(targets) || targets.length === 0) {
+    throw new Error('tags.applyBulk: targets must be a non-empty array')
+  }
+
+  const validated = targets.map((target) => {
+    if (!isRecord(target)) throw new Error('tags.applyBulk: each target must be an object')
+    const { relativePath, scenarioIndex } = target
+    if (typeof relativePath !== 'string' || !relativePath.endsWith('.feature')) {
+      throw new Error('tags.applyBulk: target relativePath must be a .feature path')
+    }
+    // Reject traversal outright; the service additionally only acts on paths it
+    // has itself indexed.
+    const normalized = pathModule.normalize(relativePath)
+    if (normalized.startsWith('..') || pathModule.isAbsolute(normalized)) {
+      throw new Error('tags.applyBulk: target relativePath must stay inside the features directory')
+    }
+    if (typeof scenarioIndex !== 'number' || !Number.isInteger(scenarioIndex) || scenarioIndex < 0) {
+      throw new Error('tags.applyBulk: target scenarioIndex must be a non-negative integer')
+    }
+    return { relativePath, scenarioIndex }
+  })
+
+  return { operation, tag, targets: validated }
 }
 
 /** Coerce untrusted renderer input into a clean `Partial<UpdatePreferences>`. */

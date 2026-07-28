@@ -8,9 +8,11 @@ import { useRunnerStore, GLOBAL_SCOPE } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useRecorderStore } from '~/stores/recorder'
 import { useSearchStore } from '~/stores/search'
-import type { SearchResult } from '@suisui/shared'
+import { useTagsStore } from '~/stores/tags'
+import type { SearchResult, TagUsage } from '@suisui/shared'
 import RecorderPanel from '~/components/recorder/RecorderPanel.vue'
 import GlobalSearch from '~/components/GlobalSearch.vue'
+import TagBrowser from '~/components/TagBrowser.vue'
 
 const workspaceStore = useWorkspaceStore()
 const stepsStore = useStepsStore()
@@ -20,6 +22,7 @@ const runnerStore = useRunnerStore()
 const aiStore = useAiStore()
 const recorderStore = useRecorderStore()
 const searchStore = useSearchStore()
+const tagsStore = useTagsStore()
 const showGitClone = ref(false)
 const showBddFolderSelect = ref(false)
 const bddCandidates = ref<string[]>([])
@@ -102,7 +105,7 @@ const showStepPanel = ref(false) // Hidden by default, shown in edit mode
 const currentViewMode = ref<'read' | 'edit'>('read')
 
 // Top-level view: editor (read/edit) vs runner (dedicated run view)
-const activeView = ref<'editor' | 'runner'>('editor')
+const activeView = ref<'editor' | 'runner' | 'tags'>('editor')
 
 async function handleModeChange(mode: 'read' | 'edit') {
   currentViewMode.value = mode
@@ -334,8 +337,54 @@ function waitForFeatureLoaded(relativePath: string): Promise<void> {
 // Results from a previous workspace must never stay selectable.
 watch(
   () => workspaceStore.workspace?.path,
-  () => searchStore.reset()
+  () => {
+    searchStore.reset()
+    tagsStore.reset()
+  }
 )
+
+function enterTagView() {
+  activeView.value = 'tags'
+}
+
+/** Open the feature behind a tag usage and select that scenario. */
+async function handleTagUsageOpen(usage: TagUsage) {
+  const feature = workspaceStore.features.find((f) => f.relativePath === usage.relativePath)
+  if (!feature) {
+    workspaceStore.error = `“${usage.relativePath}” could not be opened — it may have been moved or deleted.`
+    return
+  }
+
+  activeView.value = 'editor'
+
+  if (workspaceStore.selectedFeature?.relativePath !== usage.relativePath) {
+    // Let the `selectedFeature` watcher load it; loading here too would race it,
+    // and its later parse resets `activeScenarioIndex` to 0.
+    workspaceStore.selectFeature(feature)
+    await waitForFeatureLoaded(usage.relativePath)
+  }
+
+  scenarioStore.setActiveScenario(usage.scenarioIndex)
+}
+
+/**
+ * Run every scenario carrying a tag by reusing the existing tag-filtered batch
+ * run — no second run mechanism (research.md Decision 5).
+ */
+async function handleRunTag(tag: string) {
+  if (runnerStore.isRunning) return
+
+  activeView.value = 'runner'
+  runnerStore.setActiveScope(GLOBAL_SCOPE)
+  await runnerStore.loadWorkspaceTests()
+
+  runnerStore.config.activeFilterTab = 'tags'
+  runnerStore.config.selectedTags = [tag]
+  runnerStore.config.selectedFeatures = []
+  runnerStore.config.selectedFolders = []
+
+  await runnerStore.runBatch('headless')
+}
 </script>
 
 <template>
@@ -369,6 +418,16 @@ watch(
         text
         size="small"
         @click="showHelpDialog = true"
+      />
+      <Button
+        v-if="workspaceStore.hasWorkspace && activeView !== 'tags'"
+        label="Tags"
+        icon="pi pi-tags"
+        text
+        size="small"
+        title="Browse and manage tags across the workspace"
+        data-testid="tags-btn"
+        @click="enterTagView"
       />
       <Button
         v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
@@ -498,6 +557,30 @@ watch(
             <span>{{ workspaceStore.error }}</span>
           </div>
         </div>
+      </div>
+
+      <!-- Tag browser: its own full-width view, like the runner -->
+      <div
+        v-else-if="activeView === 'tags'"
+        class="tag-view"
+      >
+        <div class="panel-header">
+          <h3>Tags</h3>
+          <div class="header-actions">
+            <Button
+              label="Back to editor"
+              icon="pi pi-arrow-left"
+              text
+              size="small"
+              data-testid="tags-back-btn"
+              @click="activeView = 'editor'"
+            />
+          </div>
+        </div>
+        <TagBrowser
+          @open="handleTagUsageOpen"
+          @run-tag="handleRunTag"
+        />
       </div>
 
       <div
@@ -1032,6 +1115,19 @@ watch(
 
 .header-spacer {
   flex: 1;
+}
+
+.tag-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tag-view > .tag-browser {
+  flex: 1;
+  min-height: 0;
 }
 
 .header-search {

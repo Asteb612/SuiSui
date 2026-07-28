@@ -78,6 +78,17 @@ export interface ScenarioOutline {
   tags: string[]
   /** True for `Scenario Outline:`. Display-only; does not change search behaviour. */
   isOutline: boolean
+  /**
+   * 0-based line index of the `Scenario:` / `Scenario Outline:` line.
+   * Added for feature 010 (tag editing splices lines); search ignores it.
+   */
+  line?: number
+  /**
+   * 0-based line index of the FIRST tag line in the block directly above.
+   * Absent when the scenario has no tags — that is the case where a tag line
+   * must be INSERTED rather than edited.
+   */
+  tagLine?: number
 }
 
 /** Result of scanning a .feature file for searchable names and tags. */
@@ -89,4 +100,6 @@ export interface FeatureOutline {
   scenarios: ScenarioOutline[]
   /** True when at least one line could not be interpreted. */
   hasParseErrors: boolean
+  /** 0-based line index of the feature's own first tag line, when it has one. */
+  featureTagLine?: number
 }

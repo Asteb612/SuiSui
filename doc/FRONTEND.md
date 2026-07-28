@@ -1059,3 +1059,31 @@ All updater logic is main-process only; the renderer only ever sees the serializ
 - Activation is emitted upward (`@activate`) and handled in `pages/index.vue`: open the
   feature, then select `scenarioIndex` for scenario results. A vanished target shows a
   non-fatal message instead of clearing the editor.
+
+## Tag management (renderer, feature 010-tag-management)
+
+- **`TagBrowser.vue`** is a master/detail view mounted as `activeView: 'tags'`: tag list
+  with counts, sort (most-used ↔ A–Z) and filter on the left; the scenarios carrying the
+  selected tag on the right, each labelled `direct` or `inherited`.
+- Clicking a tag **always selects** rather than toggling — a toggle made re-clicking
+  silently clear the detail pane.
+- **`useTagsStore`** holds the index, selection, filter and sort. `previewBulk` computes
+  FR-019's "how many scenarios in how many files" from the index the renderer already
+  holds — no round-trip, and it cannot disagree with what is on screen.
+- `conflictsWithUnsavedEditor` blocks a bulk write that would target the feature open with
+  unsaved changes until the user explicitly acknowledges it; otherwise whichever saves last
+  silently wins.
+- The unsaved-edit overlay mirrors the search store: drop the open feature's indexed usages
+  **before** re-deriving them from live Pinia state, or a tag just removed in the editor
+  still shows.
+- **`BulkTagDialog.vue`** validates the tag name live with the same shared rule the service
+  enforces, shows the preview, and reports per-scenario outcomes (skipped/failed with
+  reasons) afterwards.
+- **`TagsEditor.vue`** (scenario/feature tags in the editor) suggests existing workspace
+  tags via `AutoComplete` while still accepting a brand-new one — Enter commits typed text,
+  clicking a suggestion commits that. Tags already applied are filtered out of the
+  suggestions, and the same `isValidTagName` rule rejects unusable names before they reach
+  the file.
+- The tag index subscription is **refcounted** (`consumers` in store state): the browser and
+  the editor's picker both use it, and whichever unmounts first must not tear down the
+  other's subscription.
