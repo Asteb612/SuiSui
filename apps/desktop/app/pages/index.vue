@@ -416,7 +416,7 @@ async function handleRunTag(tag: string) {
 
       <!-- Primary workflows. Both open something in-page, so neither carries an
            external-window affordance. -->
-      <div class="header-actions">
+      <div class="header-workflows">
         <Button
           v-if="workspaceStore.hasWorkspace && activeView === 'editor'"
           label="Run Tests"
@@ -1156,9 +1156,11 @@ async function handleRunTag(tag: string) {
 .tag-view > .tag-browser {
   flex: 1;
   min-height: 0;
+}
+
 /* Primary workflows, grouped tightly so they read as one unit distinct from the
    application controls beside them. */
-.header-actions {
+.header-workflows {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1177,11 +1179,11 @@ async function handleRunTag(tag: string) {
 
 /* The record dot stays neutral until a recording is actually running — a
    permanently red control reads as an alert rather than an affordance. */
-.header-actions :deep(.p-button) .pi-circle-fill {
+.header-workflows :deep(.p-button) .pi-circle-fill {
   font-size: 0.6rem;
 }
 
-.header-actions :deep(.p-button.is-recording) .pi-circle-fill {
+.header-workflows :deep(.p-button.is-recording) .pi-circle-fill {
   animation: record-pulse 1.6s ease-in-out infinite;
 }
 
@@ -1192,7 +1194,7 @@ async function handleRunTag(tag: string) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .header-actions :deep(.p-button.is-recording) .pi-circle-fill {
+  .header-workflows :deep(.p-button.is-recording) .pi-circle-fill {
     animation: none;
   }
 }
