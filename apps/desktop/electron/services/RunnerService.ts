@@ -200,14 +200,6 @@ export class RunnerService {
     return null
   }
 
-  async runHeadless(options: Partial<RunOptions> = {}): Promise<RunResult> {
-    return this.run({ ...options, mode: 'headless' })
-  }
-
-  async runUI(options: Partial<RunOptions> = {}): Promise<RunResult> {
-    return this.run({ ...options, mode: 'ui' })
-  }
-
   async getWorkspaceTests(): Promise<WorkspaceTestInfo> {
     const workspaceService = getWorkspaceService()
     const workspacePath = workspaceService.getPath()

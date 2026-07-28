@@ -601,3 +601,54 @@ Workspace-wide tag index plus the only bulk write path in the app.
   with **no rollback** — git is the recovery path.
 - Content is split on `/\n/`, **not** `/\r?\n/`: the latter consumes `\r`, so rejoining
   would rewrite every line of a CRLF file.
+## Live run progress (feature 011-live-run-progress)
+
+Streams per-step execution state out of a running Playwright process so the UI can
+show steps going running → passed/failed/skipped while the run is still in flight.
+
+### Reporter provisioning (`RunnerService`)
+
+`provisionProgressReporter(workspacePath)` copies
+`electron/assets/suisui-progress-reporter.cjs` to `<workspace>/.app/` before every run
+and returns its absolute path, which is appended to the existing
+`--reporter=list,json,html` chain.
+
+The reporter runs inside the **workspace's** Playwright, not the app, so it is plain
+dependency-free CommonJS with no build step. It is rewritten on every run, so an app
+upgrade can never leave a stale copy behind.
+
+**It must never be able to break a test run.** Every callback body is wrapped; a failed
+stdout write is swallowed; and if the file cannot be written at all,
+`provisionProgressReporter` returns `null`, the reporter is simply omitted from the
+chain, and the run proceeds exactly as it did before this feature existed (FR-019).
+
+### The stdout split (`handlers.ts`)
+
+The reporter emits one `@@SUISUI_PROGRESS@@`-prefixed NDJSON line per event. The
+`RUNNER_RUN_BATCH` handler runs each complete line through `parseProgressLine`:
+
+- parsed → pushed on `runner:progress` and **`continue`** — it must never reach the log
+- otherwise → forwarded to the log unchanged
+
+Only a line **starting** with the sentinel counts, so ordinary test output that merely
+mentions it is neither swallowed from the log nor able to forge an event.
+
+### Step→scenario mapping
+
+playwright-bdd reports step locations against the **generated spec**, not the
+`.feature` file, so steps are matched by **ordinal** and verified by **title**. The
+title comparison is `stepTitleMatches()`, not equality: a `Scenario Outline` is authored
+with `<placeholders>` and reported with them substituted, so equality would silently
+drop every step of every outline row. On a genuine mismatch the update is **dropped** —
+a status on the wrong step is worse than no status at all.
+
+### Testing without running Playwright
+
+Constitution III forbids launching a real browser. The reporter is instead covered by a
+**real capture** of its output, replayed through the real parser and reducer — see
+`electron/__tests__/progressReplay.test.ts` and `__tests__/fixtures/README.md`, which
+documents how the capture was produced and what it establishes.
+
+E2E uses the same capture: with `APP_TEST_MODE=1` and `TEST_RUN_PROGRESS_FIXTURE` set,
+`runBatch` replays the file through the ordinary stdout path instead of spawning
+Playwright, so parser, IPC, store and UI are all production code.

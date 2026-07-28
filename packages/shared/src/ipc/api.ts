@@ -2,7 +2,7 @@ import type { WorkspaceInfo, WorkspaceValidation, BddDetectionResult } from '../
 import type { FeatureFile, Scenario, FeatureTreeNode } from '../types/feature'
 import type { StepCatalogResult, CatalogStep, GenerateCatalogOptions, StepSourceLocation } from '../types/step-catalog'
 import type { ValidationResult } from '../types/validation'
-import type { RunResult, RunOptions, BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
+import type { BatchRunOptions, BatchRunResult, WorkspaceTestInfo } from '../types/runner'
 import type { AppSettings } from '../types/settings'
 import type { WorkspaceVariable } from '../types/variables'
 import type { NodeRuntimeInfo, NodeExtractionResult } from '../types/node'
@@ -70,8 +70,6 @@ export interface ElectronAPI {
   }
 
   runner: {
-    runHeadless: (options?: Partial<RunOptions>) => Promise<RunResult>
-    runUI: (options?: Partial<RunOptions>) => Promise<RunResult>
     runBatch: (options: BatchRunOptions) => Promise<BatchRunResult>
     getWorkspaceTests: () => Promise<WorkspaceTestInfo>
     stop: () => Promise<void>

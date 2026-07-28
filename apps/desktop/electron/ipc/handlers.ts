@@ -1,7 +1,7 @@
 import type { IpcMain, Dialog, Shell } from 'electron'
 import { app } from 'electron'
 import { IPC_CHANNELS, parseProgressLine } from '@suisui/shared'
-import type { BulkTagRequest, Scenario, RunOptions, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
+import type { BulkTagRequest, Scenario, BatchRunOptions, AppSettings, GitCredentials, AIProviderConfig, AIGenerationRequest, AIStatusTarget, GenerateCatalogOptions, RecorderStartOptions, PickRequest, LocatorReference, RecorderLocatorSettings, RecorderAssertionRequest, RecordedActionType, StepSourceLocation, WorkspaceVariable, UpdatePreferences } from '@suisui/shared'
 import {
   getWorkspaceService,
   getFeatureService,
@@ -306,14 +306,6 @@ export function registerIpcHandlers(
   })
 
   // Runner handlers
-  ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_HEADLESS, async (_event, options?: Partial<RunOptions>) => {
-    return runnerService.runHeadless(options)
-  })
-
-  ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_UI, async (_event, options?: Partial<RunOptions>) => {
-    return runnerService.runUI(options)
-  })
-
   ipcMain.handle(IPC_CHANNELS.RUNNER_RUN_BATCH, async (event, options: BatchRunOptions) => {
     // Buffer across chunks so each RUNNER_LOG is a COMPLETE line — the live `list`
     // reporter is parsed for progress in the renderer, so split lines must not leak.

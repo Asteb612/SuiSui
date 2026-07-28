@@ -1087,3 +1087,71 @@ All updater logic is main-process only; the renderer only ever sees the serializ
 - The tag index subscription is **refcounted** (`consumers` in store state): the browser and
   the editor's picker both use it, and whichever unmounts first must not tear down the
   other's subscription.
+## Live run progress (feature 011-live-run-progress)
+
+### Store state (`useRunnerStore`)
+
+Each run scope carries a `live: LiveRunState` alongside the existing aggregate
+`progress` counters. `live.available` stays `false` until the first progress event
+arrives — when no reporter output appears, every consumer falls back to the counters
+and the UI is exactly what it was before this feature.
+
+`live.running` is a **set of testIds**, not a single value: a parallel run genuinely has
+several scenarios in flight and their events interleave.
+
+Key getters:
+
+| Getter                      | Returns                                                    |
+| --------------------------- | ---------------------------------------------------------- |
+| `live`                      | raw `LiveRunState` for the displayed scope                 |
+| `liveScenarios`             | executions ordered running-first, then by start time       |
+| `liveStepsFor(path, title)` | merged display steps, or `null` when there is nothing live |
+| `executionFor(path, title)` | one scenario's execution record                            |
+
+### The merge selector
+
+`liveStepsFor` combines the **authored** step list with what actually executed.
+
+The authored list is the spine, because the reporter emits nothing for steps that have
+not run — including, per a real capture, every step after a failure. Rules:
+
+- unreported step, scenario still running → `pending`
+- unreported step, scenario finished → `skipped` (it never ran, and never will)
+- title disagrees with the authored step at that index → the update is **dropped**
+
+Authored steps come from the open editor when the feature is open (so unsaved edits are
+respected) and otherwise from `features.read` + `parseFeatureSteps`. The cache is
+cleared at the start of each run so edits between runs are picked up.
+
+### Components
+
+- **`ScenarioBuilder.vue`** — reflects live statuses on the scenario being executed
+  (FR-012). Read-only: it never mutates scenario content (FR-023). Background steps are
+  labelled as such in their accessible name (FR-005).
+- **`RunResultsPanel.vue`** — lists every scenario the run has touched with name,
+  feature and status; **all** running scenarios are highlighted, not just one.
+  Expanding one shows its steps in place, without opening it in the editor (FR-011).
+  The longest-running step is called out once it passes 5s, so a stall is attributable
+  without reading the log.
+- **`StepRow.vue`** — accepts `liveStatus`/`liveDurationMs` for the same indicator.
+
+Elapsed times come from the panel's **single** existing interval — one ticker for the
+whole panel, never one per step (FR-014).
+
+### Accessibility
+
+Status is never conveyed by colour alone. `app/utils/runStatus.ts` maps each
+`ExecutionStatus` to a distinct icon **and** a text label, used as both `aria-label` and
+tooltip. Colour and the left border only reinforce it.
+
+### Run progress never navigates
+
+Nothing in the progress pipeline touches the editor's selected feature or scenario
+(FR-013). This is covered by a regression test, not left as a convention.
+
+### Removed
+
+`ValidationPanel.vue` and the store's `runHeadless`/`runUI` actions were deleted. The
+panel was never mounted, and `ScenarioBuilder`'s `run` view mode was unreachable —
+`currentViewMode` in `pages/index.vue` is typed `'read' | 'edit'`. Rather than wire live
+progress into a code path no user could reach, the path was removed (Constitution VI).

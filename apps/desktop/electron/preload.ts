@@ -43,8 +43,6 @@ const api: ElectronAPI = {
   },
 
   runner: {
-    runHeadless: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_HEADLESS, options),
-    runUI: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_UI, options),
     runBatch: (options) => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_RUN_BATCH, options),
     getWorkspaceTests: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_GET_WORKSPACE_TESTS),
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.RUNNER_STOP),

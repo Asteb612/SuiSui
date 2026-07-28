@@ -7,7 +7,7 @@ import { useScenarioStore } from '../stores/scenario'
 
 function createWrapper(props: {
   editMode?: 'scenario' | 'background'
-  viewMode?: 'read' | 'edit' | 'run'
+  viewMode?: 'read' | 'edit'
 } = {}, storeOverrides: {
   scenario?: Record<string, unknown>
 } = {}) {
@@ -502,42 +502,6 @@ describe('ScenarioBuilder', () => {
 
       const dots = container.querySelectorAll('.pagination-dot')
       expect(dots.length).toBe(3)
-    })
-  })
-
-  describe('run mode', () => {
-    it('shows run section in run mode', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-      })
-
-      expect(container.querySelector('.run-section')).toBeTruthy()
-    })
-
-    it('shows validation status in run mode', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-          validation: { isValid: true, issues: [] },
-        },
-      })
-
-      expect(screen.getByText('Validation')).toBeTruthy()
-    })
-
-    it('hides story section in run mode', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-      })
-
-      expect(container.querySelector('.story-section')).toBeNull()
     })
   })
 

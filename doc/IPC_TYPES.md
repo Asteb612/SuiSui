@@ -732,3 +732,31 @@ Notes:
   `relativePath` that is absolute or escapes the features directory.
 - There is deliberately **no `tags:runTag`** — running a tag reuses the existing
   tag-filtered batch run.
+## `runner:progress` (feature 011-live-run-progress)
+
+Main → renderer push carrying live per-step execution events.
+
+| Channel           | Direction       | Payload            |
+| ----------------- | --------------- | ------------------ |
+| `runner:progress` | main → renderer | `RunProgressEvent` |
+
+```ts
+runner: {
+  /** Subscribe to live progress. Returns an unsubscribe fn. */
+  onProgress(callback: (event: RunProgressEvent) => void): () => void
+}
+```
+
+Uses the unsubscribe-returning shape (as `update`/`recorder`/`search` do), not the older
+`onRunnerLog`/`offRunnerLog` pair.
+
+`RunProgressEvent` is a discriminated union (`runStart`, `testStart`, `stepStart`,
+`stepEnd`, `testEnd`, `runEnd`) defined in `@suisui/shared/types/run-progress.ts`.
+Events are produced by a reporter running in the user's own Playwright process, so they
+are treated as **untrusted input**: `parseProgressLine` type-checks every field, returns
+`null` for anything unrecognized, and never throws.
+
+**Removed in this feature**: `runner:runHeadless` and `runner:runUI`. Their only caller
+was UI that could not be reached (see FRONTEND.md). Single-scenario runs go through
+`runner:runBatch` with `featurePaths`/`nameFilter`, which is what the quick-run button
+already used.

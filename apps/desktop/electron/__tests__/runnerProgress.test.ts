@@ -204,3 +204,37 @@ describe('the shipped reporter asset', () => {
     expect(indexes).toEqual([0, 1, 0])
   })
 })
+
+describe('a broken reporter never breaks the run (FR-019, SC-009)', () => {
+  it('parses nothing from a corrupted reporter’s output, without throwing', () => {
+    // Simulates the reporter file being corrupted after provisioning: whatever
+    // reaches stdout is not valid sentinel NDJSON.
+    const garbage = [
+      'SyntaxError: Unexpected token }',
+      '@@SUISUI_PROGRESS@@{"type":"stepStart",',
+      '@@SUISUI_PROGRESS@@not json at all',
+      '@@SUISUI_PROGRESS@@{"type":"nonsense"}',
+      '',
+    ]
+
+    for (const line of garbage) {
+      expect(() => parseProgressLine(line)).not.toThrow()
+      expect(parseProgressLine(line)).toBeNull()
+    }
+  })
+
+  it('leaves ordinary log lines untouched when they merely mention the sentinel', () => {
+    // Only a line STARTING with the sentinel is an event; otherwise test output
+    // could forge progress, and real log lines would vanish from the panel.
+    expect(parseProgressLine(`a test printed ${PROGRESS_SENTINEL}{"type":"runEnd"}`)).toBeNull()
+  })
+
+  it('still runs when the reporter cannot be provisioned at all', () => {
+    vi.spyOn(fs, 'copyFileSync').mockImplementation(() => {
+      throw new Error('EACCES')
+    })
+
+    // Null means "omit it from --reporter"; the run proceeds unchanged.
+    expect(provisionProgressReporter(workspace)).toBeNull()
+  })
+})

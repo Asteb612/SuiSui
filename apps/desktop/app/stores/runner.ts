@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import type {
-  RunResult,
   RunStatus,
   RunError,
   BatchRunResult,
@@ -187,7 +186,6 @@ interface RunScope {
   logs: string[]
   errors: RunError[]
   batchResult: BatchRunResult | null
-  lastResult: RunResult | null
   showResults: boolean
   reportUrl: string
   reportLoading: boolean
@@ -220,7 +218,6 @@ function emptyScope(singleRun = false): RunScope {
     logs: [],
     errors: [],
     batchResult: null,
-    lastResult: null,
     showResults: false,
     reportUrl: '',
     reportLoading: false,
@@ -330,9 +327,6 @@ export const useRunnerStore = defineStore('runner', {
     },
     batchResult(): BatchRunResult | null {
       return this.currentScope.batchResult
-    },
-    lastResult(): RunResult | null {
-      return this.currentScope.lastResult
     },
     showResults(): boolean {
       return this.currentScope.showResults
@@ -663,104 +657,6 @@ export const useRunnerStore = defineStore('runner', {
       }
     },
 
-    // Legacy single-feature run methods (kept for backward compatibility)
-    async runHeadless(featurePath?: string, scenarioName?: string) {
-      const s = this.ensureScope()
-      this.isRunning = true
-      s.status = 'running'
-      s.startedAt = Date.now()
-      s.logs = ['Starting headless test run...']
-      s.errors = []
-      if (this.baseUrl) {
-        s.logs.push(`Base URL: ${this.baseUrl}`)
-      }
-
-      try {
-        const result = await window.api.runner.runHeadless({
-          featurePath,
-          scenarioName,
-          baseUrl: this.baseUrl || undefined,
-        })
-        s.lastResult = result
-        s.status = result.status
-
-        if (result.errors && result.errors.length > 0) {
-          s.errors = result.errors
-          s.logs.push('')
-          s.logs.push('=== Errors ===')
-          for (const error of result.errors) {
-            let errorMsg = error.message
-            if (error.file) {
-              errorMsg += ` (${error.file}${error.line ? `:${error.line}` : ''})`
-            }
-            s.logs.push(errorMsg)
-            if (error.suggestion) {
-              s.logs.push(`  → ${error.suggestion}`)
-            }
-          }
-        } else if (result.stdout) {
-          s.logs.push(result.stdout)
-        }
-
-        if (result.stderr && !result.errors?.length) {
-          s.logs.push(`[stderr] ${result.stderr}`)
-        }
-
-        s.logs.push(`Test completed in ${result.duration}ms`)
-      } catch (err) {
-        s.status = 'error'
-        s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-      } finally {
-        this.isRunning = false
-        s.startedAt = 0
-      }
-    },
-
-    async runUI(featurePath?: string, scenarioName?: string) {
-      const s = this.ensureScope()
-      this.isRunning = true
-      s.status = 'running'
-      s.startedAt = Date.now()
-      s.logs = ['Starting Playwright UI...']
-      s.errors = []
-      if (this.baseUrl) {
-        s.logs.push(`Base URL: ${this.baseUrl}`)
-      }
-
-      try {
-        const result = await window.api.runner.runUI({
-          featurePath,
-          scenarioName,
-          baseUrl: this.baseUrl || undefined,
-        })
-        s.lastResult = result
-        s.status = result.status
-
-        if (result.errors && result.errors.length > 0) {
-          s.errors = result.errors
-          s.logs.push('')
-          s.logs.push('=== Errors ===')
-          for (const error of result.errors) {
-            let errorMsg = error.message
-            if (error.file) {
-              errorMsg += ` (${error.file}${error.line ? `:${error.line}` : ''})`
-            }
-            s.logs.push(errorMsg)
-            if (error.suggestion) {
-              s.logs.push(`  → ${error.suggestion}`)
-            }
-          }
-        } else {
-          s.logs.push('Playwright UI session ended')
-        }
-      } catch (err) {
-        s.status = 'error'
-        s.logs.push(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-      } finally {
-        this.isRunning = false
-        s.startedAt = 0
-      }
-    },
 
     async stop() {
       stopRequested = true
@@ -780,7 +676,6 @@ export const useRunnerStore = defineStore('runner', {
       const s = this.ensureScope()
       s.logs = []
       s.errors = []
-      s.lastResult = null
       s.batchResult = null
       s.status = 'idle'
     },

@@ -31,8 +31,6 @@ export const IPC_CHANNELS = {
   VALIDATE_SCENARIO: 'validate:scenario',
 
   // Runner
-  RUNNER_RUN_HEADLESS: 'runner:runHeadless',
-  RUNNER_RUN_UI: 'runner:runUI',
   RUNNER_RUN_BATCH: 'runner:runBatch',
   RUNNER_GET_WORKSPACE_TESTS: 'runner:getWorkspaceTests',
   RUNNER_STOP: 'runner:stop',

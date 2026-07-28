@@ -22,7 +22,7 @@ interface StepGroup {
   steps: ScenarioStep[]
 }
 
-type ViewMode = 'read' | 'edit' | 'run'
+type ViewMode = 'read' | 'edit'
 
 const props = withDefaults(
   defineProps<{
@@ -43,63 +43,6 @@ defineEmits<{
 const scenarioStore = useScenarioStore()
 const runnerStore = useRunnerStore()
 
-// Runner status colors
-const statusColors: Record<string, string> = {
-  idle: 'var(--text-color-secondary)',
-  running: 'var(--primary-color)',
-  passed: '#10b981',
-  failed: '#dc3545',
-  error: '#dc3545',
-}
-
-// Runner actions
-function runHeadless() {
-  runnerStore.runHeadless(
-    scenarioStore.currentFeaturePath ?? undefined,
-    scenarioStore.scenario.name || undefined
-  )
-}
-
-function runUI() {
-  runnerStore.runUI(
-    scenarioStore.currentFeaturePath ?? undefined,
-    scenarioStore.scenario.name || undefined
-  )
-}
-
-function stopRun() {
-  runnerStore.stop()
-}
-
-function clearLogs() {
-  runnerStore.clearLogs()
-}
-
-// Error display helpers
-function getErrorIcon(type: string): string {
-  const icons: Record<string, string> = {
-    undefined_step: 'pi pi-question-circle',
-    syntax_error: 'pi pi-code',
-    missing_decorator: 'pi pi-tag',
-    ambiguous_step: 'pi pi-clone',
-    config_error: 'pi pi-cog',
-    unknown: 'pi pi-exclamation-circle',
-  }
-  return icons[type] || 'pi pi-exclamation-circle'
-}
-
-function formatErrorType(type: string): string {
-  const labels: Record<string, string> = {
-    undefined_step: 'Undefined Step',
-    syntax_error: 'Syntax Error',
-    missing_decorator: 'Missing Decorator',
-    ambiguous_step: 'Ambiguous Step',
-    config_error: 'Configuration Error',
-    unknown: 'Error',
-  }
-  return labels[type] || 'Error'
-}
-
 // Add step dialog state
 const showAddStepDialog = ref(false)
 const addStepTarget = ref<'scenario' | 'background'>('scenario')
@@ -109,7 +52,6 @@ const addStepIndex = ref(0)
 // Mode helpers (using prop from parent)
 const isReadMode = computed(() => props.viewMode === 'read')
 const isEditMode = computed(() => props.viewMode === 'edit')
-const isRunMode = computed(() => props.viewMode === 'run')
 
 // Mode change logging (useful for debugging)
 watch(
@@ -757,7 +699,7 @@ function selectScenario(index: number) {
 
         <!-- Add Preconditions button (edit mode, no background, not in background edit mode) -->
         <Button
-          v-if="isEditMode && !isBackgroundEditMode && scenarioStore.background.length === 0 && !isRunMode"
+          v-if="isEditMode && !isBackgroundEditMode && scenarioStore.background.length === 0"
           icon="pi pi-key"
           label="Add Preconditions"
           text
@@ -768,7 +710,7 @@ function selectScenario(index: number) {
 
         <!-- Preconditions (Background) - shown in read/edit modes -->
         <div
-          v-if="(scenarioStore.background.length > 0 || isBackgroundEditMode) && !isRunMode"
+          v-if="(scenarioStore.background.length > 0 || isBackgroundEditMode)"
           key="preconditions-section"
           class="preconditions-section"
           :class="{
@@ -975,7 +917,6 @@ function selectScenario(index: number) {
 
         <!-- Story Section -->
         <div
-          v-if="!isRunMode"
           key="story-section"
           class="story-section"
         >
@@ -1311,221 +1252,10 @@ function selectScenario(index: number) {
           </div>
         </div>
 
-        <!-- Run Mode View -->
-        <div
-          v-if="isRunMode"
-          key="run-section"
-          class="run-section"
-        >
-          <!-- Validation Status -->
-          <div class="run-validation-section">
-            <div class="section-label">
-              <i class="pi pi-check-circle" />
-              <span>Validation</span>
-            </div>
-            <div
-              v-if="scenarioStore.isValid"
-              class="validation-success"
-            >
-              <i class="pi pi-check-circle" />
-              <span>Scenario is valid and ready to run</span>
-            </div>
-            <div
-              v-else-if="scenarioStore.errors.length > 0"
-              class="validation-errors"
-            >
-              <div
-                v-for="(issue, i) in scenarioStore.errors"
-                :key="`error-${i}`"
-                class="validation-issue error"
-              >
-                <i class="pi pi-times-circle" />
-                <span>{{ issue.message }}</span>
-              </div>
-            </div>
-            <div
-              v-else
-              class="validation-pending"
-            >
-              <i class="pi pi-info-circle" />
-              <span>Validation pending</span>
-            </div>
-          </div>
-
-          <!-- Target Info -->
-          <div class="run-target-section">
-            <div class="section-label">
-              <i class="pi pi-crosshair" />
-              <span>Target</span>
-            </div>
-            <div class="target-info">
-              <div class="target-item">
-                <span class="target-label">Feature</span>
-                <span class="target-value">{{ scenarioStore.currentFeaturePath || 'All features' }}</span>
-              </div>
-              <div class="target-item">
-                <span class="target-label">Scenario</span>
-                <span class="target-value">{{ scenarioStore.scenario.name || 'All scenarios' }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Runner Controls -->
-          <div class="run-controls-section">
-            <div class="section-label">
-              <i class="pi pi-play" />
-              <span>Test Runner</span>
-              <div class="runner-status">
-                <span
-                  class="status-dot"
-                  :style="{ backgroundColor: statusColors[runnerStore.status] }"
-                />
-                <span class="status-text">{{ runnerStore.status }}</span>
-                <span
-                  v-if="runnerStore.lastResult"
-                  class="duration"
-                >
-                  {{ runnerStore.lastResult.duration }}ms
-                </span>
-              </div>
-            </div>
-
-            <div class="base-url-field">
-              <label for="baseUrl">Base URL</label>
-              <InputText
-                id="baseUrl"
-                :model-value="runnerStore.baseUrl"
-                placeholder="http://localhost:3000"
-                :disabled="runnerStore.isRunning"
-                @update:model-value="runnerStore.setBaseUrl($event ?? '')"
-              />
-            </div>
-
-            <div class="run-buttons">
-              <Button
-                label="Run with UI"
-                icon="pi pi-desktop"
-                :disabled="runnerStore.isRunning || !scenarioStore.isValid"
-                @click="runUI"
-              />
-              <Button
-                label="Run Headless"
-                icon="pi pi-play"
-                outlined
-                :disabled="runnerStore.isRunning || !scenarioStore.isValid"
-                @click="runHeadless"
-              />
-              <Button
-                v-if="runnerStore.isRunning"
-                label="Stop"
-                icon="pi pi-stop"
-                severity="danger"
-                @click="stopRun"
-              />
-            </div>
-          </div>
-
-          <!-- Runner Errors -->
-          <div
-            v-if="runnerStore.errors.length > 0"
-            class="run-errors-section"
-          >
-            <div class="section-label">
-              <i class="pi pi-exclamation-triangle" />
-              <span>Errors</span>
-              <span class="error-count">{{ runnerStore.errors.length }} issue{{ runnerStore.errors.length > 1 ? 's' : '' }}</span>
-            </div>
-            <div class="errors-list">
-              <div
-                v-for="(error, index) in runnerStore.errors"
-                :key="index"
-                class="error-item"
-                :class="error.type"
-              >
-                <div class="error-header">
-                  <i :class="getErrorIcon(error.type)" />
-                  <span class="error-type">{{ formatErrorType(error.type) }}</span>
-                </div>
-                <div class="error-message">
-                  {{ error.message }}
-                </div>
-                <div
-                  v-if="error.file"
-                  class="error-location"
-                >
-                  <i class="pi pi-file" />
-                  {{ error.file }}{{ error.line ? `:${error.line}` : '' }}
-                </div>
-                <div
-                  v-if="error.suggestion"
-                  class="error-suggestion"
-                >
-                  <i class="pi pi-lightbulb" />
-                  {{ error.suggestion }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Steps Preview -->
-          <div class="run-steps-section">
-            <div class="section-label">
-              <i class="pi pi-list" />
-              <span>Steps to Execute</span>
-              <span class="step-count">{{ scenarioStore.scenario.steps.length }} steps</span>
-            </div>
-            <ol class="steps-list">
-              <li
-                v-for="step in scenarioStore.scenario.steps"
-                :key="step.id"
-              >
-                <template
-                  v-for="(segment, segIdx) in formatStepSegments(step)"
-                  :key="segIdx"
-                >
-                  <strong
-                    v-if="segment.type === 'strong'"
-                    :class="segment.className"
-                  >{{ segment.text }}</strong>
-                  <span v-else>{{ segment.text }}</span>
-                </template>
-              </li>
-            </ol>
-          </div>
-
-          <!-- Logs -->
-          <div class="run-logs-section">
-            <div class="section-label">
-              <i class="pi pi-file" />
-              <span>Output</span>
-              <Button
-                v-if="runnerStore.logs.length > 0"
-                icon="pi pi-trash"
-                text
-                rounded
-                size="small"
-                class="clear-logs-btn"
-                @click="clearLogs"
-              />
-            </div>
-            <div class="logs-container">
-              <div
-                v-if="runnerStore.logs.length === 0"
-                class="logs-empty"
-              >
-                Run the scenario to see output here
-              </div>
-              <pre
-                v-else
-                class="logs-content"
-              >{{ runnerStore.logs.join('\n') }}</pre>
-            </div>
-          </div>
-        </div>
 
         <!-- Examples / Variations - shown in read/edit modes -->
         <div
-          v-if="isOutline && !isRunMode"
+          v-if="isOutline"
           key="variations-section"
           class="variations-section"
         >

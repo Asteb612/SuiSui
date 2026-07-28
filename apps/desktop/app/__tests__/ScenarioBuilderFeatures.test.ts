@@ -17,7 +17,7 @@ import {
 function createWrapper(
   props: {
     editMode?: 'scenario' | 'background'
-    viewMode?: 'read' | 'edit' | 'run'
+    viewMode?: 'read' | 'edit'
   } = {},
   storeOverrides: {
     scenario?: Record<string, unknown>
@@ -1044,188 +1044,11 @@ describe('ScenarioBuilder — Comprehensive Feature Tests', () => {
       expect(store.toggleScenarioOutline).toHaveBeenCalled()
     })
 
-    it('hides examples section in run mode', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{
-            name: 'Outline',
-            steps: [],
-            examples: {
-              columns: ['v'],
-              rows: [{ v: '1' }],
-            },
-          }],
-        },
-      })
-
-      expect(container.querySelector('.variations-section')).toBeNull()
-    })
   })
 
   // =========================================================================
   // Run Mode
   // =========================================================================
-
-  describe('run mode — detailed', () => {
-    it('shows "Scenario is valid" message when validation passes', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-          validation: { isValid: true, issues: [] },
-        },
-      })
-
-      expect(screen.getByText(/valid and ready to run/i)).toBeTruthy()
-    })
-
-    it('shows validation error messages when validation fails', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-          validation: {
-            isValid: false,
-            issues: [
-              { severity: 'error', message: 'Missing step definition' },
-              { severity: 'error', message: 'Empty arg value' },
-            ],
-          },
-        },
-      })
-
-      expect(screen.getByText('Missing step definition')).toBeTruthy()
-      expect(screen.getByText('Empty arg value')).toBeTruthy()
-    })
-
-    it('shows target info with feature path and scenario name', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'login.feature',
-          scenarios: [{ name: 'Successful login', steps: [createMockStep()] }],
-        },
-      })
-
-      // Target info section has .target-value spans
-      const targetValues = container.querySelectorAll('.target-value')
-      const texts = Array.from(targetValues).map(el => el.textContent)
-      expect(texts.some(t => t?.includes('login.feature'))).toBe(true)
-      expect(texts.some(t => t?.includes('Successful login'))).toBe(true)
-    })
-
-    it('shows base URL input', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-      })
-
-      const baseUrlInput = container.querySelector('.run-controls-section input')
-      expect(baseUrlInput).toBeTruthy()
-    })
-
-    it('shows run buttons (Run with UI and Run Headless)', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-          validation: { isValid: true, issues: [] },
-        },
-      })
-
-      expect(screen.getByText('Run with UI')).toBeTruthy()
-      expect(screen.getByText('Run Headless')).toBeTruthy()
-    })
-
-    it('shows stop button when runner is running', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-        runner: {
-          isRunning: true,
-          status: 'running',
-        },
-      })
-
-      expect(screen.getByText('Stop')).toBeTruthy()
-    })
-
-    it('does NOT show stop button when runner is idle', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-        runner: {
-          isRunning: false,
-          status: 'idle',
-        },
-      })
-
-      expect(screen.queryByText('Stop')).toBeNull()
-    })
-
-    it('shows steps preview as ordered list', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{
-            name: 'Test',
-            steps: [
-              createMockStep({ keyword: 'Given', pattern: 'step one' }),
-              createMockStep({ keyword: 'When', pattern: 'step two' }),
-            ],
-          }],
-        },
-      })
-
-      const stepsList = container.querySelector('.run-steps-section ol')
-      expect(stepsList).toBeTruthy()
-      const items = stepsList!.querySelectorAll('li')
-      expect(items.length).toBe(2)
-    })
-
-    it('shows logs section with placeholder when no logs', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-        runner: { logs: [] },
-      })
-
-      expect(screen.getByText(/Run the scenario to see output here/)).toBeTruthy()
-    })
-
-    it('shows logs content when logs exist', () => {
-      createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-        runner: { logs: ['PASS test 1', 'PASS test 2'] },
-      })
-
-      expect(screen.getByText(/PASS test 1/)).toBeTruthy()
-    })
-
-    it('hides story and preconditions sections in run mode', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          background: [createMockStep()],
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-      })
-
-      expect(container.querySelector('.story-section')).toBeNull()
-      expect(container.querySelector('.preconditions-section')).toBeNull()
-    })
-  })
 
   // =========================================================================
   // View Mode Classes
@@ -1252,15 +1075,6 @@ describe('ScenarioBuilder — Comprehensive Feature Tests', () => {
       expect(container.querySelector('.mode-edit')).toBeTruthy()
     })
 
-    it('applies mode-run class in run mode', () => {
-      const { container } = createWrapper({ viewMode: 'run' }, {
-        scenario: {
-          currentFeaturePath: 'test.feature',
-          scenarios: [{ name: 'Test', steps: [createMockStep()] }],
-        },
-      })
-      expect(container.querySelector('.mode-run')).toBeTruthy()
-    })
   })
 
   // =========================================================================
