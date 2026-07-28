@@ -34,9 +34,9 @@ pnpm monorepo. Shared contracts and pure logic in `packages/shared/src/`; main p
 
 **Purpose**: Confirm the sequencing dependency is satisfied, then establish the shared type surface.
 
-- [ ] T001 Verify feature 009 has landed: confirm `packages/shared/src/search/featureOutline.ts` and `apps/desktop/electron/services/FileWatcher.ts` exist on this branch (rebase onto `main` after PR #127 merges). If they do not, **stop** and take the documented fallback decision in plan.md — do not improvise a third parser
-- [ ] T002 Create `packages/shared/src/types/tags.ts` with `TagOrigin`, `TagUsage`, `TagSummary`, `TagIndexState`, `TagIndex`, `BulkTagOperation`, `BulkTagRequest`, `BulkTagTarget`, `TagWriteStatus`, `TagWriteOutcome`, and `BulkTagResult`, exactly as specified in data-model.md
-- [ ] T003 Add `export * from './types/tags'` to `packages/shared/src/index.ts`, then run `pnpm --filter @suisui/shared build` and `pnpm typecheck` to confirm the types resolve from both processes
+- [X] T001 Verify feature 009 has landed: confirm `packages/shared/src/search/featureOutline.ts` and `apps/desktop/electron/services/FileWatcher.ts` exist on this branch (rebase onto `main` after PR #127 merges). If they do not, **stop** and take the documented fallback decision in plan.md — do not improvise a third parser
+- [X] T002 Create `packages/shared/src/types/tags.ts` with `TagOrigin`, `TagUsage`, `TagSummary`, `TagIndexState`, `TagIndex`, `BulkTagOperation`, `BulkTagRequest`, `BulkTagTarget`, `TagWriteStatus`, `TagWriteOutcome`, and `BulkTagResult`, exactly as specified in data-model.md
+- [X] T003 Add `export * from './types/tags'` to `packages/shared/src/index.ts`, then run `pnpm --filter @suisui/shared build` and `pnpm typecheck` to confirm the types resolve from both processes
 
 **Checkpoint**: Shared types compile and are importable from main and renderer.
 
@@ -51,29 +51,29 @@ Story-agnostic plumbing — no tag semantics or editing yet.
 
 ### Parser extension (`@suisui/shared`)
 
-- [ ] T004 [P] Add failing tests to `packages/shared/src/__tests__/featureOutline.test.ts` for line positions: `line` on each scenario, `tagLine` present only when a tag line sits directly above, `tagLine` absent when the scenario has no tags, and `featureTagLine` for the feature's own tag line. Include a CRLF fixture
-- [ ] T005 Add optional `line`, `tagLine`, and `featureTagLine` to `parseFeatureOutline` in `packages/shared/src/search/featureOutline.ts` until T004 passes. **Additive only** — the parser must keep never throwing, and all existing assertions must still hold
-- [ ] T006 Run `pnpm --filter @suisui/shared build` then `pnpm test` and confirm feature 009's search tests (`matcher.test.ts`, `SearchIndexService.test.ts`) still pass unchanged — the parser extension must not disturb the search index
+- [X] T004 [P] Add failing tests to `packages/shared/src/__tests__/featureOutline.test.ts` for line positions: `line` on each scenario, `tagLine` present only when a tag line sits directly above, `tagLine` absent when the scenario has no tags, and `featureTagLine` for the feature's own tag line. Include a CRLF fixture
+- [X] T005 Add optional `line`, `tagLine`, and `featureTagLine` to `parseFeatureOutline` in `packages/shared/src/search/featureOutline.ts` until T004 passes. **Additive only** — the parser must keep never throwing, and all existing assertions must still hold
+- [X] T006 Run `pnpm --filter @suisui/shared build` then `pnpm test` and confirm feature 009's search tests (`matcher.test.ts`, `SearchIndexService.test.ts`) still pass unchanged — the parser extension must not disturb the search index
 
 ### Tag index service (main process)
 
-- [ ] T007 [P] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` using `memfs` + `FakeFileWatcher`, covering: index builds from a workspace scan, `state` moves `idle → building → ready`, no workspace open yields `state: 'idle'` with empty collections, nested directories are scanned, non-`.feature` files are ignored, and the watcher is established on the features directory
-- [ ] T008 Implement `TagService` in `apps/desktop/electron/services/TagService.ts` — constructor takes optional `IFileWatcher` and `IWorkspaceLocator` (Principle IV), with a `getTagService()` singleton factory. Scan `.feature` files via `WorkspaceService.getFeaturesDir()` and hold parsed outlines per file
-- [ ] T009 Add freshness to `TagService`: rebuild on workspace change, incremental per-file update on a debounced watcher event, and a single full rescan on watcher error **without re-establishing the watch** (a dir that can never be watched must not loop). Extend `TagService.test.ts` to drive these through `FakeFileWatcher`
-- [ ] T010 Export `TagService` and `getTagService` from `apps/desktop/electron/services/index.ts`
+- [X] T007 [P] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` using `memfs` + `FakeFileWatcher`, covering: index builds from a workspace scan, `state` moves `idle → building → ready`, no workspace open yields `state: 'idle'` with empty collections, nested directories are scanned, non-`.feature` files are ignored, and the watcher is established on the features directory
+- [X] T008 Implement `TagService` in `apps/desktop/electron/services/TagService.ts` — constructor takes optional `IFileWatcher` and `IWorkspaceLocator` (Principle IV), with a `getTagService()` singleton factory. Scan `.feature` files via `WorkspaceService.getFeaturesDir()` and hold parsed outlines per file
+- [X] T009 Add freshness to `TagService`: rebuild on workspace change, incremental per-file update on a debounced watcher event, and a single full rescan on watcher error **without re-establishing the watch** (a dir that can never be watched must not loop). Extend `TagService.test.ts` to drive these through `FakeFileWatcher`
+- [X] T010 Export `TagService` and `getTagService` from `apps/desktop/electron/services/index.ts`
 
 ### IPC read surface (all five touchpoints)
 
-- [ ] T011 Add `TAGS_GET_INDEX: 'tags:getIndex'`, `TAGS_APPLY_BULK: 'tags:applyBulk'`, and `TAGS_INDEX_CHANGED: 'tags:indexChanged'` to `packages/shared/src/ipc/channels.ts`
-- [ ] T012 Add the `tags: { getIndex, applyBulk, onIndexChanged }` block to `packages/shared/src/ipc/api.ts`, matching contracts/ipc-tags.md
-- [ ] T013 Add the `TAGS_GET_INDEX` handler to `apps/desktop/electron/ipc/handlers.ts` and wire index lifecycle into `WORKSPACE_SET`, `WORKSPACE_SELECT`, `WORKSPACE_INIT`, **and `WORKSPACE_GET`**. The `WORKSPACE_GET` path is how a workspace restored from settings first materializes; omitting it yields an index that is silently empty for the whole session (this exact bug shipped in feature 009)
-- [ ] T014 Add the `tags` bindings to `apps/desktop/electron/preload.ts`, with `onIndexChanged` returning an unsubscribe fn, and push `TAGS_INDEX_CHANGED` from the main process on index change (mirror the `search:indexStatus` wiring in `main.ts`)
-- [ ] T015 Run `pnpm --filter @suisui/shared build`, then `pnpm typecheck` and `pnpm test`; confirm `packages/shared/src/__tests__/ipcContract.test.ts` passes with the three new channels
+- [X] T011 Add `TAGS_GET_INDEX: 'tags:getIndex'`, `TAGS_APPLY_BULK: 'tags:applyBulk'`, and `TAGS_INDEX_CHANGED: 'tags:indexChanged'` to `packages/shared/src/ipc/channels.ts`
+- [X] T012 Add the `tags: { getIndex, applyBulk, onIndexChanged }` block to `packages/shared/src/ipc/api.ts`, matching contracts/ipc-tags.md
+- [X] T013 Add the `TAGS_GET_INDEX` handler to `apps/desktop/electron/ipc/handlers.ts` and wire index lifecycle into `WORKSPACE_SET`, `WORKSPACE_SELECT`, `WORKSPACE_INIT`, **and `WORKSPACE_GET`**. The `WORKSPACE_GET` path is how a workspace restored from settings first materializes; omitting it yields an index that is silently empty for the whole session (this exact bug shipped in feature 009)
+- [X] T014 Add the `tags` bindings to `apps/desktop/electron/preload.ts`, with `onIndexChanged` returning an unsubscribe fn, and push `TAGS_INDEX_CHANGED` from the main process on index change (mirror the `search:indexStatus` wiring in `main.ts`)
+- [X] T015 Run `pnpm --filter @suisui/shared build`, then `pnpm typecheck` and `pnpm test`; confirm `packages/shared/src/__tests__/ipcContract.test.ts` passes with the three new channels
 
 ### Renderer shell
 
-- [ ] T016 Create `apps/desktop/app/stores/tags.ts` with state (`index`, `selectedTag`, `tagFilter`, `sortMode`, `selectedScenarioIds`) plus `init`/`dispose` that subscribe and **unsubscribe** from `onIndexChanged`, and a `reset` that clears state when the workspace changes
-- [ ] T017 Create `apps/desktop/app/components/TagBrowser.vue` (`<script setup lang="ts">`, PrimeVue) as a master/detail shell, extend `activeView` to `'editor' | 'runner' | 'tags'` in `apps/desktop/app/pages/index.vue`, and add a header entry point shown only when a workspace is open
+- [X] T016 Create `apps/desktop/app/stores/tags.ts` with state (`index`, `selectedTag`, `tagFilter`, `sortMode`, `selectedScenarioIds`) plus `init`/`dispose` that subscribe and **unsubscribe** from `onIndexChanged`, and a `reset` that clears state when the workspace changes
+- [X] T017 Create `apps/desktop/app/components/TagBrowser.vue` (`<script setup lang="ts">`, PrimeVue) as a master/detail shell, extend `activeView` to `'editor' | 'runner' | 'tags'` in `apps/desktop/app/pages/index.vue`, and add a header entry point shown only when a workspace is open
 
 **Checkpoint**: The index builds, stays fresh, and is readable over IPC; the Tags view opens. No tag
 counts or semantics yet — that is US1.
@@ -91,22 +91,22 @@ inheritance marked, and select one to open it.
 
 ### Tests for User Story 1
 
-- [ ] T018 [P] [US1] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` for tag aggregation: a feature-level tag counts for every scenario in that feature, a tag on both a feature and one of its own scenarios counts that scenario **once** (`origin: 'direct'` wins), a tag on a feature with zero scenarios yields `scenarioCount: 0` and `orphaned: true`, `@Smoke` and `@smoke` stay distinct, and `usedAtFeatureLevel`/`usedAtScenarioLevel` are set correctly
-- [ ] T019 [P] [US1] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` for resilience: an unparseable feature file is listed in `unparsedFiles` without preventing tags from other files appearing
-- [ ] T020 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/tagsStore.test.ts` for the store: sort by count-descending vs alphabetical, the tag filter narrows the list, selecting a tag exposes its usages, and the unsaved-edit overlay replaces the open feature's usages from `scenarioStore` state
+- [X] T018 [P] [US1] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` for tag aggregation: a feature-level tag counts for every scenario in that feature, a tag on both a feature and one of its own scenarios counts that scenario **once** (`origin: 'direct'` wins), a tag on a feature with zero scenarios yields `scenarioCount: 0` and `orphaned: true`, `@Smoke` and `@smoke` stay distinct, and `usedAtFeatureLevel`/`usedAtScenarioLevel` are set correctly
+- [X] T019 [P] [US1] Write failing tests in `apps/desktop/electron/__tests__/TagService.test.ts` for resilience: an unparseable feature file is listed in `unparsedFiles` without preventing tags from other files appearing
+- [X] T020 [P] [US1] Write failing tests in `apps/desktop/app/__tests__/tagsStore.test.ts` for the store: sort by count-descending vs alphabetical, the tag filter narrows the list, selecting a tag exposes its usages, and the unsaved-edit overlay replaces the open feature's usages from `scenarioStore` state
 
 ### Implementation for User Story 1
 
-- [ ] T021 [US1] Implement tag aggregation in `apps/desktop/electron/services/TagService.ts` — build `TagUsage[]` per tag with `origin`, deduplicate per scenario (direct wins over inherited), and derive `TagSummary` counts and flags until T018 passes
-- [ ] T022 [US1] Implement per-file parse-failure handling in `apps/desktop/electron/services/TagService.ts` so a bad file is recorded in `unparsedFiles` and skipped without aborting the scan, until T019 passes
-- [ ] T023 [US1] Implement sorting, filtering, and selection getters in `apps/desktop/app/stores/tags.ts` until T020's sort/filter/selection tests pass
-- [ ] T024 [US1] Implement the unsaved-edit overlay in `apps/desktop/app/stores/tags.ts`: when `scenarioStore.isDirty`, drop usages whose `relativePath` matches `scenarioStore.currentFeaturePath` and re-derive them from live Pinia state (excluding by path **before** re-adding), until T020's overlay test passes
-- [ ] T025 [US1] Render the tag list in `apps/desktop/app/components/TagBrowser.vue`: each tag with its scenario count, a sort toggle (count ↔ alphabetical), a filter input, and a visual marker for `orphaned` tags (FR-002, FR-004, FR-005)
-- [ ] T026 [US1] Render the scenario detail list in `apps/desktop/app/components/TagBrowser.vue`: scenario name, owning feature, file location, and a clear `direct` vs `inherited` indicator (FR-006, FR-007)
-- [ ] T027 [US1] Implement scenario activation in `apps/desktop/app/pages/index.vue`: open the feature and select the scenario, waiting for the feature load to complete before setting the scenario index so the editor does not reset it (FR-008)
-- [ ] T028 [US1] Implement empty and unavailable states in `apps/desktop/app/components/TagBrowser.vue`: explicit "no tags found" for an empty workspace, an indexing-in-progress state, a disabled entry point with explanation when no workspace is open, and a notice naming files that could not be searched (FR-009, FR-012)
-- [ ] T029 [P] [US1] Create the E2E fixture workspace under `apps/desktop/e2e/fixtures/workspaces/tags/` covering: feature-level inheritance, the same tag on a feature and its own scenario, a tag on a feature with zero scenarios, `@Smoke` vs `@smoke`, `@smoke` vs `@smoke-test`, scenarios with no tag line and with several tags on one line, a scenario with an empty name but tags, one malformed file, and at least one CRLF file
-- [ ] T030 [US1] Write `apps/desktop/e2e/tag-management.spec.ts` covering the browsing journey: open the Tags view, assert exact counts against the fixture, select a tag, assert its scenario list and inheritance markers, select a scenario and confirm the editor lands on it, and confirm the malformed file is reported without hiding other tags
+- [X] T021 [US1] Implement tag aggregation in `apps/desktop/electron/services/TagService.ts` — build `TagUsage[]` per tag with `origin`, deduplicate per scenario (direct wins over inherited), and derive `TagSummary` counts and flags until T018 passes
+- [X] T022 [US1] Implement per-file parse-failure handling in `apps/desktop/electron/services/TagService.ts` so a bad file is recorded in `unparsedFiles` and skipped without aborting the scan, until T019 passes
+- [X] T023 [US1] Implement sorting, filtering, and selection getters in `apps/desktop/app/stores/tags.ts` until T020's sort/filter/selection tests pass
+- [X] T024 [US1] Implement the unsaved-edit overlay in `apps/desktop/app/stores/tags.ts`: when `scenarioStore.isDirty`, drop usages whose `relativePath` matches `scenarioStore.currentFeaturePath` and re-derive them from live Pinia state (excluding by path **before** re-adding), until T020's overlay test passes
+- [X] T025 [US1] Render the tag list in `apps/desktop/app/components/TagBrowser.vue`: each tag with its scenario count, a sort toggle (count ↔ alphabetical), a filter input, and a visual marker for `orphaned` tags (FR-002, FR-004, FR-005)
+- [X] T026 [US1] Render the scenario detail list in `apps/desktop/app/components/TagBrowser.vue`: scenario name, owning feature, file location, and a clear `direct` vs `inherited` indicator (FR-006, FR-007)
+- [X] T027 [US1] Implement scenario activation in `apps/desktop/app/pages/index.vue`: open the feature and select the scenario, waiting for the feature load to complete before setting the scenario index so the editor does not reset it (FR-008)
+- [X] T028 [US1] Implement empty and unavailable states in `apps/desktop/app/components/TagBrowser.vue`: explicit "no tags found" for an empty workspace, an indexing-in-progress state, a disabled entry point with explanation when no workspace is open, and a notice naming files that could not be searched (FR-009, FR-012)
+- [X] T029 [P] [US1] Create the E2E fixture workspace under `apps/desktop/e2e/fixtures/workspaces/tags/` covering: feature-level inheritance, the same tag on a feature and its own scenario, a tag on a feature with zero scenarios, `@Smoke` vs `@smoke`, `@smoke` vs `@smoke-test`, scenarios with no tag line and with several tags on one line, a scenario with an empty name but tags, one malformed file, and at least one CRLF file
+- [X] T030 [US1] Write `apps/desktop/e2e/tag-management.spec.ts` covering the browsing journey: open the Tags view, assert exact counts against the fixture, select a tag, assert its scenario list and inheritance markers, select a scenario and confirm the editor lands on it, and confirm the malformed file is reported without hiding other tags
 
 **Checkpoint**: US1 is fully functional and shippable on its own — tags are visible workspace-wide
 with correct counts and drill-down. No running by tag, no editing.
@@ -126,13 +126,13 @@ working one (research.md Decision 5).
 
 ### Tests for User Story 2
 
-- [ ] T031 [P] [US2] Write failing tests in `apps/desktop/app/__tests__/tagsStore.test.ts` for the run handoff: running a tag sets `runnerStore.config.activeFilterTab = 'tags'` and `selectedTags = [tag]` and invokes the existing batch run, and a tag with `scenarioCount: 0` is refused without invoking it
+- [X] T031 [P] [US2] Write failing tests in `apps/desktop/app/__tests__/tagsStore.test.ts` for the run handoff: running a tag sets `runnerStore.config.activeFilterTab = 'tags'` and `selectedTags = [tag]` and invokes the existing batch run, and a tag with `scenarioCount: 0` is refused without invoking it
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Implement the run handoff in `apps/desktop/app/stores/tags.ts`: set the runner config, switch `activeView` to `'runner'`, and call the existing `runnerStore.runBatch` — no new IPC channel (FR-013, FR-014, FR-015)
-- [ ] T033 [US2] Add a "Run this tag" action to `apps/desktop/app/components/TagBrowser.vue`, disabled with an explanation when the selected tag has zero scenarios (FR-016)
-- [ ] T034 [US2] Extend `apps/desktop/e2e/tag-management.spec.ts` with the run journey: start a run for a tag from the browser, confirm the runner view opens with that tag selected, and confirm a zero-count tag cannot be run
+- [X] T032 [US2] Implement the run handoff in `apps/desktop/app/stores/tags.ts`: set the runner config, switch `activeView` to `'runner'`, and call the existing `runnerStore.runBatch` — no new IPC channel (FR-013, FR-014, FR-015)
+- [X] T033 [US2] Add a "Run this tag" action to `apps/desktop/app/components/TagBrowser.vue`, disabled with an explanation when the selected tag has zero scenarios (FR-016)
+- [X] T034 [US2] Extend `apps/desktop/e2e/tag-management.spec.ts` with the run journey: start a run for a tag from the browser, confirm the runner view opens with that tag selected, and confirm a zero-count tag cannot be run
 
 **Checkpoint**: US1 and US2 both work independently.
 

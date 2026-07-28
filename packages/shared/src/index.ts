@@ -15,6 +15,7 @@ export * from './types/step-catalog'
 export * from './types/recorder'
 export * from './types/update'
 export * from './types/search'
+export * from './types/tags'
 export * from './recorder/locatorSelector'
 
 // Catalog (backward-compat adapter added in US1)

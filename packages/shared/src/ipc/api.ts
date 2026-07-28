@@ -23,6 +23,7 @@ import type {
 } from '../types/recorder'
 import type { UpdateState, UpdatePreferences } from '../types/update'
 import type { SearchResponse, SearchIndexStatus } from '../types/search'
+import type { TagIndex, BulkTagRequest, BulkTagResult } from '../types/tags'
 
 export interface WorkspaceSelectResult {
   workspace: WorkspaceInfo | null
@@ -206,6 +207,21 @@ export interface ElectronAPI {
     getStatus: () => Promise<SearchIndexStatus>
     /** Subscribe to index-state pushes; returns an unsubscribe fn. */
     onIndexStatus: (callback: (status: SearchIndexStatus) => void) => () => void
+  }
+
+  tags: {
+    /**
+     * Workspace-wide tag index (feature 010). Includes per-tag usages, so the
+     * renderer never needs a second round-trip to show what a count refers to.
+     */
+    getIndex: () => Promise<TagIndex>
+    /**
+     * Apply a bulk add/remove. Returns a per-scenario outcome AND the rebuilt
+     * index, so displayed counts can never lag the change that produced them.
+     */
+    applyBulk: (request: BulkTagRequest) => Promise<BulkTagResult>
+    /** Subscribe to index changes; returns an unsubscribe fn. */
+    onIndexChanged: (callback: (index: TagIndex) => void) => () => void
   }
 }
 

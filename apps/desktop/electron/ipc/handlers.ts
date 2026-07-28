@@ -29,6 +29,7 @@ import {
   FakeUpdaterAdapter,
   getUpdateService,
   getSearchIndexService,
+  getTagService,
 } from '../services'
 import type {
   GitWorkspaceParams,
@@ -99,9 +100,10 @@ export function registerIpcHandlers(
     logger.debug('WORKSPACE_GET called')
     const result = await workspaceService.get()
     // This is how a workspace restored from settings first materializes, so it
-    // is also where the search index first learns it has something to index.
+    // is also where the indexes first learn they have something to index.
     // `ensureBuilt` no-ops once the current workspace is already indexed.
     ensureSearchIndex()
+    ensureTagIndex()
     logger.debug('WORKSPACE_GET completed', { hasWorkspace: result !== null })
     return result
   })
@@ -110,6 +112,7 @@ export function registerIpcHandlers(
     logger.info('WORKSPACE_SET called', { path, gitRoot })
     const result = await workspaceService.set(path, gitRoot)
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('WORKSPACE_SET completed', { path, isValid: result.isValid })
     return result
   })
@@ -160,6 +163,7 @@ export function registerIpcHandlers(
 
     const workspace = await workspaceService.get()
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('Workspace selected successfully', { workspacePath, workspaceName: workspace?.name })
     return { workspace, validation, selectedPath: workspacePath }
   })
@@ -175,6 +179,7 @@ export function registerIpcHandlers(
     logger.info('WORKSPACE_INIT called', { path })
     const result = await workspaceService.init(path)
     rebuildSearchIndex()
+    rebuildTagIndex()
     logger.info('WORKSPACE_INIT completed', { path, workspaceName: result.name })
     return result
   })
@@ -727,6 +732,12 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SEARCH_GET_STATUS, async () => searchIndexService.getStatus())
 
+  // Tag management (feature 010). The workspace root comes from WorkspaceService,
+  // never the renderer; target paths are matched against indexed usages.
+  const tagService = getTagService()
+
+  ipcMain.handle(IPC_CHANNELS.TAGS_GET_INDEX, async () => tagService.getIndex())
+
   logger.info('IPC handlers registered', { isTestMode })
 }
 
@@ -747,6 +758,18 @@ function ensureSearchIndex(): void {
   void getSearchIndexService()
     .ensureBuilt()
     .catch((error) => logger.warn('Search index build failed', { error: String(error) }))
+}
+
+function rebuildTagIndex(): void {
+  void getTagService()
+    .rebuild()
+    .catch((error) => logger.warn('Tag index rebuild failed', { error: String(error) }))
+}
+
+function ensureTagIndex(): void {
+  void getTagService()
+    .ensureBuilt()
+    .catch((error) => logger.warn('Tag index build failed', { error: String(error) }))
 }
 
 /** Coerce untrusted renderer input into a clean `Partial<UpdatePreferences>`. */
