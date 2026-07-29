@@ -12,6 +12,7 @@ import type {
   ScenarioExecution,
   ScenarioStep,
   ReportedScenarioOutcome,
+  ExecutionStatus,
 } from '@suisui/shared'
 import {
   DEFAULT_RUN_CONFIGURATION,
@@ -42,6 +43,20 @@ let stopRequested = false
 
 /** The global filters runner. Per-spec quick-runs use their feature path as the scope id. */
 export const GLOBAL_SCOPE = 'global'
+
+/**
+ * How loudly a status asks to be looked at, for rolling several scenarios up
+ * into one badge. A file with one failed row among fifty passed ones is a failed
+ * file; `pending` ranks below `passed` because it means "no information yet".
+ */
+const STATUS_SEVERITY: Record<ExecutionStatus, number> = {
+  pending: 0,
+  passed: 1,
+  skipped: 2,
+  running: 3,
+  interrupted: 4,
+  failed: 5,
+}
 
 /** Live progress derived from the Playwright `list` reporter while a run is in flight. */
 export interface RunProgress {
@@ -181,6 +196,81 @@ function findExecution(
 }
 
 /**
+ * One file's worth of scenarios in the live view.
+ *
+ * A suite of any size reports hundreds of scenarios, and a flat list of them is
+ * not something anyone can read. Grouping by the file they came from turns it
+ * back into a list the size of the suite's file count, which is what the tree
+ * shows too.
+ */
+export interface LiveScenarioGroup {
+  /** Feature path, or source file for a plain spec: the label and the identity. */
+  key: string
+  /** Worst status in the group — what the collapsed row has to convey. */
+  status: ExecutionStatus
+  /** In the order `liveScenarios` produced them: running first, then chronological. */
+  scenarios: ScenarioExecution[]
+  passed: number
+  failed: number
+  /** True while any scenario in it is executing. */
+  running: boolean
+  /** Earliest start, so groups read in the order the run reached them. */
+  startedAt: number
+}
+
+/**
+ * Bucket scenarios by file, preserving the incoming order within each bucket.
+ *
+ * Groups are ordered running → contains a failure → everything else, each
+ * chronologically: with hundreds of tests, what is happening now and what went
+ * wrong are the only two things worth putting at the top.
+ */
+function groupScenarios(
+  scenarios: readonly ScenarioExecution[],
+  keyOf: (scenario: ScenarioExecution) => string,
+  running: ReadonlySet<string>,
+): LiveScenarioGroup[] {
+  const groups = new Map<string, LiveScenarioGroup>()
+
+  for (const scenario of scenarios) {
+    const key = keyOf(scenario)
+    if (!key) continue
+
+    const at = scenario.startedAt ?? 0
+    const group =
+      groups.get(key) ??
+      ({
+        key,
+        status: scenario.status,
+        scenarios: [],
+        passed: 0,
+        failed: 0,
+        running: false,
+        startedAt: at,
+      } satisfies LiveScenarioGroup)
+
+    group.scenarios.push(scenario)
+    if (scenario.status === 'passed') group.passed += 1
+    if (scenario.status === 'failed') group.failed += 1
+    if (running.has(scenario.testId)) group.running = true
+    if (STATUS_SEVERITY[scenario.status] > STATUS_SEVERITY[group.status]) {
+      group.status = scenario.status
+    }
+    if (at > 0 && (group.startedAt === 0 || at < group.startedAt)) group.startedAt = at
+
+    groups.set(key, group)
+  }
+
+  const rank = (group: LiveScenarioGroup): number =>
+    group.running ? 0 : group.failed > 0 ? 1 : 2
+
+  return [...groups.values()].sort((a, b) => {
+    const byRank = rank(a) - rank(b)
+    return byRank !== 0 ? byRank : a.startedAt - b.startedAt
+  })
+}
+
+/**
  * Per-scope run output. The global filters runner and each single-spec quick-run
  * keep their OWN results/report/logs so they never clobber one another.
  */
@@ -240,6 +330,16 @@ export const useRunnerStore = defineStore('runner', {
     workspaceBaseUrl: '' as string,
 
     workspaceTests: null as WorkspaceTestInfo | null,
+
+    /**
+     * Whether the raw run log is on screen. Off by default, during a run as well
+     * as after it: shown, it takes the whole panel, and the point of the live
+     * list is that nobody has to read stdout to see where the run is.
+     *
+     * Store state rather than component state because the toggle lives in the
+     * runner header and the log itself lives in the results panel.
+     */
+    showLogs: false,
 
     // Run configuration (filters + execution settings) — the GLOBAL runner's config.
     config: { ...DEFAULT_RUN_CONFIGURATION } as RunConfiguration,
@@ -328,6 +428,120 @@ export const useRunnerStore = defineStore('runner', {
       })
     },
 
+    /** Scenarios backed by a feature file — the Gherkin half of the run. */
+    liveFeatureScenarios(): ScenarioExecution[] {
+      return this.liveScenarios.filter((scenario) => !!scenario.relativePath)
+    },
+
+    /**
+     * Tests from plain Playwright specs that ran alongside the Gherkin suite.
+     *
+     * Shown separately rather than dropped: they ran, they can fail, and hiding a
+     * failing test is worse than showing one with no step detail. They have none —
+     * a plain spec has no authored Gherkin steps to show statuses against.
+     */
+    liveOtherScenarios(): ScenarioExecution[] {
+      return this.liveScenarios.filter((scenario) => !scenario.relativePath && !!scenario.specPath)
+    },
+
+    /** The run's Gherkin scenarios, grouped by feature file for display. */
+    liveFeatureGroups(): LiveScenarioGroup[] {
+      return groupScenarios(
+        this.liveFeatureScenarios,
+        (scenario) => scenario.relativePath,
+        new Set(this.currentScope.live.running),
+      )
+    },
+
+    /** The run's plain Playwright tests, grouped by the spec file they live in. */
+    liveOtherSpecGroups(): LiveScenarioGroup[] {
+      return groupScenarios(
+        this.liveOtherScenarios,
+        (scenario) => scenario.specPath ?? '',
+        new Set(this.currentScope.live.running),
+      )
+    },
+
+    /** Scenarios in the current run that failed — what the failures-only filter keeps. */
+    liveFailureCount(): number {
+      return this.liveScenarios.filter((scenario) => scenario.status === 'failed').length
+    },
+
+    /**
+     * Worst last-run status per feature file, for the tree badges.
+     *
+     * "Worst" because a badge answers one question — does this file need my
+     * attention — so one failing example row has to colour the whole file.
+     *
+     * Across ALL scopes, not just the displayed one: quick-running a single
+     * feature must not blank the badges of every other file. Where scopes
+     * disagree about a file, the run that started later wins, so re-running one
+     * feature green clears the red the global run left on it.
+     */
+    liveStatusByFeature(): Record<string, ExecutionStatus> {
+      /** path → worst status of the latest run that touched it, and when that was. */
+      const best: Record<string, { status: ExecutionStatus; at: number }> = {}
+
+      for (const scope of Object.values(this.scopes)) {
+        // Roll up within one run first: statuses are only comparable across runs
+        // once each run has been reduced to a single verdict per file.
+        const perFeature: Record<string, { status: ExecutionStatus; at: number }> = {}
+
+        for (const scenario of Object.values(scope.live.scenarios)) {
+          if (!scenario.relativePath) continue
+          const at = scenario.startedAt ?? 0
+          const current = perFeature[scenario.relativePath]
+          perFeature[scenario.relativePath] = {
+            status:
+              current && STATUS_SEVERITY[current.status] >= STATUS_SEVERITY[scenario.status]
+                ? current.status
+                : scenario.status,
+            at: current ? Math.max(current.at, at) : at,
+          }
+        }
+
+        for (const [path, entry] of Object.entries(perFeature)) {
+          const current = best[path]
+          if (!current || entry.at >= current.at) best[path] = entry
+        }
+      }
+
+      return Object.fromEntries(Object.entries(best).map(([path, entry]) => [path, entry.status]))
+    },
+
+    /** Last-run status of one feature file, tolerant of the two path namespaces. */
+    statusForFeature(): (relativePath: string) => ExecutionStatus | null {
+      const byPath = this.liveStatusByFeature
+      return (relativePath: string) => {
+        const exact = byPath[relativePath]
+        if (exact) return exact
+
+        for (const [path, status] of Object.entries(byPath)) {
+          if (featurePathsMatch(path, relativePath)) return status
+        }
+        return null
+      }
+    },
+
+    /**
+     * Worst last-run status among everything inside a folder.
+     *
+     * Folder paths are the tree's, features-dir-relative, so a prefix test is the
+     * whole of it — matched on a `/` boundary so `cart` cannot claim `cart-legacy`.
+     */
+    statusForFolder(): (folderPath: string) => ExecutionStatus | null {
+      const byPath = this.liveStatusByFeature
+      return (folderPath: string) => {
+        let worst: ExecutionStatus | null = null
+
+        for (const [path, status] of Object.entries(byPath)) {
+          if (!path.startsWith(`${folderPath}/`)) continue
+          if (worst === null || STATUS_SEVERITY[status] > STATUS_SEVERITY[worst]) worst = status
+        }
+        return worst
+      }
+    },
+
     /** Live execution record for a scenario, if it ran in the current run. */
     executionFor(): (
       relativePath: string,
@@ -368,49 +582,53 @@ export const useRunnerStore = defineStore('runner', {
     },
 
     /**
-     * Compute matched features and scenarios based on current filters.
-     * Exclusive tab model: only the active tab's filter applies + name filter (AND).
+     * The features and scenarios the current filters select.
+     *
+     * ALL the filters apply, not just the one whose tab happens to be open: the
+     * tabs are three views of one filter set, and "narrow to this folder, then to
+     * this tag" is the whole point of having them. `activeFilterTab` says which
+     * list is on screen and nothing more.
+     *
+     * Features and folders are a UNION — both answer "which files", so selecting a
+     * folder plus one extra feature adds that feature rather than intersecting to
+     * nothing. Tags and the name filter then narrow the scenarios INSIDE those
+     * files (AND), which is what makes "@smoke in the checkout folder" expressible.
      */
     matchedTests(state): { features: WorkspaceTestInfo['features']; scenarioCount: number } {
       if (!state.workspaceTests) {
         return { features: [], scenarioCount: 0 }
       }
 
-      let features = [...state.workspaceTests.features]
+      const { selectedFeatures, selectedFolders, selectedTags, nameFilter } = state.config
+      const byFile = selectedFeatures.length > 0 || selectedFolders.length > 0
 
-      // Apply ONLY the active tab's structural filter
-      if (state.config.activeFilterTab === 'features' && state.config.selectedFeatures.length > 0) {
-        features = features.filter((f) =>
-          state.config.selectedFeatures.includes(f.relativePath),
-        )
-      } else if (state.config.activeFilterTab === 'folders' && state.config.selectedFolders.length > 0) {
-        features = features.filter((f) =>
-          state.config.selectedFolders.some(
-            (folder) => f.folder === folder || f.folder.startsWith(folder + '/'),
-          ),
-        )
-      }
+      const features = byFile
+        ? state.workspaceTests.features.filter(
+            (f) =>
+              selectedFeatures.includes(f.relativePath) ||
+              selectedFolders.some(
+                (folder) => f.folder === folder || f.folder.startsWith(folder + '/'),
+              ),
+          )
+        : [...state.workspaceTests.features]
 
-      // Filter scenarios by tags (only when tags tab is active) and name (always)
       let scenarioCount = 0
       const filteredFeatures = features
         .map((f) => {
           let scenarios = [...f.scenarios]
 
-          // Tag filter only applies when tags tab is active
-          if (state.config.activeFilterTab === 'tags' && state.config.selectedTags.length > 0) {
-            scenarios = scenarios.filter((s) =>
-              s.tags.some((t) => state.config.selectedTags.includes(t)),
-            )
+          if (selectedTags.length > 0) {
+            scenarios = scenarios.filter((s) => s.tags.some((t) => selectedTags.includes(t)))
           }
 
-          // Name filter always applies (AND with active tab)
-          if (state.config.nameFilter) {
-            const lower = state.config.nameFilter.toLowerCase()
+          if (nameFilter) {
+            const lower = nameFilter.toLowerCase()
             scenarios = scenarios.filter((s) => s.name.toLowerCase().includes(lower))
           }
 
-          scenarioCount += scenarios.length
+          // Tests, not authored scenarios: one `Scenario Outline` runs once per
+          // example row, and counting the entries under-reported every outline.
+          scenarioCount += scenarios.reduce((sum, s) => sum + (s.testCount ?? 1), 0)
           return { ...f, scenarios }
         })
         .filter((f) => f.scenarios.length > 0)
@@ -440,6 +658,11 @@ export const useRunnerStore = defineStore('runner', {
      * aggregate counters carry the run, exactly as before this feature.
      */
     async ensureAuthoredSteps(relativePath: string, scenarioTitle: string) {
+      // A run can include plain Playwright specs, which have no feature file.
+      // Asking the main process to read one as a feature is guaranteed to throw,
+      // and it logs on every rejection — so never ask.
+      if (!relativePath.endsWith('.feature')) return
+
       const key = authoredKey(relativePath, scenarioTitle)
       if (this.authoredSteps[key]) return
 
@@ -505,14 +728,26 @@ export const useRunnerStore = defineStore('runner', {
       if (!this.scopes[scopeId]) {
         this.scopes[scopeId] = emptyScope(scopeId !== GLOBAL_SCOPE)
       }
-      this.scopes[scopeId]!.live = snapshot.live
+
+      // Older snapshots recorded plain Playwright specs under a mangled feature
+      // path, before the reporter learned to report them as `specPath`. Those
+      // rows name a file that does not exist, so they are dropped rather than
+      // restored; a scenario is kept only if it names a feature or a source file.
+      const scenarios = Object.fromEntries(
+        Object.entries(snapshot.live.scenarios).filter(
+          ([, scenario]) => scenario.relativePath.endsWith('.feature') || !!scenario.specPath,
+        ),
+      )
+      const live = { ...snapshot.live, scenarios }
+
+      this.scopes[scopeId]!.live = live
       // Nothing else has run yet on a fresh load, so showing the restored scope
       // is what the user expects to see.
       this.activeScope = scopeId
 
       // Re-derive the step lists from the CURRENT files.
       await Promise.all(
-        Object.values(snapshot.live.scenarios).map((scenario) =>
+        Object.values(scenarios).map((scenario) =>
           this.ensureAuthoredSteps(scenario.relativePath, scenario.title),
         ),
       )
@@ -672,16 +907,13 @@ export const useRunnerStore = defineStore('runner', {
           // Explicit targets (single-spec quick-run) — do NOT touch the global filters.
           options.featurePaths = opts.featurePaths
         } else {
-          // Global run: derive targets from the active filter tab.
-          const matched = this.matchedTests
-          const tab = this.config.activeFilterTab
-          if (
-            (tab === 'features' && this.config.selectedFeatures.length > 0) ||
-            (tab === 'folders' && this.config.selectedFolders.length > 0)
-          ) {
-            options.featurePaths = matched.features.map((f) => f.relativePath)
+          // Global run: EVERY filter applies, exactly as the matched count says.
+          // Playwright ANDs them for us — spec files narrow which files run, and
+          // `--grep` narrows within them (see `buildGrepPattern`).
+          if (this.config.selectedFeatures.length > 0 || this.config.selectedFolders.length > 0) {
+            options.featurePaths = this.matchedTests.features.map((f) => f.relativePath)
           }
-          if (tab === 'tags' && this.config.selectedTags.length > 0) {
+          if (this.config.selectedTags.length > 0) {
             options.tags = this.config.selectedTags
           }
           if (this.config.nameFilter) {

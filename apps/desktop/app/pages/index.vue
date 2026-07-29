@@ -142,6 +142,21 @@ function exitRunView() {
 }
 
 /**
+ * Does the runner's back arrow go to the filters rather than out to the editor?
+ *
+ * Only when there ARE filters to go back to: a single-spec quick-run was started
+ * from the editor and has none, so its back arrow leaves the runner directly.
+ */
+const runnerBacksToFilters = computed(
+  () => runnerStore.showResults && !runnerStore.singleRun,
+)
+
+/** The matched-test count belongs to the filters, so it shows only with them. */
+const showsMatchedCount = computed(
+  () => !runnerStore.showResults && !runnerStore.singleRun,
+)
+
+/**
  * One-click run of the feature currently open in the editor: run ONLY it in its own
  * scope (so its results/report never mix with the global runner's), switch to the
  * runner view, and run it in a visible (headed) browser with tracing on so the user
@@ -649,13 +664,24 @@ async function handleRunTag(tag: string) {
         <section class="panel center-panel">
           <div class="panel-header">
             <div class="panel-header-left">
+              <!-- In the runner, back is ONE step: results → filters → editor.
+                   A single arrow, labelled with where it actually goes, rather
+                   than a title plus a second back button inside the results. -->
               <Button
-                v-if="activeView === 'runner'"
+                v-if="activeView === 'runner' && runnerBacksToFilters"
                 icon="pi pi-arrow-left"
+                label="Back to filters"
                 text
-                rounded
                 size="small"
-                title="Back to editor"
+                data-testid="back-to-filters-btn"
+                @click="runnerStore.showFilters()"
+              />
+              <Button
+                v-else-if="activeView === 'runner'"
+                icon="pi pi-arrow-left"
+                label="Back to editor"
+                text
+                size="small"
                 data-testid="back-to-editor-btn"
                 @click="exitRunView"
               />
@@ -668,9 +694,50 @@ async function handleRunTag(tag: string) {
                 title="Show folder panel"
                 @click="showFolderPanel = true"
               />
-              <h3>{{ activeView === 'runner' ? 'Test Runner' : (scenarioStore.featureName || 'Scenario') }}</h3>
+              <h3 v-if="activeView !== 'runner'">
+                {{ scenarioStore.featureName || 'Scenario' }}
+              </h3>
+              <!-- What the current filters will run — only while choosing them. -->
+              <span
+                v-else-if="showsMatchedCount"
+                class="runner-matched-count"
+                data-testid="runner-matched-count"
+              >
+                <template v-if="runnerStore.workspaceTests">
+                  <strong>{{ runnerStore.matchedTests.scenarioCount }}</strong>
+                  scenario{{ runnerStore.matchedTests.scenarioCount !== 1 ? 's' : '' }}
+                  across
+                  <strong>{{ runnerStore.matchedTests.features.length }}</strong>
+                  feature{{ runnerStore.matchedTests.features.length !== 1 ? 's' : '' }}
+                  will run
+                </template>
+                <template v-else>
+                  <i class="pi pi-spin pi-spinner" /> Loading tests...
+                </template>
+              </span>
             </div>
             <div class="header-actions">
+              <!-- Run controls sit on the header row, not in the run toolbar: that
+                   toolbar is about choosing what to run next, and it empties out
+                   once the results are on screen. -->
+              <Button
+                v-if="activeView === 'runner' && runnerStore.logs.length > 0"
+                :icon="runnerStore.showLogs ? 'pi pi-eye-slash' : 'pi pi-list'"
+                :label="runnerStore.showLogs ? 'Hide logs' : 'Show logs'"
+                text
+                size="small"
+                data-testid="toggle-logs-btn"
+                @click="runnerStore.showLogs = !runnerStore.showLogs"
+              />
+              <Button
+                v-if="activeView === 'runner' && runnerStore.isRunning"
+                icon="pi pi-stop"
+                label="Stop"
+                size="small"
+                severity="danger"
+                data-testid="stop-run-btn"
+                @click="runnerStore.stop()"
+              />
               <!-- Quick run: run the currently open feature in one click -->
               <Button
                 v-if="activeView === 'editor' && scenarioStore.currentFeaturePath"
@@ -1429,6 +1496,16 @@ async function handleRunTag(tag: string) {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+/* What the current filters will run, on the header row beside the back button. */
+.runner-matched-count {
+  font-size: 0.8rem;
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .panel-content {

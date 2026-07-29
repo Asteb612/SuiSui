@@ -3,11 +3,13 @@ import { ref, computed, watch, provide } from 'vue'
 import { useWorkspaceStore } from '~/stores/workspace'
 import { useScenarioStore } from '~/stores/scenario'
 import { useStepsStore } from '~/stores/steps'
+import { useRunnerStore } from '~/stores/runner'
 import type { FeatureTreeNode } from '@suisui/shared'
 
 const workspaceStore = useWorkspaceStore()
 const scenarioStore = useScenarioStore()
 const stepsStore = useStepsStore()
+const runnerStore = useRunnerStore()
 
 const expandedKeys = ref<Record<string, boolean>>({})
 const selectedKey = ref<string>('')
@@ -45,6 +47,15 @@ provide('expandedKeys', expandedKeys)
 provide('selectedKey', selectedKey)
 provide('toggleExpanded', toggleExpanded)
 provide('onNodeSelect', onNodeSelect)
+
+// Last-run outcome per row (feature 011), so a failing feature is findable in the
+// tree rather than only in the runner. A folder shows the worst status beneath it,
+// which is what makes it findable while collapsed.
+provide('runStatusFor', (node: FeatureTreeNode) =>
+  node.type === 'folder'
+    ? runnerStore.statusForFolder(node.relativePath)
+    : runnerStore.statusForFeature(node.relativePath),
+)
 
 // --- Drag & drop: move files/folders between folders ---
 const draggedPath = ref<string | null>(null)

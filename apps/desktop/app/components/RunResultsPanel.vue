@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
-import { useRunnerStore } from '~/stores/runner'
+import type { ScenarioExecution } from '@suisui/shared'
+import { useRunnerStore, type LiveScenarioGroup } from '~/stores/runner'
 import { useAiStore } from '~/stores/ai'
 import { useStepsStore } from '~/stores/steps'
 import { statusPresentation, formatDuration } from '~/utils/runStatus'
@@ -98,8 +99,6 @@ watch(
     })
   },
 )
-// Logs are noisy and hidden by default; the integrated report is the main view.
-const showLogs = ref(false)
 
 // --- Live run progress + elapsed timer (so a long/stuck run is visible) ---
 const elapsedMs = ref(0)
@@ -194,6 +193,56 @@ function toggleScenario(testId: string): void {
   selectedTestId.value = selectedTestId.value === testId ? null : testId
 }
 
+// --- Grouping and filtering ---
+//
+// A suite of any size reports hundreds of scenarios; listed flat they are not
+// readable. Scenarios are grouped by the file they came from, groups open only
+// when they need attention, and a failures-only filter cuts a large run down to
+// the part anyone is actually looking for.
+
+/** Explicit open/closed overrides, keyed by group; unset means "decide for me". */
+const groupOverrides = ref<Record<string, boolean>>({})
+
+/** Show only what failed. Off by default: a green run should still be visible. */
+const failuresOnly = ref(false)
+
+function groupMatchesFilter(group: LiveScenarioGroup): boolean {
+  return !failuresOnly.value || group.failed > 0
+}
+
+function visibleScenarios(group: LiveScenarioGroup): ScenarioExecution[] {
+  if (!failuresOnly.value) return group.scenarios
+  return group.scenarios.filter((scenario) => scenario.status === 'failed')
+}
+
+/** The two lists the live view renders: Gherkin features, then everything else. */
+const liveSections = computed(() => [
+  {
+    id: 'features',
+    label: '',
+    note: '',
+    groups: runnerStore.liveFeatureGroups.filter(groupMatchesFilter),
+  },
+  {
+    id: 'other',
+    label: 'Other specs',
+    note: 'no Gherkin steps',
+    groups: runnerStore.liveOtherSpecGroups.filter(groupMatchesFilter),
+  },
+])
+
+/**
+ * Open a group only when it has something to say: it is running, or it failed.
+ * Anything green stays shut, which is what keeps a 300-test run on one screen.
+ */
+function isGroupOpen(group: LiveScenarioGroup): boolean {
+  return groupOverrides.value[group.key] ?? (group.running || group.failed > 0)
+}
+
+function toggleGroup(group: LiveScenarioGroup): void {
+  groupOverrides.value = { ...groupOverrides.value, [group.key]: !isGroupOpen(group) }
+}
+
 /** How long a step has been running, or how long it took once finished. */
 function stepElapsedMs(step: { status: string; startedAt?: number; durationMs?: number }): number {
   if (step.status === 'running' && step.startedAt) return Math.max(0, nowMs.value - step.startedAt)
@@ -230,28 +279,8 @@ const longestRunningStep = computed(() => {
 
 <template>
   <div class="run-results-panel">
-    <!-- Back to Filters button (hidden for a single-spec quick-run — there are no filters to return to) -->
-    <div class="results-header">
-      <Button
-        v-if="!runnerStore.singleRun"
-        icon="pi pi-arrow-left"
-        label="Back to Filters"
-        text
-        size="small"
-        data-testid="back-to-filters-btn"
-        @click="runnerStore.showFilters()"
-      />
-      <div class="results-header-spacer" />
-      <Button
-        v-if="runnerStore.batchResult && !runnerStore.isRunning && runnerStore.logs.length > 0"
-        :icon="showLogs ? 'pi pi-eye-slash' : 'pi pi-list'"
-        :label="showLogs ? 'Hide logs' : 'Show logs'"
-        text
-        size="small"
-        data-testid="toggle-logs-btn"
-        @click="showLogs = !showLogs"
-      />
-    </div>
+    <!-- "Back to filters" and the logs toggle both live in the Test Runner header
+         (pages/index.vue), so this panel is results and nothing else. -->
 
     <!-- No results yet -->
     <div
@@ -323,90 +352,179 @@ const longestRunningStep = computed(() => {
       </div>
 
       <!-- Live scenario list (US2). Only appears when the reporter produced
-           events; otherwise the counters above are the whole story. -->
+           events; otherwise the counters above are the whole story.
+
+           Grouped by file and collapsed unless a group is running or failed: a
+           real suite reports hundreds of scenarios, and a flat list of them is
+           not something anyone can read. -->
       <div
         v-if="hasLiveDetail"
-        class="live-scenarios"
-        data-testid="live-scenarios"
+        class="live-section"
       >
-        <div
-          v-for="scenario in runnerStore.liveScenarios"
-          :key="scenario.testId"
-          class="live-scenario"
-          :class="[
-            `live-${scenario.status}`,
-            { 'is-running': runningIds.has(scenario.testId) }
-          ]"
-          :data-testid="`live-scenario-${scenario.status}`"
-        >
+        <div class="live-toolbar">
+          <span class="live-toolbar-count">
+            {{ runnerStore.liveScenarios.length }} tests
+            <template v-if="runnerStore.liveFailureCount > 0">
+              · {{ runnerStore.liveFailureCount }} failed
+            </template>
+          </span>
           <button
+            v-if="runnerStore.liveFailureCount > 0"
             type="button"
-            class="live-scenario-head"
-            :aria-expanded="selectedTestId === scenario.testId"
-            data-testid="live-scenario-toggle"
-            @click="toggleScenario(scenario.testId)"
+            class="live-filter-toggle"
+            :class="{ 'is-active': failuresOnly }"
+            :aria-pressed="failuresOnly"
+            data-testid="live-failures-only"
+            @click="failuresOnly = !failuresOnly"
           >
-            <span
-              class="live-status"
-              :class="`live-icon-${scenario.status}`"
-              :title="statusPresentation(scenario.status).label"
-              :aria-label="statusPresentation(scenario.status).label"
-              role="img"
-            >
-              <i :class="statusPresentation(scenario.status).icon" />
-            </span>
-            <span class="live-scenario-name">{{ scenario.title }}</span>
-            <span class="live-scenario-feature">{{ scenario.relativePath }}</span>
-            <span
-              v-if="scenario.durationMs"
-              class="live-scenario-duration"
-            >{{ formatDuration(scenario.durationMs) }}</span>
-            <i
-              class="pi live-scenario-chevron"
-              :class="selectedTestId === scenario.testId ? 'pi-chevron-down' : 'pi-chevron-right'"
-            />
+            <i class="pi pi-filter" />
+            Failures only
           </button>
+        </div>
 
-          <!-- Steps of the selected scenario, without leaving the run view (FR-011) -->
-          <ol
-            v-if="selectedTestId === scenario.testId && selectedSteps"
-            class="live-steps"
-            data-testid="live-steps"
+        <div
+          class="live-scenarios"
+          data-testid="live-scenarios"
+        >
+          <template
+            v-for="section in liveSections"
+            :key="section.id"
           >
-            <li
-              v-for="step in selectedSteps"
-              :key="step.index"
-              class="live-step"
-              :class="`live-${step.status}`"
+            <p
+              v-if="section.label && section.groups.length > 0"
+              class="live-group-section"
+              data-testid="live-other-specs"
             >
-              <span
-                class="live-status"
-                :class="`live-icon-${step.status}`"
-                :title="statusPresentation(step.status).label"
-                :aria-label="statusPresentation(step.status).label"
-                role="img"
-              >
-                <i :class="statusPresentation(step.status).icon" />
-              </span>
-              <span class="live-step-title">{{ step.title }}</span>
-              <span
-                v-if="step.isBackground"
-                class="live-step-background"
-              >background</span>
-              <span
-                v-if="stepElapsedMs(step)"
-                class="live-step-elapsed"
-                data-testid="live-step-elapsed"
-              >{{ formatDuration(stepElapsedMs(step)) }}</span>
-            </li>
-          </ol>
+              {{ section.label }}
+              <span class="live-group-section-note">{{ section.note }}</span>
+            </p>
 
-          <p
-            v-else-if="selectedTestId === scenario.testId"
-            class="live-steps-empty"
-          >
-            Step details are not available for this scenario.
-          </p>
+            <div
+              v-for="group in section.groups"
+              :key="group.key"
+              class="live-group"
+              :class="[`live-${group.status}`, { 'is-running': group.running }]"
+              :data-testid="`live-group-${group.status}`"
+              :data-group="group.key"
+            >
+              <button
+                type="button"
+                class="live-group-head"
+                :aria-expanded="isGroupOpen(group)"
+                data-testid="live-group-toggle"
+                @click="toggleGroup(group)"
+              >
+                <i
+                  class="pi live-group-chevron"
+                  :class="isGroupOpen(group) ? 'pi-chevron-down' : 'pi-chevron-right'"
+                />
+                <span
+                  class="live-status"
+                  :class="`live-icon-${group.status}`"
+                  :title="statusPresentation(group.status).label"
+                  :aria-label="statusPresentation(group.status).label"
+                  role="img"
+                >
+                  <i :class="statusPresentation(group.status).icon" />
+                </span>
+                <span
+                  class="live-group-name"
+                  :title="group.key"
+                >{{ group.key }}</span>
+                <span class="live-group-counts">
+                  <span
+                    v-if="group.failed > 0"
+                    class="live-count-failed"
+                  >{{ group.failed }} failed</span>
+                  <span
+                    v-if="group.passed > 0"
+                    class="live-count-passed"
+                  >{{ group.passed }} passed</span>
+                </span>
+              </button>
+
+              <div v-if="isGroupOpen(group)">
+                <div
+                  v-for="scenario in visibleScenarios(group)"
+                  :key="scenario.testId"
+                  class="live-scenario"
+                  :class="[
+                    `live-${scenario.status}`,
+                    { 'is-running': runningIds.has(scenario.testId) }
+                  ]"
+                  :data-testid="`live-scenario-${scenario.status}`"
+                >
+                  <button
+                    type="button"
+                    class="live-scenario-head"
+                    :aria-expanded="selectedTestId === scenario.testId"
+                    data-testid="live-scenario-toggle"
+                    @click="toggleScenario(scenario.testId)"
+                  >
+                    <span
+                      class="live-status"
+                      :class="`live-icon-${scenario.status}`"
+                      :title="statusPresentation(scenario.status).label"
+                      :aria-label="statusPresentation(scenario.status).label"
+                      role="img"
+                    >
+                      <i :class="statusPresentation(scenario.status).icon" />
+                    </span>
+                    <span class="live-scenario-name">{{ scenario.title }}</span>
+                    <span
+                      v-if="scenario.durationMs"
+                      class="live-scenario-duration"
+                    >{{ formatDuration(scenario.durationMs) }}</span>
+                    <i
+                      class="pi live-scenario-chevron"
+                      :class="selectedTestId === scenario.testId ? 'pi-chevron-down' : 'pi-chevron-right'"
+                    />
+                  </button>
+
+                  <!-- Steps of the selected scenario, without leaving the run view (FR-011) -->
+                  <ol
+                    v-if="selectedTestId === scenario.testId && selectedSteps"
+                    class="live-steps"
+                    data-testid="live-steps"
+                  >
+                    <li
+                      v-for="step in selectedSteps"
+                      :key="step.index"
+                      class="live-step"
+                      :class="`live-${step.status}`"
+                    >
+                      <span
+                        class="live-status"
+                        :class="`live-icon-${step.status}`"
+                        :title="statusPresentation(step.status).label"
+                        :aria-label="statusPresentation(step.status).label"
+                        role="img"
+                      >
+                        <i :class="statusPresentation(step.status).icon" />
+                      </span>
+                      <span class="live-step-title">{{ step.title }}</span>
+                      <span
+                        v-if="step.isBackground"
+                        class="live-step-background"
+                      >background</span>
+                      <span
+                        v-if="stepElapsedMs(step)"
+                        class="live-step-elapsed"
+                        data-testid="live-step-elapsed"
+                      >{{ formatDuration(stepElapsedMs(step)) }}</span>
+                    </li>
+                  </ol>
+
+                  <p
+                    v-else-if="selectedTestId === scenario.testId"
+                    class="live-steps-empty"
+                  >
+                    Step details are not available for this scenario.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -418,8 +536,11 @@ const longestRunningStep = computed(() => {
         {{ lastLogLine }}
       </p>
 
+      <!-- Behind the same toggle as the finished-run logs: unhidden it takes the
+           whole panel, and the point of the live list is that you do not have to
+           read the log to know where the run is. -->
       <pre
-        v-if="runnerStore.logs.length > 0"
+        v-if="runnerStore.showLogs && runnerStore.logs.length > 0"
         ref="logsContainer"
         class="logs-output"
       >{{ runnerStore.logs.join('\n') }}</pre>
@@ -598,7 +719,7 @@ const longestRunningStep = computed(() => {
         </div>
 
         <div
-          v-if="showLogs && runnerStore.logs.length > 0"
+          v-if="runnerStore.showLogs && runnerStore.logs.length > 0"
           class="logs-pane"
           data-testid="logs-pane"
         >
@@ -638,10 +759,6 @@ const longestRunningStep = computed(() => {
 }
 
 /* Integrated report + logs live side by side and fill the panel */
-.results-header-spacer {
-  flex: 1;
-}
-
 .results-body {
   display: flex;
   flex: 1;
@@ -696,19 +813,21 @@ const longestRunningStep = computed(() => {
   min-height: 0;
 }
 
-.results-header {
-  display: flex;
-  align-items: center;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--p-content-border-color);
-}
-
 .running-state-section {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   flex: 1;
   min-height: 0;
+}
+
+/* Everything except the live list keeps its natural height: the list is the only
+   thing that flexes, and the only thing that scrolls. */
+.running-state-section > .running-state,
+.running-state-section > .run-progress,
+.running-state-section > .stuck-step,
+.running-state-section > .run-current {
+  flex-shrink: 0;
 }
 
 .empty-state,
@@ -813,18 +932,161 @@ const longestRunningStep = computed(() => {
   color: var(--text-color-secondary);
 }
 
+.live-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0.75rem 0.35rem;
+  font-size: 0.74rem;
+  color: var(--text-color-secondary);
+}
+
+.live-toolbar-count {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--text-color-secondary);
+  cursor: pointer;
+}
+
+.live-filter-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.live-filter-toggle.is-active {
+  border-color: var(--p-red-300, #fca5a5);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--p-red-600, #dc2626);
+}
+
+/* Bounded by the panel and scrolling inside it, rather than by a fixed height:
+   with the log hidden the list gets the whole panel, and it never grows the
+   panel — which has `overflow: hidden` and would clip it instead of scrolling. */
+.live-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .live-scenarios {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   margin: 0 0.75rem 0.75rem;
-  max-height: 22rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.live-scenario {
+/* One file's worth of scenarios. The border lives here rather than on each row,
+   so a collapsed group reads as a single line.
+
+   `flex-shrink: 0` is load-bearing: `overflow: hidden` cancels a flex item's
+   automatic minimum size, so without it the column squashes every group into a
+   sliver to fit the available height — the list never overflows and so never
+   scrolls. Each group keeps its content height, and the container scrolls. */
+.live-group {
+  flex-shrink: 0;
   border: 1px solid var(--surface-border);
   border-radius: 6px;
+  background: var(--surface-card);
+  overflow: hidden;
+}
+
+.live-group.is-running {
+  border-color: var(--p-blue-400, #60a5fa);
+}
+
+.live-group.live-failed {
+  border-color: var(--p-red-300, #fca5a5);
+}
+
+.live-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text-color);
+  text-align: left;
+  cursor: pointer;
+}
+
+.live-group-head:hover {
+  background: var(--surface-hover);
+}
+
+.live-group-chevron {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--text-color-secondary);
+}
+
+.live-group-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-group-counts {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-count-failed {
+  color: var(--p-red-600, #dc2626);
+}
+
+.live-count-passed {
+  color: var(--text-color-secondary);
+}
+
+/* Section divider between the Gherkin groups and the plain-spec ones. */
+.live-group-section {
+  display: flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-color-secondary);
+}
+
+.live-group-section-note {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.live-scenario {
+  border-top: 1px solid var(--surface-border);
   background: var(--surface-card);
   overflow: hidden;
 }
@@ -832,12 +1094,7 @@ const longestRunningStep = computed(() => {
 /* Every running scenario is highlighted, not just one — a parallel run has
    several genuinely in flight (FR-009). */
 .live-scenario.is-running {
-  border-color: var(--p-blue-400, #60a5fa);
   background: rgba(59, 130, 246, 0.06);
-}
-
-.live-scenario.live-failed {
-  border-color: var(--p-red-300, #fca5a5);
 }
 
 .live-scenario-head {
@@ -860,17 +1117,9 @@ const longestRunningStep = computed(() => {
 }
 
 .live-scenario-name {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.live-scenario-feature {
   flex: 1;
   min-width: 0;
-  font-size: 0.74rem;
-  color: var(--text-color-secondary);
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

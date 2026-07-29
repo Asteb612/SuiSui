@@ -378,6 +378,7 @@ and bulk add/remove. **The only feature that writes to many user `.feature` file
 
 See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md), and
 [doc/FRONTEND.md](doc/FRONTEND.md).
+
 ## Live Run Progress (feature 011)
 
 Per-step pass/fail shown **while a run is in flight**, from a custom Playwright reporter
@@ -389,6 +390,15 @@ that runs inside the **workspace's** Playwright, not the app.
 - **Sentinel lines never reach the log.** The `RUNNER_RUN_BATCH` handler parses each
   complete line; a parsed event is pushed on `runner:progress` and `continue`d. Only a
   line _starting_ with `@@SUISUI_PROGRESS@@` counts, so test output can't forge events.
+- **A run holds two kinds of test.** A config can run plain `*.spec.ts` projects
+  alongside the bdd one. `testStart` carries `relativePath` (the `.feature`, **empty**
+  when not Gherkin) and `specPath` (source file, set **only** when not Gherkin). Never
+  treat a non-`.feature` path as a feature file — that made `features:read` throw on
+  every event. Step events are dropped for non-Gherkin tests: no authored list exists
+  to show them against.
+- **The live list is grouped by file, not flat.** A real suite reports hundreds of
+  scenarios. Groups open only when running or failed, and `liveStatusByFeature` rolls
+  each file up to one status — which is also what the feature-tree badges render.
 - **Step matching is ordinal + title.** playwright-bdd reports locations against the
   generated spec, not the `.feature`. Title comparison is `stepTitleMatches()`, NOT
   equality — a `Scenario Outline` is authored with `<placeholders>` and reported

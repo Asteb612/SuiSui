@@ -60,7 +60,18 @@ export function parseProgressLine(line: string): RunProgressEvent | null {
       const at = num(payload.at)
       if (testId === null || relativePath === null || title === null) return null
       if (attempt === null || at === null) return null
-      return { type: 'testStart', testId, relativePath, title, attempt, at }
+
+      // Optional: an older reporter left in a workspace omits it entirely.
+      const specPath = str(payload.specPath)
+      return {
+        type: 'testStart',
+        testId,
+        relativePath,
+        title,
+        attempt,
+        at,
+        ...(specPath === null ? {} : { specPath }),
+      }
     }
 
     case 'stepStart': {

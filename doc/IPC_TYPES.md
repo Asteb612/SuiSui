@@ -711,11 +711,11 @@ Notes:
 
 ## Tag channels (`tags:*`, feature 010-tag-management)
 
-| Channel | Direction | Signature |
-| --- | --- | --- |
-| `tags:getIndex` | invoke | `getIndex(): Promise<TagIndex>` |
-| `tags:applyBulk` | invoke | `applyBulk(request: BulkTagRequest): Promise<BulkTagResult>` |
-| `tags:indexChanged` | main → renderer | `onIndexChanged(cb): () => void` (returns unsubscribe) |
+| Channel             | Direction       | Signature                                                    |
+| ------------------- | --------------- | ------------------------------------------------------------ |
+| `tags:getIndex`     | invoke          | `getIndex(): Promise<TagIndex>`                              |
+| `tags:applyBulk`    | invoke          | `applyBulk(request: BulkTagRequest): Promise<BulkTagResult>` |
+| `tags:indexChanged` | main → renderer | `onIndexChanged(cb): () => void` (returns unsubscribe)       |
 
 Types live in `packages/shared/src/types/tags.ts`: `TagSummary`, `TagUsage`, `TagOrigin`,
 `TagIndex`, `BulkTagRequest`, `BulkTagResult`, `TagWriteOutcome`.
@@ -732,6 +732,7 @@ Notes:
   `relativePath` that is absolute or escapes the features directory.
 - There is deliberately **no `tags:runTag`** — running a tag reuses the existing
   tag-filtered batch run.
+
 ## `runner:progress` (feature 011-live-run-progress)
 
 Main → renderer push carrying live per-step execution events.
@@ -755,6 +756,12 @@ Uses the unsubscribe-returning shape (as `update`/`recorder`/`search` do), not t
 Events are produced by a reporter running in the user's own Playwright process, so they
 are treated as **untrusted input**: `parseProgressLine` type-checks every field, returns
 `null` for anything unrecognized, and never throws.
+
+`testStart` carries two locators, because a run can mix Gherkin tests with plain
+Playwright specs: `relativePath` (the `.feature`, **empty** when the test is not
+Gherkin) and the optional `specPath` (source file relative to Playwright's `rootDir`,
+present **only** for non-Gherkin tests). `specPath` is optional in the wire format too —
+a workspace can still hold a reporter copy from an older SuiSui.
 
 **Removed in this feature**: `runner:runHeadless` and `runner:runUI`. Their only caller
 was UI that could not be reached (see FRONTEND.md). Single-scenario runs go through

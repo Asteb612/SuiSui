@@ -36,24 +36,24 @@ function runUI() {
   runnerStore.runBatch('ui')
 }
 
-function stopRun() {
-  runnerStore.stop()
-}
+// --- Feature selection ---
+//
+// An EMPTY selection means "no feature filter", so everything runs. The checkbox
+// used to render that as every box ticked, which made clicking a ticked box
+// deselect all the others — it was really the first tick of an empty list. The
+// boxes now show the actual selection, and the header says what empty means.
 
-// Feature selection helpers
 const allFeaturesSelected = computed(() => {
-  if (!runnerStore.workspaceTests) return false
-  return runnerStore.config.selectedFeatures.length === 0
+  const total = runnerStore.workspaceTests?.features.length ?? 0
+  return total > 0 && runnerStore.config.selectedFeatures.length === total
 })
 
+const noFeatureFilter = computed(() => runnerStore.config.selectedFeatures.length === 0)
+
 function toggleAllFeatures() {
-  if (allFeaturesSelected.value) {
-    runnerStore.config.selectedFeatures = runnerStore.workspaceTests?.features.map(
-      (f) => f.relativePath,
-    ) ?? []
-  } else {
-    runnerStore.config.selectedFeatures = []
-  }
+  runnerStore.config.selectedFeatures = allFeaturesSelected.value
+    ? []
+    : (runnerStore.workspaceTests?.features.map((f) => f.relativePath) ?? [])
 }
 
 function toggleFeature(path: string) {
@@ -66,10 +66,12 @@ function toggleFeature(path: string) {
 }
 
 function isFeatureSelected(path: string): boolean {
-  return (
-    runnerStore.config.selectedFeatures.length === 0 ||
-    runnerStore.config.selectedFeatures.includes(path)
-  )
+  return runnerStore.config.selectedFeatures.includes(path)
+}
+
+/** Tests a feature will run — outlines count once per example row, not once. */
+function featureTestCount(feature: { scenarios: { testCount?: number }[] }): number {
+  return feature.scenarios.reduce((sum, s) => sum + (s.testCount ?? 1), 0)
 }
 
 // Folder tree
@@ -127,18 +129,10 @@ function clearAllFilters() {
     <!-- Fixed Toolbar -->
     <div class="run-toolbar">
       <div class="toolbar-left">
-        <div class="toolbar-field">
-          <label class="toolbar-label">Base URL</label>
-          <InputText
-            :model-value="runnerStore.config.baseUrl"
-            placeholder="e.g. http://localhost:3000"
-            size="small"
-            class="base-url-input"
-            @update:model-value="(val: string | undefined) => runnerStore.setBaseUrl(val ?? '')"
-          />
-        </div>
+        <!-- Only while choosing what to run: it configures the next run, and has
+             nothing to say once the results are on screen. -->
         <div
-          v-if="!runnerStore.singleRun"
+          v-if="!runnerStore.singleRun && !runnerStore.showResults"
           class="toolbar-field"
           data-testid="execution-selector"
         >
@@ -157,44 +151,15 @@ function clearAllFilters() {
           />
         </div>
       </div>
-      <div
-        v-if="!runnerStore.singleRun"
-        class="toolbar-center"
-      >
-        <span
-          v-if="runnerStore.workspaceTests"
-          class="matched-count"
-        >
-          <strong>{{ runnerStore.matchedTests.scenarioCount }}</strong>
-          scenario{{ runnerStore.matchedTests.scenarioCount !== 1 ? 's' : '' }}
-          across
-          <strong>{{ runnerStore.matchedTests.features.length }}</strong>
-          feature{{ runnerStore.matchedTests.features.length !== 1 ? 's' : '' }}
-          will run
-        </span>
-        <span
-          v-else
-          class="loading-tests"
-        >
-          <i class="pi pi-spin pi-spinner" /> Loading tests...
-        </span>
-      </div>
+      <!-- The matched-test count lives on the header row (pages/index.vue), beside
+           the back button — same line as the logs toggle it alternates with. -->
       <div class="toolbar-right">
-        <!-- Running: allow Stop (any run). Idle + global: the filter-based run buttons.
+        <!-- Stopping a run lives in the Test Runner header (pages/index.vue), on the
+             row with the back button — it is a control over the run, not over the
+             filters, and it must stay put as this toolbar empties out.
+             Idle + global: the filter-based run buttons.
              Idle + single-spec: nothing (re-run from the editor's quick-run instead). -->
-        <template v-if="runnerStore.isRunning">
-          <Button
-            icon="pi pi-stop"
-            label="Stop"
-            size="small"
-            severity="danger"
-            @click="stopRun"
-          />
-          <span class="running-indicator">
-            <i class="pi pi-spin pi-spinner" /> Running...
-          </span>
-        </template>
-        <template v-else-if="!runnerStore.singleRun">
+        <template v-if="!runnerStore.isRunning && !runnerStore.singleRun">
           <Button
             icon="pi pi-play"
             label="Run Headless"
@@ -242,6 +207,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'features'"
                 :severity="runnerStore.config.activeFilterTab === 'features' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-features"
                 @click="runnerStore.config.activeFilterTab = 'features'"
               />
               <Button
@@ -249,6 +215,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'folders'"
                 :severity="runnerStore.config.activeFilterTab === 'folders' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-folders"
                 @click="runnerStore.config.activeFilterTab = 'folders'"
               />
               <Button
@@ -257,6 +224,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'tags'"
                 :severity="runnerStore.config.activeFilterTab === 'tags' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-tags"
                 @click="runnerStore.config.activeFilterTab = 'tags'"
               />
               <Button
@@ -297,11 +265,19 @@ function clearAllFilters() {
             class="filter-list"
           >
             <div class="filter-list-header">
-              <label class="filter-list-title">Feature Files</label>
+              <label class="filter-list-title">
+                Feature Files
+                <span
+                  v-if="noFeatureFilter"
+                  class="filter-list-hint"
+                  data-testid="features-no-filter-hint"
+                >none selected — all run</span>
+              </label>
               <Button
                 :label="allFeaturesSelected ? 'Deselect All' : 'Select All'"
                 text
                 size="small"
+                data-testid="features-select-all"
                 @click="toggleAllFeatures"
               />
             </div>
@@ -309,15 +285,26 @@ function clearAllFilters() {
               v-for="feature in runnerStore.workspaceTests.features"
               :key="feature.relativePath"
               class="filter-item"
+              data-testid="feature-filter-item"
+              :data-path="feature.relativePath"
+              :data-selected="isFeatureSelected(feature.relativePath)"
               @click="toggleFeature(feature.relativePath)"
             >
-              <Checkbox
-                :model-value="isFeatureSelected(feature.relativePath)"
-                :binary="true"
+              <!-- A plain input, not PrimeVue's Checkbox: that one keeps its own
+                   copy of the value and only writes it back through
+                   `update:modelValue`. Driving it from `@click` left the two
+                   diverging — the filter applied but the box never ticked, and
+                   boxes it had ticked internally survived Clear. Here `checked`
+                   is a pure function of the selection, so it cannot disagree. -->
+              <input
+                type="checkbox"
+                class="filter-item-checkbox"
+                :checked="isFeatureSelected(feature.relativePath)"
+                :aria-label="feature.name || feature.relativePath"
                 @click.stop="toggleFeature(feature.relativePath)"
-              />
+              >
               <span class="filter-item-label">{{ feature.name || feature.relativePath }}</span>
-              <span class="filter-item-meta">{{ feature.scenarios.length }} scenarios</span>
+              <span class="filter-item-meta">{{ featureTestCount(feature) }} tests</span>
             </div>
           </div>
 
@@ -349,6 +336,9 @@ function clearAllFilters() {
                 size="small"
                 :outlined="!runnerStore.config.selectedTags.includes(tag)"
                 :severity="runnerStore.config.selectedTags.includes(tag) ? undefined : 'secondary'"
+                data-testid="tag-filter-item"
+                :data-tag="tag"
+                :data-selected="runnerStore.config.selectedTags.includes(tag)"
                 @click="toggleTag(tag)"
               />
             </div>
@@ -397,6 +387,8 @@ function clearAllFilters() {
 
 .toolbar-left {
   display: flex;
+  /* Pushes the run buttons to the right now that nothing sits between them. */
+  flex: 1;
   align-items: center;
   gap: 1rem;
 }
@@ -414,34 +406,10 @@ function clearAllFilters() {
   white-space: nowrap;
 }
 
-.toolbar-center {
-  flex: 1;
-  text-align: center;
-}
-
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.base-url-input {
-  min-width: 180px;
-}
-
-.matched-count {
-  font-size: 0.85rem;
-  color: var(--p-text-color);
-}
-
-.loading-tests {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color);
-}
-
-.running-indicator {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color);
 }
 
 .run-content {
@@ -532,6 +500,14 @@ function clearAllFilters() {
   letter-spacing: 0.05em;
 }
 
+/* Says what an empty selection means, so unticked boxes do not read as "nothing". */
+.filter-list-hint {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .filter-item {
   display: flex;
   align-items: center;
@@ -544,6 +520,15 @@ function clearAllFilters() {
 
 .filter-item:hover {
   background: var(--p-surface-hover);
+}
+
+.filter-item-checkbox {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--p-primary-color);
+  cursor: pointer;
 }
 
 .filter-item-label {

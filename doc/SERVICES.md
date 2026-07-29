@@ -601,6 +601,7 @@ Workspace-wide tag index plus the only bulk write path in the app.
   with **no rollback** — git is the recovery path.
 - Content is split on `/\n/`, **not** `/\r?\n/`: the latter consumes `\r`, so rejoining
   would rewrite every line of a CRLF file.
+
 ## Live run progress (feature 011-live-run-progress)
 
 Streams per-step execution state out of a running Playwright process so the UI can
@@ -632,6 +633,46 @@ The reporter emits one `@@SUISUI_PROGRESS@@`-prefixed NDJSON line per event. The
 
 Only a line **starting** with the sentinel counts, so ordinary test output that merely
 mentions it is neither swallowed from the log nor able to forge an event.
+
+### Counting what will run
+
+`ScenarioTestInfo.testCount` is how many **tests** an authored scenario produces: the
+number of `Examples` rows for a `Scenario Outline`, 1 for a plain `Scenario`. One outline
+stays **one** entry — that is the unit the name and tag filters work on — but Playwright
+runs one test per row, so `matchedTests.scenarioCount` sums `testCount` rather than
+counting entries. Counting entries under-reported every outline in the workspace.
+
+`parseFeatureMetadata` counts example rows by tracking the current outline: the first
+row after `Examples:` is the column header and is not a test, a second `Examples:` block
+adds to the same outline, and any other block keyword ends the table — so a step data
+table or a `Background` below an outline is not miscounted. Doc strings are skipped
+wholesale, since a line in one can look like anything.
+
+The count still covers **Gherkin only**. Plain `*.spec.ts` projects in the same
+Playwright config also run, and the filters do not govern them.
+
+### Two kinds of test in one run
+
+A Playwright config can run plain `*.spec.ts` projects alongside the bdd one, and
+`test.location.file` for those is an absolute path to the spec. Deriving a feature path
+from it produced a mangled relative-looking path (`home/me/project/tests/…/forms`),
+which named a file the user has no feature for and made `features:read` throw in the
+main process on **every** event.
+
+`testStart` therefore carries two locators:
+
+- `relativePath` — the `.feature`, **empty** when the test is not Gherkin
+- `specPath` — the source file relative to Playwright's `rootDir`, set **only** for
+  non-Gherkin tests (a Gherkin test's source file is the generated spec, which is
+  nowhere to send anyone; its `.feature` is the locator)
+
+Step events are still dropped for non-Gherkin tests: there is no authored Gherkin list
+to show them against. The renderer lists them in their own group so a failure there is
+visible under the file it is written in.
+
+Two guards cover snapshots written before this: `ensureAuthoredSteps` refuses a path
+that is not a `.feature`, and `restoreLastRun` drops scenarios that name neither a
+feature nor a source file rather than restoring rows a run today would never produce.
 
 ### Step→scenario mapping
 

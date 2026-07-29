@@ -984,3 +984,192 @@ describe('the previous run survives a reload', () => {
     expect(getLastRunMock).not.toHaveBeenCalled()
   })
 })
+
+describe('runs that mix Gherkin with plain Playwright specs (regression)', () => {
+  // A config can keep legacy `*.spec.ts` projects alongside the bdd one. Those
+  // tests have no feature file, so the reporter reports no path for them.
+  // Asking the main process to read one as a feature always throws — and
+  // ipcMain logs every rejection, so a single run filled the console with
+  // "Invalid file: must be a .feature file".
+  const LEGACY = 'home/me/project/playwright/tests/architect/account'
+
+  it('does not read a path that is not a feature file', async () => {
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(s, [
+      testStart('legacy-1', { relativePath: '', title: 'signs in' }),
+      testStart('legacy-2', { relativePath: LEGACY, title: 'signs out' }),
+    ])
+
+    expect(featuresReadMock).not.toHaveBeenCalled()
+  })
+
+  it('lists them under the file they are written in, so the failure is locatable', async () => {
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(s, [
+      testStart('legacy-1', {
+        relativePath: '',
+        specPath: 'playwright/tests/architect/forms.spec.ts',
+        title: 'architect fills the land form',
+      }),
+      { type: 'testEnd', testId: 'legacy-1', status: 'failed', durationMs: 30, at: 40 },
+    ])
+
+    // Kept out of the feature list — it has no feature — and given its own group.
+    expect(s.liveFeatureScenarios).toEqual([])
+    expect(s.liveOtherSpecGroups.map((group) => group.key)).toEqual([
+      'playwright/tests/architect/forms.spec.ts',
+    ])
+    expect(s.liveOtherSpecGroups[0]).toMatchObject({ status: 'failed', failed: 1 })
+  })
+
+  it('drops them from a snapshot that recorded them, rather than restoring rows a run would no longer produce', async () => {
+    // Snapshots written before the reporter stopped emitting these still exist
+    // on disk, so the restore path has to hold the line too.
+    const s = useRunnerStore()
+    getLastRunMock.mockResolvedValue({
+      version: 1,
+      savedAt: 1,
+      scopeId: GLOBAL_SCOPE,
+      live: {
+        available: true,
+        reconciled: true,
+        running: [],
+        scenarios: {
+          legacy: {
+            testId: 'legacy',
+            relativePath: LEGACY,
+            title: 'signs in',
+            status: 'failed',
+            attempt: 0,
+            steps: {},
+          },
+          bdd: {
+            testId: 'bdd',
+            relativePath: LOGIN,
+            title: VALID,
+            status: 'passed',
+            attempt: 0,
+            steps: { 0: { index: 0, title: 'Given the application is running', status: 'passed' } },
+          },
+        },
+      },
+    })
+
+    await s.restoreLastRun()
+
+    expect(s.liveScenarios.map((scenario) => scenario.testId)).toEqual(['bdd'])
+    expect(featuresReadMock).toHaveBeenCalledTimes(1)
+    expect(featuresReadMock).toHaveBeenCalledWith(LOGIN)
+  })
+})
+
+describe('a large run stays readable', () => {
+  // A real suite reports hundreds of scenarios. Listed flat they are unreadable,
+  // so they are grouped by the file they came from and the groups carry the
+  // verdict — which is also what the tree badges are built from.
+  const CART = 'cart/checkout.feature'
+
+  const started = (
+    testId: string,
+    relativePath: string,
+    title: string,
+    at: number,
+  ): RunProgressEvent => ({ type: 'testStart', testId, relativePath, title, attempt: 0, at })
+
+  const ended = (
+    testId: string,
+    status: 'passed' | 'failed',
+    at: number,
+  ): RunProgressEvent => ({ type: 'testEnd', testId, status, durationMs: 5, at })
+
+  async function twoFeatures(s: ReturnType<typeof useRunnerStore>) {
+    await runWith(s, [
+      started('a1', LOGIN, 'Valid login', 10),
+      started('a2', LOGIN, 'Invalid login', 11),
+      started('b1', CART, 'Checkout', 12),
+      ended('a1', 'passed', 20),
+      ended('a2', 'failed', 21),
+      ended('b1', 'passed', 22),
+    ])
+  }
+
+  it('collapses a run into one group per feature, carrying the worst status', async () => {
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await twoFeatures(s)
+
+    const groups = s.liveFeatureGroups
+    expect(groups.map((group) => group.key)).toEqual([LOGIN, CART])
+    expect(groups[0]).toMatchObject({ status: 'failed', passed: 1, failed: 1 })
+    expect(groups[1]).toMatchObject({ status: 'passed', passed: 1, failed: 0 })
+    expect(groups[0]!.scenarios).toHaveLength(2)
+  })
+
+  it('puts the groups that need attention first', async () => {
+    // Failures before greens: with 47 files on screen, the order is the only
+    // thing making the failure findable without scrolling.
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+
+    await runWith(s, [
+      started('b1', CART, 'Checkout', 10),
+      ended('b1', 'passed', 11),
+      started('a1', LOGIN, 'Valid login', 12),
+      ended('a1', 'failed', 13),
+    ])
+
+    expect(s.liveFeatureGroups.map((group) => group.key)).toEqual([LOGIN, CART])
+  })
+
+  it('reports the worst status per feature file, for the tree badge', async () => {
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await twoFeatures(s)
+
+    // One failing example row makes the whole file failed — the badge answers
+    // "does this need me", not "did everything in it fail".
+    expect(s.statusForFeature(LOGIN)).toBe('failed')
+    expect(s.statusForFeature(CART)).toBe('passed')
+    expect(s.statusForFeature('untouched.feature')).toBeNull()
+  })
+
+  it('resolves the badge across the two feature-path namespaces', async () => {
+    // The reporter's path includes the features dir; the tree's does not.
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await twoFeatures(s)
+
+    expect(s.statusForFeature('login.feature')).toBe('failed')
+  })
+
+  it('rolls the worst status inside a folder up to the folder', async () => {
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await twoFeatures(s)
+
+    expect(s.statusForFolder('cart')).toBe('passed')
+    expect(s.statusForFolder('features')).toBe('failed')
+    // Matched on a path boundary, so a folder cannot claim a similarly named one.
+    expect(s.statusForFolder('car')).toBeNull()
+  })
+
+  it('lets a later single-feature run clear the red an earlier global run left', async () => {
+    // Badges span every scope, so quick-running one feature must not blank the
+    // others — but where two runs disagree about a file, the later one is true.
+    const s = useRunnerStore()
+    s.setActiveScope(GLOBAL_SCOPE)
+    await twoFeatures(s)
+    expect(s.statusForFeature(LOGIN)).toBe('failed')
+
+    s.setActiveScope(LOGIN)
+    await runWith(s, [started('a1', LOGIN, 'Valid login', 100), ended('a1', 'passed', 101)])
+
+    expect(s.statusForFeature(LOGIN)).toBe('passed')
+    // The global run's verdict on the feature it did not re-run still stands.
+    expect(s.statusForFeature(CART)).toBe('passed')
+  })
+})

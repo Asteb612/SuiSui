@@ -3,12 +3,13 @@ import { ref } from 'vue'
 import { render, screen, fireEvent } from '@testing-library/vue'
 import TreeNodeItem from '../components/TreeNodeItem.vue'
 import { primeVueStubs } from './testUtils'
-import type { FeatureTreeNode } from '@suisui/shared'
+import type { ExecutionStatus, FeatureTreeNode } from '@suisui/shared'
 
 function createWrapper(props: {
   node?: FeatureTreeNode
   expanded?: boolean
   selected?: boolean
+  runStatusFor?: (node: FeatureTreeNode) => ExecutionStatus | null
 } = {}) {
   const defaultNode: FeatureTreeNode = {
     type: 'file',
@@ -25,6 +26,7 @@ function createWrapper(props: {
     },
     global: {
       stubs: primeVueStubs,
+      ...(props.runStatusFor ? { provide: { runStatusFor: props.runStatusFor } } : {}),
     },
   })
 }
@@ -418,6 +420,41 @@ describe('TreeNodeItem', () => {
 
       // The injected onNodeSelect should have been called with the child node
       expect(onNodeSelectSpy).toHaveBeenCalledWith(childNode)
+    })
+  })
+  describe('last-run status badge', () => {
+    // The badge is what makes a failing feature findable in the tree instead of
+    // only in the runner. A folder carries the worst status beneath it, so it
+    // still points the way while collapsed.
+    it('shows the status of a feature file', () => {
+      createWrapper({ runStatusFor: () => 'failed' })
+
+      const badge = screen.getByTestId('tree-node-run-status')
+      expect(badge.getAttribute('data-status')).toBe('failed')
+      expect(badge.getAttribute('title')).toBe('Last run: Failed')
+    })
+
+    it('shows the rolled-up status of a folder', () => {
+      createWrapper({
+        node: { type: 'folder', name: 'auth', relativePath: 'auth', children: [] },
+        runStatusFor: (node) => (node.type === 'folder' ? 'failed' : null),
+      })
+
+      expect(screen.getByTestId('tree-node-run-status').getAttribute('data-status')).toBe('failed')
+    })
+
+    it('shows nothing for a file the last run never touched', () => {
+      createWrapper({ runStatusFor: () => null })
+
+      expect(screen.queryByTestId('tree-node-run-status')).toBeNull()
+    })
+
+    it('renders without a status lookup at all', () => {
+      // A tree rendered outside the runner simply has no badges to show.
+      const { container } = createWrapper()
+
+      expect(container.querySelector('.tree-node-item')).toBeTruthy()
+      expect(screen.queryByTestId('tree-node-run-status')).toBeNull()
     })
   })
 })

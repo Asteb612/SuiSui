@@ -104,6 +104,15 @@ export interface FeatureTestInfo {
 export interface ScenarioTestInfo {
   name: string
   tags: string[]
+  /**
+   * How many tests this scenario produces: the number of `Examples` rows for a
+   * `Scenario Outline`, and 1 for a plain `Scenario`.
+   *
+   * One authored `Scenario Outline` is one entry here — that is the unit the
+   * name and tag filters work on — but Playwright runs one test per example row.
+   * Counting the entries instead under-reported every outline in the workspace.
+   */
+  testCount: number
 }
 
 // --- Run configuration (persisted) ---

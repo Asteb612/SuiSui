@@ -40,8 +40,8 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: ['auth'],
       folder: 'features/auth',
       scenarios: [
-        { name: 'Valid login', tags: ['auth', 'smoke'] },
-        { name: 'Invalid login', tags: ['auth'] },
+        { name: 'Valid login', tags: ['auth', 'smoke'], testCount: 1 },
+        { name: 'Invalid login', tags: ['auth'], testCount: 1 },
       ],
     },
     {
@@ -50,7 +50,7 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: ['auth'],
       folder: 'features/auth',
       scenarios: [
-        { name: 'New user registration', tags: ['auth', 'regression'] },
+        { name: 'New user registration', tags: ['auth', 'regression'], testCount: 1 },
       ],
     },
     {
@@ -59,8 +59,8 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: [],
       folder: 'features/checkout',
       scenarios: [
-        { name: 'Add item to cart', tags: ['smoke'] },
-        { name: 'Remove item from cart', tags: [] },
+        { name: 'Add item to cart', tags: ['smoke'], testCount: 1 },
+        { name: 'Remove item from cart', tags: [], testCount: 1 },
       ],
     },
   ],
@@ -68,7 +68,7 @@ const mockWorkspace: WorkspaceTestInfo = {
   folders: ['features/auth', 'features/checkout'],
 }
 
-describe('Runner Store - Exclusive Tab Filtering', () => {
+describe('Runner Store — combining filters', () => {
   let store: ReturnType<typeof useRunnerStore>
 
   beforeEach(() => {
@@ -83,12 +83,8 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(result.scenarioCount).toBe(5)
   })
 
-  it('filters by features tab only when activeFilterTab is features', () => {
-    store.config.activeFilterTab = 'features'
+  it('narrows to the selected features', () => {
     store.config.selectedFeatures = ['features/auth/login.feature']
-    // Also set some folders/tags that should NOT apply
-    store.config.selectedFolders = ['features/checkout']
-    store.config.selectedTags = ['regression']
 
     const result = store.matchedTests
     expect(result.features).toHaveLength(1)
@@ -96,12 +92,8 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(result.scenarioCount).toBe(2)
   })
 
-  it('filters by folders tab only when activeFilterTab is folders', () => {
-    store.config.activeFilterTab = 'folders'
+  it('narrows to the selected folders', () => {
     store.config.selectedFolders = ['features/checkout']
-    // Also set some features/tags that should NOT apply
-    store.config.selectedFeatures = ['features/auth/login.feature']
-    store.config.selectedTags = ['auth']
 
     const result = store.matchedTests
     expect(result.features).toHaveLength(1)
@@ -109,21 +101,46 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(result.scenarioCount).toBe(2)
   })
 
-  it('filters by tags tab only when activeFilterTab is tags', () => {
-    store.config.activeFilterTab = 'tags'
+  it('narrows to the selected tags', () => {
     store.config.selectedTags = ['smoke']
-    // Also set some features/folders that should NOT apply
-    store.config.selectedFeatures = ['features/auth/register.feature']
-    store.config.selectedFolders = ['features/checkout']
 
     const result = store.matchedTests
-    // smoke tag on: login.feature (Valid login), cart.feature (Add item)
     expect(result.features).toHaveLength(2)
     expect(result.scenarioCount).toBe(2)
   })
 
-  it('applies name filter as AND with active tab (features)', () => {
-    store.config.activeFilterTab = 'features'
+  it('UNIONS features with folders — both answer "which files"', () => {
+    // Selecting a folder plus one extra feature adds that feature. Intersecting
+    // them would give nothing whenever the feature is outside the folder, which
+    // is the normal case and would read as the filter being broken.
+    store.config.selectedFeatures = ['features/auth/login.feature']
+    store.config.selectedFolders = ['features/checkout']
+
+    const result = store.matchedTests
+    expect(result.features.map((f) => f.name)).toEqual(['Login', 'Cart'])
+    expect(result.scenarioCount).toBe(4)
+  })
+
+  it('ANDs a tag with a folder — the point of having both', () => {
+    store.config.selectedFolders = ['features/auth']
+    store.config.selectedTags = ['smoke']
+
+    const result = store.matchedTests
+    expect(result.features).toHaveLength(1)
+    expect(result.features[0]!.scenarios.map((s) => s.name)).toEqual(['Valid login'])
+    expect(result.scenarioCount).toBe(1)
+  })
+
+  it('ANDs a tag with a feature, down to nothing when they disagree', () => {
+    store.config.selectedFeatures = ['features/auth/register.feature']
+    store.config.selectedTags = ['smoke']
+
+    const result = store.matchedTests
+    expect(result.features).toHaveLength(0)
+    expect(result.scenarioCount).toBe(0)
+  })
+
+  it('applies the name filter on top of a feature selection', () => {
     store.config.selectedFeatures = ['features/auth/login.feature']
     store.config.nameFilter = 'invalid'
 
@@ -133,47 +150,37 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(result.features[0]!.scenarios[0]!.name).toBe('Invalid login')
   })
 
-  it('applies name filter as AND with active tab (tags)', () => {
-    store.config.activeFilterTab = 'tags'
+  it('applies the name filter on top of a tag selection', () => {
     store.config.selectedTags = ['smoke']
     store.config.nameFilter = 'cart'
 
     const result = store.matchedTests
-    // smoke tag + "cart" name → only "Add item to cart"
     expect(result.features).toHaveLength(1)
     expect(result.scenarioCount).toBe(1)
     expect(result.features[0]!.scenarios[0]!.name).toBe('Add item to cart')
   })
 
-  it('tab switch does not combine filters', () => {
-    // Set up features tab with selection
-    store.config.activeFilterTab = 'features'
+  it('is unaffected by which tab is open — that only says which list is shown', () => {
     store.config.selectedFeatures = ['features/auth/login.feature']
+    store.config.selectedTags = ['smoke']
 
-    let result = store.matchedTests
-    expect(result.scenarioCount).toBe(2) // Login has 2 scenarios
+    store.config.activeFilterTab = 'features'
+    const fromFeaturesTab = store.matchedTests.scenarioCount
 
-    // Switch to tags tab with different selection
     store.config.activeFilterTab = 'tags'
-    store.config.selectedTags = ['regression']
-
-    result = store.matchedTests
-    // regression tag only on "New user registration" in register.feature
-    expect(result.scenarioCount).toBe(1)
-    expect(result.features[0]!.name).toBe('Register')
+    expect(store.matchedTests.scenarioCount).toBe(fromFeaturesTab)
+    expect(fromFeaturesTab).toBe(1)
   })
 
-  it('empty selection means all when active tab has no selection', () => {
-    store.config.activeFilterTab = 'features'
-    store.config.selectedFeatures = [] // empty = all
+  it('treats an empty feature selection as no filter, not as nothing', () => {
+    store.config.selectedFeatures = []
 
     const result = store.matchedTests
     expect(result.features).toHaveLength(3)
     expect(result.scenarioCount).toBe(5)
   })
 
-  it('empty tags selection on tags tab returns all', () => {
-    store.config.activeFilterTab = 'tags'
+  it('treats an empty tag selection as no filter', () => {
     store.config.selectedTags = []
 
     const result = store.matchedTests
@@ -181,9 +188,7 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
     expect(result.scenarioCount).toBe(5)
   })
 
-  it('name filter works alone when no tab selection', () => {
-    store.config.activeFilterTab = 'features'
-    store.config.selectedFeatures = []
+  it('applies the name filter on its own', () => {
     store.config.nameFilter = 'login'
 
     const result = store.matchedTests
@@ -193,7 +198,6 @@ describe('Runner Store - Exclusive Tab Filtering', () => {
   })
 
   it('folders filter includes subfolders', () => {
-    store.config.activeFilterTab = 'folders'
     store.config.selectedFolders = ['features/auth']
 
     const result = store.matchedTests
