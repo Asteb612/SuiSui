@@ -22,6 +22,10 @@ const SENTINEL = '@@SUISUI_PROGRESS@@'
 const stepCounters = new Map()
 /** Maps a Playwright step object to the ordinal we assigned it at stepBegin. */
 const stepIndexes = new WeakMap()
+/** Ids of tests with no feature file, whose STEP events are dropped. */
+const notGherkin = new Set()
+/** Playwright's rootDir, so source paths can be reported relative to it. */
+let rootDir = ''
 
 function emit(payload) {
   try {
@@ -34,6 +38,13 @@ function emit(payload) {
 /**
  * Feature file path relative to the features directory, derived from the
  * generated spec path. Mirrors SuiSui's `extractFeatureRelativePath`.
+ *
+ * A run can mix Gherkin tests with plain Playwright specs — the same config
+ * often keeps legacy `*.spec.ts` projects alongside the bdd one. Those have no
+ * feature file, and `test.location.file` for them is an ABSOLUTE path to the
+ * spec. Returning anything but '' for them would hand SuiSui a path it then
+ * tries to open as a feature file, so anything that does not resolve to a
+ * `.feature` is reported as "no feature" — `specPath` locates those instead.
  */
 function featureRelativePath(file) {
   if (typeof file !== 'string') return ''
@@ -41,7 +52,25 @@ function featureRelativePath(file) {
   const generated = normalized.match(/(?:^|\/)\.features-gen\/(.+?)\.spec\.[jt]s$/)
   if (generated && generated[1]) return generated[1]
   const plain = normalized.match(/([^/].*?)\.spec\.[jt]s$/)
-  return plain && plain[1] ? plain[1] : normalized
+  const stripped = plain && plain[1] ? plain[1] : normalized
+  return stripped.endsWith('.feature') ? stripped : ''
+}
+
+/**
+ * The file the test is WRITTEN in, relative to Playwright's rootDir — what a
+ * reader needs to open the failure.
+ *
+ * For a Gherkin test this is the generated spec, which is not useful and not
+ * reported; the caller passes the authored `.feature` path instead. Returns ''
+ * when the file lies outside rootDir or rootDir is unknown, since a half-relative
+ * path is worse than none.
+ */
+function sourceRelativePath(file) {
+  if (typeof file !== 'string' || file.length === 0) return ''
+  const normalized = file.replace(/\\/g, '/')
+  if (!rootDir) return ''
+  const prefix = rootDir.endsWith('/') ? rootDir : `${rootDir}/`
+  return normalized.startsWith(prefix) ? normalized.slice(prefix.length) : ''
 }
 
 /** A stable id for one test, independent of retries. */
@@ -52,8 +81,17 @@ function testKey(test) {
 }
 
 class SuiSuiProgressReporter {
-  onBegin(_config, suite) {
+  onBegin(config, suite) {
     try {
+      try {
+        rootDir =
+          config && typeof config.rootDir === 'string'
+            ? config.rootDir.replace(/\\/g, '/').replace(/\/+$/, '')
+            : ''
+      } catch {
+        rootDir = ''
+      }
+
       let totalTests
       try {
         totalTests = suite && typeof suite.allTests === 'function' ? suite.allTests().length : undefined
@@ -69,12 +107,31 @@ class SuiSuiProgressReporter {
   onTestBegin(test, result) {
     try {
       const testId = testKey(test)
+      const file = test && test.location && test.location.file
+      const relativePath = featureRelativePath(file)
+
+      // No feature file: a plain Playwright spec running alongside the Gherkin
+      // suite. It is still reported — it ran, and it can fail — but under its own
+      // source file, and without step events: it has no authored step list to
+      // show them against, so they would render as nothing.
+      if (relativePath) {
+        notGherkin.delete(testId)
+      } else {
+        notGherkin.add(testId)
+      }
+
       // A retry restarts the step numbering for this test.
       stepCounters.set(testId, 0)
+
+      // For a Gherkin test the source file is the GENERATED spec, which is not
+      // somewhere anyone should be sent; the `.feature` path is the locator.
+      const specPath = relativePath ? '' : sourceRelativePath(file)
+
       emit({
         type: 'testStart',
         testId,
-        relativePath: featureRelativePath(test && test.location && test.location.file),
+        relativePath,
+        ...(specPath ? { specPath } : {}),
         title: (test && test.title) || '',
         attempt: (result && result.retry) || 0,
         at: Date.now(),
@@ -91,6 +148,8 @@ class SuiSuiProgressReporter {
       if (!step || step.category !== 'test.step') return
 
       const testId = testKey(test)
+      if (notGherkin.has(testId)) return
+
       const index = stepCounters.get(testId) || 0
       stepCounters.set(testId, index + 1)
       stepIndexes.set(step, index)
@@ -110,6 +169,7 @@ class SuiSuiProgressReporter {
   onStepEnd(test, _result, step) {
     try {
       if (!step || step.category !== 'test.step') return
+      if (notGherkin.has(testKey(test))) return
 
       const index = stepIndexes.get(step)
       if (index === undefined) return
@@ -135,6 +195,8 @@ class SuiSuiProgressReporter {
     try {
       const testId = testKey(test)
       stepCounters.delete(testId)
+      // Dropped so a long run does not accumulate one entry per non-Gherkin test.
+      notGherkin.delete(testId)
 
       const raw = (result && result.status) || 'failed'
       const status =

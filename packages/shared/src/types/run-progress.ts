@@ -42,8 +42,23 @@ export interface StepExecution {
 export interface ScenarioExecution {
   /** Reporter-assigned stable id for this test — the key everything is bucketed by. */
   testId: string
-  /** Feature file relative to the features directory. */
+  /**
+   * Feature file relative to the features directory.
+   *
+   * EMPTY for a plain Playwright spec running alongside the Gherkin suite: it has
+   * no feature file. Use `specPath` to locate those.
+   */
   relativePath: string
+  /**
+   * Source file the test is written in, relative to the Playwright config's root
+   * — `playwright/tests/architect/forms.spec.ts`.
+   *
+   * The point of it is locating a result: `relativePath` names the FEATURE, which
+   * for a plain spec does not exist, and for a Gherkin test is not where the
+   * failure is read from anyway. Absent when the reporter could not relativize
+   * the path, so consumers must tolerate that rather than assume it.
+   */
+  specPath?: string
   /** Scenario title as reported. For an outline this identifies the example row. */
   title: string
   status: ExecutionStatus
@@ -88,7 +103,10 @@ export type RunProgressEvent =
   | {
       type: 'testStart'
       testId: string
+      /** Empty for a plain Playwright spec — see `ScenarioExecution.relativePath`. */
       relativePath: string
+      /** Source file relative to the Playwright root; see `ScenarioExecution.specPath`. */
+      specPath?: string
       title: string
       attempt: number
       at: number

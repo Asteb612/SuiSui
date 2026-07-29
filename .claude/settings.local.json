@@ -73,7 +73,9 @@
       "Bash(bash .specify/scripts/bash/setup-plan.sh --json 2>&1)",
       "Bash(bash .specify/scripts/bash/update-agent-context.sh claude 2>&1)",
       "Bash(bash .specify/scripts/bash/check-prerequisites.sh --json 2>&1)",
-      "Bash(bash .specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks 2>&1)"
+      "Bash(bash .specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks 2>&1)",
+      "Read(//home/grosso_a/.config/SuiSui/**)",
+      "Read(//home/grosso_a/.config/**)"
     ]
   }
 }

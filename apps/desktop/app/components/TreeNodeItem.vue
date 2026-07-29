@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, type Ref } from 'vue'
-import type { FeatureTreeNode } from '@suisui/shared'
+import type { ExecutionStatus, FeatureTreeNode } from '@suisui/shared'
+import { statusPresentation } from '~/utils/runStatus'
 
 interface Props {
   node: FeatureTreeNode
@@ -71,6 +72,25 @@ function onDrop(e: DragEvent) {
 // Create computed properties to safely access injected refs
 const expandedKeysValue = computed(() => expandedKeys?.value || {})
 const selectedKeyValue = computed(() => selectedKey?.value || '')
+
+// --- Last-run status badge (feature 011) ---
+//
+// Injected rather than read from the store, like every other piece of state this
+// component works with: it stays presentational, and the lookup is optional so a
+// tree rendered without a runner simply shows no badges.
+const runStatusFor = inject<(node: FeatureTreeNode) => ExecutionStatus | null>('runStatusFor')
+
+/**
+ * Last-run outcome for this row: the file's own, or the worst inside a folder.
+ *
+ * A folder keeps its badge while collapsed, which is the point — it is what
+ * makes a failure findable without opening every folder in turn.
+ */
+const runStatus = computed(() => runStatusFor?.(props.node) ?? null)
+
+const runStatusPresentation = computed(() =>
+  runStatus.value ? statusPresentation(runStatus.value) : null,
+)
 
 const menuRef = ref()
 
@@ -154,6 +174,20 @@ function showMenu(event: MouseEvent) {
 
       <i :class="[node.type === 'folder' ? 'pi pi-folder' : 'pi pi-file', 'node-icon']" />
       <span class="node-label">{{ node.name }}</span>
+
+      <!-- Last-run outcome, so a failure is findable without opening each file. -->
+      <span
+        v-if="runStatusPresentation && runStatus"
+        class="run-status-badge"
+        :class="`run-status-${runStatus}`"
+        :title="`Last run: ${runStatusPresentation.label}`"
+        :aria-label="`Last run: ${runStatusPresentation.label}`"
+        data-testid="tree-node-run-status"
+        :data-status="runStatus"
+        role="img"
+      >
+        <i :class="runStatusPresentation.icon" />
+      </span>
 
       <div class="node-actions">
         <Button
@@ -272,6 +306,26 @@ function showMenu(event: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+/* Never hidden on hover the way the row actions are: it is what you scan for. */
+.run-status-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+}
+
+.run-status-pending { color: var(--text-color-secondary); }
+.run-status-running { color: var(--p-blue-600, #2563eb); }
+.run-status-passed { color: var(--p-green-600, #16a34a); }
+.run-status-failed { color: var(--p-red-600, #dc2626); }
+.run-status-skipped { color: var(--text-color-secondary); }
+.run-status-interrupted { color: var(--p-orange-600, #ea580c); }
+
+/* The selected row paints itself solid, so the badge has to read against it. */
+.node-content.selected .run-status-badge {
+  color: inherit;
 }
 
 .action-button {

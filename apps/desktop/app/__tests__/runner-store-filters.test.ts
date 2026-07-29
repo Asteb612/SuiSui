@@ -40,8 +40,8 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: ['auth'],
       folder: 'features/auth',
       scenarios: [
-        { name: 'Valid login', tags: ['auth', 'smoke'] },
-        { name: 'Invalid login', tags: ['auth'] },
+        { name: 'Valid login', tags: ['auth', 'smoke'], testCount: 1 },
+        { name: 'Invalid login', tags: ['auth'], testCount: 1 },
       ],
     },
     {
@@ -50,7 +50,7 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: ['auth'],
       folder: 'features/auth',
       scenarios: [
-        { name: 'New user registration', tags: ['auth', 'regression'] },
+        { name: 'New user registration', tags: ['auth', 'regression'], testCount: 1 },
       ],
     },
     {
@@ -59,8 +59,8 @@ const mockWorkspace: WorkspaceTestInfo = {
       tags: [],
       folder: 'features/checkout',
       scenarios: [
-        { name: 'Add item to cart', tags: ['smoke'] },
-        { name: 'Remove item from cart', tags: [] },
+        { name: 'Add item to cart', tags: ['smoke'], testCount: 1 },
+        { name: 'Remove item from cart', tags: [], testCount: 1 },
       ],
     },
   ],

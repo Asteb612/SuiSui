@@ -36,10 +36,6 @@ function runUI() {
   runnerStore.runBatch('ui')
 }
 
-function stopRun() {
-  runnerStore.stop()
-}
-
 // Feature selection helpers
 const allFeaturesSelected = computed(() => {
   if (!runnerStore.workspaceTests) return false
@@ -127,18 +123,10 @@ function clearAllFilters() {
     <!-- Fixed Toolbar -->
     <div class="run-toolbar">
       <div class="toolbar-left">
-        <div class="toolbar-field">
-          <label class="toolbar-label">Base URL</label>
-          <InputText
-            :model-value="runnerStore.config.baseUrl"
-            placeholder="e.g. http://localhost:3000"
-            size="small"
-            class="base-url-input"
-            @update:model-value="(val: string | undefined) => runnerStore.setBaseUrl(val ?? '')"
-          />
-        </div>
+        <!-- Only while choosing what to run: it configures the next run, and has
+             nothing to say once the results are on screen. -->
         <div
-          v-if="!runnerStore.singleRun"
+          v-if="!runnerStore.singleRun && !runnerStore.showResults"
           class="toolbar-field"
           data-testid="execution-selector"
         >
@@ -157,44 +145,15 @@ function clearAllFilters() {
           />
         </div>
       </div>
-      <div
-        v-if="!runnerStore.singleRun"
-        class="toolbar-center"
-      >
-        <span
-          v-if="runnerStore.workspaceTests"
-          class="matched-count"
-        >
-          <strong>{{ runnerStore.matchedTests.scenarioCount }}</strong>
-          scenario{{ runnerStore.matchedTests.scenarioCount !== 1 ? 's' : '' }}
-          across
-          <strong>{{ runnerStore.matchedTests.features.length }}</strong>
-          feature{{ runnerStore.matchedTests.features.length !== 1 ? 's' : '' }}
-          will run
-        </span>
-        <span
-          v-else
-          class="loading-tests"
-        >
-          <i class="pi pi-spin pi-spinner" /> Loading tests...
-        </span>
-      </div>
+      <!-- The matched-test count lives on the header row (pages/index.vue), beside
+           the back button — same line as the logs toggle it alternates with. -->
       <div class="toolbar-right">
-        <!-- Running: allow Stop (any run). Idle + global: the filter-based run buttons.
+        <!-- Stopping a run lives in the Test Runner header (pages/index.vue), on the
+             row with the back button — it is a control over the run, not over the
+             filters, and it must stay put as this toolbar empties out.
+             Idle + global: the filter-based run buttons.
              Idle + single-spec: nothing (re-run from the editor's quick-run instead). -->
-        <template v-if="runnerStore.isRunning">
-          <Button
-            icon="pi pi-stop"
-            label="Stop"
-            size="small"
-            severity="danger"
-            @click="stopRun"
-          />
-          <span class="running-indicator">
-            <i class="pi pi-spin pi-spinner" /> Running...
-          </span>
-        </template>
-        <template v-else-if="!runnerStore.singleRun">
+        <template v-if="!runnerStore.isRunning && !runnerStore.singleRun">
           <Button
             icon="pi pi-play"
             label="Run Headless"
@@ -397,6 +356,8 @@ function clearAllFilters() {
 
 .toolbar-left {
   display: flex;
+  /* Pushes the run buttons to the right now that nothing sits between them. */
+  flex: 1;
   align-items: center;
   gap: 1rem;
 }
@@ -414,34 +375,10 @@ function clearAllFilters() {
   white-space: nowrap;
 }
 
-.toolbar-center {
-  flex: 1;
-  text-align: center;
-}
-
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.base-url-input {
-  min-width: 180px;
-}
-
-.matched-count {
-  font-size: 0.85rem;
-  color: var(--p-text-color);
-}
-
-.loading-tests {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color);
-}
-
-.running-indicator {
-  font-size: 0.85rem;
-  color: var(--p-text-muted-color);
 }
 
 .run-content {

@@ -1087,6 +1087,7 @@ All updater logic is main-process only; the renderer only ever sees the serializ
 - The tag index subscription is **refcounted** (`consumers` in store state): the browser and
   the editor's picker both use it, and whichever unmounts first must not tear down the
   other's subscription.
+
 ## Live run progress (feature 011-live-run-progress)
 
 ### Store state (`useRunnerStore`)
@@ -1105,8 +1106,47 @@ Key getters:
 | --------------------------- | ---------------------------------------------------------- |
 | `live`                      | raw `LiveRunState` for the displayed scope                 |
 | `liveScenarios`             | executions ordered running-first, then by start time       |
+| `liveFeatureScenarios`      | just the ones backed by a `.feature`                       |
+| `liveOtherScenarios`        | just the plain Playwright specs (`specPath`, no feature)   |
+| `liveFeatureGroups`         | those grouped by feature file, worst status per group      |
+| `liveOtherSpecGroups`       | plain specs grouped by the file they live in               |
+| `liveFailureCount`          | failed scenarios, for the failures-only filter             |
+| `liveStatusByFeature`       | worst status per feature file, **across every scope**      |
+| `statusForFeature(path)`    | one file's badge status, tolerant of both path namespaces  |
+| `statusForFolder(path)`     | worst status beneath a folder                              |
 | `liveStepsFor(path, title)` | merged display steps, or `null` when there is nothing live |
 | `executionFor(path, title)` | one scenario's execution record                            |
+
+### Grouping, so a large run stays readable
+
+A real suite reports hundreds of scenarios and a flat list of them is unreadable.
+`groupScenarios` buckets them by the file they came from, ordered **running → contains a
+failure → the rest**, each chronologically. The panel opens a group only when it is
+running or has a failure, so a green run of any size stays about one screen, and offers
+a failures-only filter once anything has failed.
+
+The list is bounded by the panel and scrolls inside it — not by a fixed height. The
+panel is `overflow: hidden`, so an unbounded list would be **clipped** rather than
+scrolled. `.live-group` carries `flex-shrink: 0` and that is load-bearing: `overflow:
+hidden` cancels a flex item's automatic minimum size, so without it the column squashes
+every group into a sliver to fit — the list never overflows and so never scrolls. In
+that column only the list flexes; every sibling is pinned `flex-shrink: 0`.
+
+The raw log is behind the `Show logs` toggle **during** a run as well as after it (it
+takes the whole panel when shown); the one-line `run-current` readout stays, so there is
+still a live signal without the wall of text.
+
+### Badges in the feature tree
+
+`liveStatusByFeature` rolls each file up to its worst status — one failing outline row
+makes the file failed, because the badge answers "does this need me", not "did all of it
+fail". It spans **every scope**, so quick-running one feature does not blank the badges
+of the rest; where two runs disagree about a file, the later one wins.
+
+`FeatureTree.vue` `provide`s a `runStatusFor(node)` lookup and `TreeNodeItem.vue`
+injects it, keeping that component presentational like the rest of its state. A folder
+shows the worst status beneath it, which is what makes a failure findable while the
+folder is collapsed.
 
 ### The merge selector
 
@@ -1128,11 +1168,41 @@ cleared at the start of each run so edits between runs are picked up.
 - **`ScenarioBuilder.vue`** — reflects live statuses on the scenario being executed
   (FR-012). Read-only: it never mutates scenario content (FR-023). Background steps are
   labelled as such in their accessible name (FR-005).
-- **`RunResultsPanel.vue`** — lists every scenario the run has touched with name,
-  feature and status; **all** running scenarios are highlighted, not just one.
-  Expanding one shows its steps in place, without opening it in the editor (FR-011).
-  The longest-running step is called out once it passes 5s, so a stall is attributable
-  without reading the log.
+- **`RunResultsPanel.vue`** — lists every scenario the run has touched, grouped by file
+  (see above); **all** running scenarios are highlighted, not just one. Expanding one
+  shows its steps in place, without opening it in the editor (FR-011). The
+  longest-running step is called out once it passes 5s, so a stall is attributable
+  without reading the log. Plain Playwright specs get their own "Other specs" section,
+  labelled with the file they are written in.
+- **`TreeNodeItem.vue`** — renders the last-run badge for a file or folder, from the
+  injected `runStatusFor`.
+
+### Where the runner's chrome lives
+
+One header row (`pages/index.vue`) carries everything about the run; the toolbar below
+it (`RunConfigPanel`) is only about choosing what to run next.
+
+| Control                 | Row     | Shown when                                  |
+| ----------------------- | ------- | ------------------------------------------- |
+| Back (one step)         | header  | always in the runner                        |
+| Matched-test count      | header  | filters view (`!showResults && !singleRun`) |
+| `Show/Hide logs`        | header  | the run produced a log                      |
+| `Stop`                  | header  | a run is in flight                          |
+| Execution mode          | toolbar | filters view only                           |
+| `Run Headless`/`Run UI` | toolbar | not running, not a single-spec quick-run    |
+
+**Back is one step**: results → filters → editor, labelled with where it goes. A
+single-spec quick-run has no filters to return to, so its back arrow leaves the runner
+directly. The old "Test Runner" title and the results panel's own back button are gone —
+two back arrows on adjacent rows was the thing worth removing.
+
+Base URL is **not** in the toolbar: it is a workspace setting, edited in Settings (which
+also explains the Playwright-config default). Two fields for it only invited the two to
+disagree.
+
+`showLogs` is store state, not component state, because the toggle is in the header and
+the log is in the results panel.
+
 - **`StepRow.vue`** — accepts `liveStatus`/`liveDurationMs` for the same indicator.
 
 Elapsed times come from the panel's **single** existing interval — one ticker for the
