@@ -62,6 +62,16 @@ export const SEL = {
   backToFiltersBtn: '[data-testid="back-to-filters-btn"]',
   executionSelector: '[data-testid="execution-selector"]',
 
+  // Runner filters
+  runnerMatchedCount: '[data-testid="runner-matched-count"]',
+  filterTabFeatures: '[data-testid="filter-tab-features"]',
+  filterTabFolders: '[data-testid="filter-tab-folders"]',
+  filterTabTags: '[data-testid="filter-tab-tags"]',
+  featureFilterItem: '[data-testid="feature-filter-item"]',
+  featuresSelectAll: '[data-testid="features-select-all"]',
+  featuresNoFilterHint: '[data-testid="features-no-filter-hint"]',
+  tagFilterItem: '[data-testid="tag-filter-item"]',
+
   // Validation
   validationPanel: '[data-testid="validation-panel"]',
   validationIndicator: '[data-testid="validation-indicator"]',

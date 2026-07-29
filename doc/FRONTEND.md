@@ -1177,6 +1177,30 @@ cleared at the start of each run so edits between runs are picked up.
 - **`TreeNodeItem.vue`** — renders the last-run badge for a file or folder, from the
   injected `runStatusFor`.
 
+### The runner's filters combine
+
+`matchedTests` applies **every** filter, not just the one whose tab is open.
+`config.activeFilterTab` says which list is on screen and nothing else — narrowing to a
+folder and then to a tag is the main reason to have two filters, and the exclusive-tab
+model made it impossible.
+
+- **Features ∪ folders.** Both answer "which files", so selecting a folder plus one
+  extra feature adds that feature. Intersecting them would give nothing whenever the
+  feature sits outside the folder, which is the normal case.
+- **∩ tags ∩ name.** These narrow the scenarios _inside_ those files.
+- An **empty** selection is no filter, not "nothing". The feature checkboxes used to
+  render that as every box ticked, so clicking a ticked box read as "deselect one" but
+  was really the first tick of an empty list — every other feature silently dropped out.
+  The boxes now show the real selection, and the list header says what empty means.
+- The count and the per-file label are **tests**, so a `Scenario Outline` counts once per
+  example row (`ScenarioTestInfo.testCount`).
+
+`runBatch` passes all of them together; Playwright ANDs spec-file arguments with
+`--grep` (see `buildGrepPattern` in SERVICES.md).
+
+Covered by `e2e/runner-filters.spec.ts` against a fixture with exact known numbers —
+see `e2e/fixtures/workspaces/runner-filters/README.md`.
+
 ### Where the runner's chrome lives
 
 One header row (`pages/index.vue`) carries everything about the run; the toolbar below

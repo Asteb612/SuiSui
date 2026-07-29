@@ -36,20 +36,24 @@ function runUI() {
   runnerStore.runBatch('ui')
 }
 
-// Feature selection helpers
+// --- Feature selection ---
+//
+// An EMPTY selection means "no feature filter", so everything runs. The checkbox
+// used to render that as every box ticked, which made clicking a ticked box
+// deselect all the others — it was really the first tick of an empty list. The
+// boxes now show the actual selection, and the header says what empty means.
+
 const allFeaturesSelected = computed(() => {
-  if (!runnerStore.workspaceTests) return false
-  return runnerStore.config.selectedFeatures.length === 0
+  const total = runnerStore.workspaceTests?.features.length ?? 0
+  return total > 0 && runnerStore.config.selectedFeatures.length === total
 })
 
+const noFeatureFilter = computed(() => runnerStore.config.selectedFeatures.length === 0)
+
 function toggleAllFeatures() {
-  if (allFeaturesSelected.value) {
-    runnerStore.config.selectedFeatures = runnerStore.workspaceTests?.features.map(
-      (f) => f.relativePath,
-    ) ?? []
-  } else {
-    runnerStore.config.selectedFeatures = []
-  }
+  runnerStore.config.selectedFeatures = allFeaturesSelected.value
+    ? []
+    : (runnerStore.workspaceTests?.features.map((f) => f.relativePath) ?? [])
 }
 
 function toggleFeature(path: string) {
@@ -62,10 +66,12 @@ function toggleFeature(path: string) {
 }
 
 function isFeatureSelected(path: string): boolean {
-  return (
-    runnerStore.config.selectedFeatures.length === 0 ||
-    runnerStore.config.selectedFeatures.includes(path)
-  )
+  return runnerStore.config.selectedFeatures.includes(path)
+}
+
+/** Tests a feature will run — outlines count once per example row, not once. */
+function featureTestCount(feature: { scenarios: { testCount?: number }[] }): number {
+  return feature.scenarios.reduce((sum, s) => sum + (s.testCount ?? 1), 0)
 }
 
 // Folder tree
@@ -201,6 +207,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'features'"
                 :severity="runnerStore.config.activeFilterTab === 'features' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-features"
                 @click="runnerStore.config.activeFilterTab = 'features'"
               />
               <Button
@@ -208,6 +215,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'folders'"
                 :severity="runnerStore.config.activeFilterTab === 'folders' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-folders"
                 @click="runnerStore.config.activeFilterTab = 'folders'"
               />
               <Button
@@ -216,6 +224,7 @@ function clearAllFilters() {
                 :outlined="runnerStore.config.activeFilterTab !== 'tags'"
                 :severity="runnerStore.config.activeFilterTab === 'tags' ? undefined : 'secondary'"
                 size="small"
+                data-testid="filter-tab-tags"
                 @click="runnerStore.config.activeFilterTab = 'tags'"
               />
               <Button
@@ -256,11 +265,19 @@ function clearAllFilters() {
             class="filter-list"
           >
             <div class="filter-list-header">
-              <label class="filter-list-title">Feature Files</label>
+              <label class="filter-list-title">
+                Feature Files
+                <span
+                  v-if="noFeatureFilter"
+                  class="filter-list-hint"
+                  data-testid="features-no-filter-hint"
+                >none selected — all run</span>
+              </label>
               <Button
                 :label="allFeaturesSelected ? 'Deselect All' : 'Select All'"
                 text
                 size="small"
+                data-testid="features-select-all"
                 @click="toggleAllFeatures"
               />
             </div>
@@ -268,6 +285,9 @@ function clearAllFilters() {
               v-for="feature in runnerStore.workspaceTests.features"
               :key="feature.relativePath"
               class="filter-item"
+              data-testid="feature-filter-item"
+              :data-path="feature.relativePath"
+              :data-selected="isFeatureSelected(feature.relativePath)"
               @click="toggleFeature(feature.relativePath)"
             >
               <Checkbox
@@ -276,7 +296,7 @@ function clearAllFilters() {
                 @click.stop="toggleFeature(feature.relativePath)"
               />
               <span class="filter-item-label">{{ feature.name || feature.relativePath }}</span>
-              <span class="filter-item-meta">{{ feature.scenarios.length }} scenarios</span>
+              <span class="filter-item-meta">{{ featureTestCount(feature) }} tests</span>
             </div>
           </div>
 
@@ -308,6 +328,9 @@ function clearAllFilters() {
                 size="small"
                 :outlined="!runnerStore.config.selectedTags.includes(tag)"
                 :severity="runnerStore.config.selectedTags.includes(tag) ? undefined : 'secondary'"
+                data-testid="tag-filter-item"
+                :data-tag="tag"
+                :data-selected="runnerStore.config.selectedTags.includes(tag)"
                 @click="toggleTag(tag)"
               />
             </div>
@@ -467,6 +490,14 @@ function clearAllFilters() {
   color: var(--p-text-muted-color);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Says what an empty selection means, so unticked boxes do not read as "nothing". */
+.filter-list-hint {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .filter-item {

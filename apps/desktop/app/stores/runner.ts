@@ -582,45 +582,47 @@ export const useRunnerStore = defineStore('runner', {
     },
 
     /**
-     * Compute matched features and scenarios based on current filters.
-     * Exclusive tab model: only the active tab's filter applies + name filter (AND).
+     * The features and scenarios the current filters select.
+     *
+     * ALL the filters apply, not just the one whose tab happens to be open: the
+     * tabs are three views of one filter set, and "narrow to this folder, then to
+     * this tag" is the whole point of having them. `activeFilterTab` says which
+     * list is on screen and nothing more.
+     *
+     * Features and folders are a UNION — both answer "which files", so selecting a
+     * folder plus one extra feature adds that feature rather than intersecting to
+     * nothing. Tags and the name filter then narrow the scenarios INSIDE those
+     * files (AND), which is what makes "@smoke in the checkout folder" expressible.
      */
     matchedTests(state): { features: WorkspaceTestInfo['features']; scenarioCount: number } {
       if (!state.workspaceTests) {
         return { features: [], scenarioCount: 0 }
       }
 
-      let features = [...state.workspaceTests.features]
+      const { selectedFeatures, selectedFolders, selectedTags, nameFilter } = state.config
+      const byFile = selectedFeatures.length > 0 || selectedFolders.length > 0
 
-      // Apply ONLY the active tab's structural filter
-      if (state.config.activeFilterTab === 'features' && state.config.selectedFeatures.length > 0) {
-        features = features.filter((f) =>
-          state.config.selectedFeatures.includes(f.relativePath),
-        )
-      } else if (state.config.activeFilterTab === 'folders' && state.config.selectedFolders.length > 0) {
-        features = features.filter((f) =>
-          state.config.selectedFolders.some(
-            (folder) => f.folder === folder || f.folder.startsWith(folder + '/'),
-          ),
-        )
-      }
+      const features = byFile
+        ? state.workspaceTests.features.filter(
+            (f) =>
+              selectedFeatures.includes(f.relativePath) ||
+              selectedFolders.some(
+                (folder) => f.folder === folder || f.folder.startsWith(folder + '/'),
+              ),
+          )
+        : [...state.workspaceTests.features]
 
-      // Filter scenarios by tags (only when tags tab is active) and name (always)
       let scenarioCount = 0
       const filteredFeatures = features
         .map((f) => {
           let scenarios = [...f.scenarios]
 
-          // Tag filter only applies when tags tab is active
-          if (state.config.activeFilterTab === 'tags' && state.config.selectedTags.length > 0) {
-            scenarios = scenarios.filter((s) =>
-              s.tags.some((t) => state.config.selectedTags.includes(t)),
-            )
+          if (selectedTags.length > 0) {
+            scenarios = scenarios.filter((s) => s.tags.some((t) => selectedTags.includes(t)))
           }
 
-          // Name filter always applies (AND with active tab)
-          if (state.config.nameFilter) {
-            const lower = state.config.nameFilter.toLowerCase()
+          if (nameFilter) {
+            const lower = nameFilter.toLowerCase()
             scenarios = scenarios.filter((s) => s.name.toLowerCase().includes(lower))
           }
 
@@ -905,16 +907,13 @@ export const useRunnerStore = defineStore('runner', {
           // Explicit targets (single-spec quick-run) — do NOT touch the global filters.
           options.featurePaths = opts.featurePaths
         } else {
-          // Global run: derive targets from the active filter tab.
-          const matched = this.matchedTests
-          const tab = this.config.activeFilterTab
-          if (
-            (tab === 'features' && this.config.selectedFeatures.length > 0) ||
-            (tab === 'folders' && this.config.selectedFolders.length > 0)
-          ) {
-            options.featurePaths = matched.features.map((f) => f.relativePath)
+          // Global run: EVERY filter applies, exactly as the matched count says.
+          // Playwright ANDs them for us — spec files narrow which files run, and
+          // `--grep` narrows within them (see `buildGrepPattern`).
+          if (this.config.selectedFeatures.length > 0 || this.config.selectedFolders.length > 0) {
+            options.featurePaths = this.matchedTests.features.map((f) => f.relativePath)
           }
-          if (tab === 'tags' && this.config.selectedTags.length > 0) {
+          if (this.config.selectedTags.length > 0) {
             options.tags = this.config.selectedTags
           }
           if (this.config.nameFilter) {
