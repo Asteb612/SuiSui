@@ -1192,6 +1192,12 @@ model made it impossible.
   render that as every box ticked, so clicking a ticked box read as "deselect one" but
   was really the first tick of an empty list — every other feature silently dropped out.
   The boxes now show the real selection, and the list header says what empty means.
+- The feature list uses a **plain `<input type="checkbox">`**, not PrimeVue's `Checkbox`.
+  That component keeps its own copy of the value and writes it back only through
+  `update:modelValue`; driven from `@click` the two diverged, so the filter applied while
+  the box stayed empty — and boxes it had ticked internally survived `Clear`. `checked`
+  is now a pure function of the selection and cannot disagree with it. The E2E asserts
+  the **rendered** state for exactly this reason.
 - The count and the per-file label are **tests**, so a `Scenario Outline` counts once per
   example row (`ScenarioTestInfo.testCount`).
 

@@ -290,11 +290,19 @@ function clearAllFilters() {
               :data-selected="isFeatureSelected(feature.relativePath)"
               @click="toggleFeature(feature.relativePath)"
             >
-              <Checkbox
-                :model-value="isFeatureSelected(feature.relativePath)"
-                :binary="true"
+              <!-- A plain input, not PrimeVue's Checkbox: that one keeps its own
+                   copy of the value and only writes it back through
+                   `update:modelValue`. Driving it from `@click` left the two
+                   diverging — the filter applied but the box never ticked, and
+                   boxes it had ticked internally survived Clear. Here `checked`
+                   is a pure function of the selection, so it cannot disagree. -->
+              <input
+                type="checkbox"
+                class="filter-item-checkbox"
+                :checked="isFeatureSelected(feature.relativePath)"
+                :aria-label="feature.name || feature.relativePath"
                 @click.stop="toggleFeature(feature.relativePath)"
-              />
+              >
               <span class="filter-item-label">{{ feature.name || feature.relativePath }}</span>
               <span class="filter-item-meta">{{ featureTestCount(feature) }} tests</span>
             </div>
@@ -512,6 +520,15 @@ function clearAllFilters() {
 
 .filter-item:hover {
   background: var(--p-surface-hover);
+}
+
+.filter-item-checkbox {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--p-primary-color);
+  cursor: pointer;
 }
 
 .filter-item-label {

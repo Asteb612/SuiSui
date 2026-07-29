@@ -124,6 +124,34 @@ test.describe('Test runner filters', () => {
       await expectCount(window, 2)
     })
 
+    test('the box shows the tick, and it is the selection that decides', async () => {
+      // The regression that made this feel broken: the checkbox kept its own copy
+      // of the value, so the filter applied while the box stayed empty. Assert the
+      // rendered state, not just ours — they diverged silently before.
+      const { window } = ctx
+      const box = featureRow(window, 'features/smoke.feature').locator('input[type="checkbox"]')
+
+      await expect(box).not.toBeChecked()
+      await box.click()
+      await expect(box).toBeChecked()
+      await expectCount(window, 2)
+
+      await box.click()
+      await expect(box).not.toBeChecked()
+      await expectCount(window, 8)
+    })
+
+    test('Select All ticks the boxes themselves, not just the state', async () => {
+      const { window } = ctx
+      const boxes = window.locator(`${SEL.featureFilterItem} input[type="checkbox"]`)
+
+      await window.locator(SEL.featuresSelectAll).click()
+      for (const box of await boxes.all()) await expect(box).toBeChecked()
+
+      await window.locator(SEL.featuresSelectAll).click()
+      for (const box of await boxes.all()) await expect(box).not.toBeChecked()
+    })
+
     test('adds to the selection rather than replacing it', async () => {
       const { window } = ctx
 
@@ -278,12 +306,30 @@ test.describe('Test runner filters', () => {
       const { window } = ctx
 
       await featureRow(window, 'features/smoke.feature').click()
+      await window.locator(SEL.filterTabFolders).click()
+      await toggleFolder(window, 'cart')
       await window.locator(SEL.filterTabTags).click()
       await tagChip(window, 'smoke').click()
-      await expectCount(window, 2)
+      await window.locator('input[placeholder="Filter scenarios by name..."]').fill('boots')
+      await expectCount(window, 1)
 
       await window.locator('button', { hasText: 'Clear' }).first().click()
       await expectCount(window, 8)
+
+      // Every control has to LOOK cleared too. A checkbox holding its own value
+      // stayed ticked after Clear, which is what made Clear look broken.
+      await expect(window.locator('input[placeholder="Filter scenarios by name..."]')).toHaveValue('')
+      await expect(window.locator(`${SEL.tagFilterItem}[data-selected="true"]`)).toHaveCount(0)
+
+      await window.locator(SEL.filterTabFolders).click()
+      await expect(window.locator('.p-tree-node-checkbox[data-p-checked="true"]')).toHaveCount(0)
+
+      await window.locator(SEL.filterTabFeatures).click()
+      for (const box of await window
+        .locator(`${SEL.featureFilterItem} input[type="checkbox"]`)
+        .all()) {
+        await expect(box).not.toBeChecked()
+      }
     })
   })
 })
