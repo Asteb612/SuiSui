@@ -58,6 +58,10 @@ export function catalogStepToStepDefinition(step: CatalogStep): StepDefinition {
     keyword: step.keyword,
     location: `${step.source.file}:${step.source.line}`,
     args: step.parameters.map(catalogParameterToArgDefinition),
-    isGeneric: false,
+    // Carries the authorship tier to the renderer (feature 012, FR-011). Was
+    // hardcoded `false`, which left the "generic" badge in the step picker
+    // permanently dead. Absent tier means project — a step is only generic when
+    // it provably came from the file the app provisioned.
+    isGeneric: step.tier === 'generic',
   }
 }

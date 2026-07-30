@@ -19,6 +19,16 @@ export interface Scenario {
   steps: ScenarioStep[]
   /** Examples table for Scenario Outline - when present, this is a Scenario Outline */
   examples?: ExampleTable
+  /**
+   * Verbatim comment lines immediately preceding the scenario, INCLUDING the
+   * leading `#` (feature 012, FR-029 → FR-031).
+   *
+   * Stored raw and never re-parsed, so any text — URLs, ticket titles — round
+   * trips untouched and can never be reinterpreted as a step, tag, or
+   * description. Only scenario-leading comments are modelled; comments
+   * elsewhere in a feature file are still lost on save.
+   */
+  comments?: string[]
 }
 
 export interface ExampleTable {

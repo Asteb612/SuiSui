@@ -27,6 +27,20 @@ export type MetadataOrigin =
 
 export type MetadataPrecision = 'exact' | 'inferred' | 'partial' | 'unknown'
 
+/**
+ * Who authored a step (feature 012, FR-008).
+ *
+ * `generic` = the starter step-definition file the app provisions when a
+ * workspace is initialised; `project` = written by the team. Distinct from
+ * `MetadataOrigin`, which is about how a step's metadata was extracted, not
+ * who wrote the step.
+ *
+ * DERIVED at load time from the step's source file — never authored, and
+ * deliberately not part of the catalog cache key, so a workspace whose
+ * features directory changed cannot serve a stale tier.
+ */
+export type StepTier = 'project' | 'generic'
+
 export type ParameterType =
   | 'string'
   | 'int'
@@ -108,6 +122,14 @@ export interface CatalogStep {
   origin: MetadataOrigin
   precision: MetadataPrecision
   diagnostics: CatalogDiagnostic[]
+  /**
+   * Authorship tier (feature 012, FR-008). Optional because the catalog ENGINE
+   * does not set it — it is stamped by `StepCatalogService`, which is the layer
+   * that knows the workspace's features directory. Absent is treated as
+   * `project`, the safe default: a step is only generic if we can prove it came
+   * from the file the app provisioned.
+   */
+  tier?: StepTier
 }
 
 export interface StepCatalogResult {

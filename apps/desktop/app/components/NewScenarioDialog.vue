@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useAiStore } from '~/stores/ai'
+import { useStepsStore } from '~/stores/steps'
 
 const props = defineProps<{
   visible: boolean
@@ -8,7 +10,21 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   create: [data: { name: string; fileName: string }]
+  /** Create the scenario, then open the AI draft dialog (feature 012, FR-002). */
+  'create-with-ai': [data: { name: string; fileName: string }]
 }>()
+
+const aiStore = useAiStore()
+const stepsStore = useStepsStore()
+
+/**
+ * The AI entry point appears only when a provider is configured AND the
+ * workspace has steps to build from — there is nothing to offer otherwise
+ * (FR-001, FR-003).
+ */
+const canGenerateWithAi = computed(
+  () => aiStore.isConfigured && stepsStore.allSteps.length > 0,
+)
 
 const scenarioName = ref('')
 const customFileName = ref('')
@@ -45,6 +61,12 @@ function reset() {
 function onCreate() {
   if (!isValid.value) return
   emit('create', { name: scenarioName.value.trim(), fileName: fileName.value })
+  emit('update:visible', false)
+}
+
+function onCreateWithAi() {
+  if (!isValid.value) return
+  emit('create-with-ai', { name: scenarioName.value.trim(), fileName: fileName.value })
   emit('update:visible', false)
 }
 
@@ -118,6 +140,15 @@ function onCancel() {
         label="Cancel"
         text
         @click="onCancel"
+      />
+      <Button
+        v-if="canGenerateWithAi"
+        label="Describe it instead"
+        icon="pi pi-sparkles"
+        outlined
+        :disabled="!isValid"
+        data-testid="describe-with-ai-button"
+        @click="onCreateWithAi"
       />
       <Button
         label="Create"

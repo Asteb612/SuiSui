@@ -730,3 +730,28 @@ Anything the check cannot determine — no `playwright-core` in the workspace, o
 `PLAYWRIGHT_BROWSERS_PATH=0` (Playwright manages the layout itself) — reports
 `needsInstall: false` with a reason. A detection gap must never stop someone running
 their tests.
+
+## AI scenario generation (feature 012-ai-scenario-generation)
+
+- **`AIService.buildScenarioPrompt()`** — a fifth branch in the existing `buildPrompt()`
+  dispatch, for the `scenario-generate` kind. Presents the available steps as a
+  **numbered list** and asks for JSON containing indices, not step text. The tier is
+  deliberately never named in the prompt: preference for the team's own steps is
+  expressed positionally ("prefer a lower-numbered step"), because the renderer sends
+  project steps first. A model that ignores the instruction still cannot name a step
+  that does not exist.
+- **No new IPC channel.** The feature rides the existing `ai:start`/`chunk`/`done`/
+  `error`/`cancel` stream; only `AIGenerationKind` gained a value.
+- **`StepCatalogService.stampTiers()`** — stamps `CatalogStep.tier` (`project` |
+  `generic`) by comparing `source.file` against `<featuresDir>/steps/generic.steps.ts`,
+  the file `WorkspaceService.ensureDefaultSteps()` provisions. Applied on generate
+  **and on every cache read**, because the tier is derived: a catalog cached before the
+  features directory changed must not serve a stale tier. It is deliberately not part
+  of the cache key. When the features directory cannot be resolved, everything falls
+  back to `project` — the safe direction, since it never demotes a team's own step.
+- **`catalogStepToStepDefinition()`** now sets `isGeneric` from the tier. It was
+  hardcoded `false`, which left the "generic" badge in the step picker permanently
+  dead; three components already rendered it.
+- **The model response is untrusted input.** It is validated at the boundary and
+  resolved in the renderer (`app/utils/aiScenario.ts`), never trusted about what steps
+  exist. See `specs/012-ai-scenario-generation/contracts/model-response.md`.

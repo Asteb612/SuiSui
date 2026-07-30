@@ -127,7 +127,51 @@ export class AIService {
     if (req.kind === 'failure-fix') {
       return this.buildFailureFixPrompt(req)
     }
+    if (req.kind === 'scenario-generate') {
+      return this.buildScenarioPrompt(req)
+    }
     return req.input
+  }
+
+  /**
+   * Prompt for assembling a whole scenario from EXISTING steps (feature 012).
+   *
+   * The steps arrive already ordered by the renderer, project steps first, and
+   * are presented as a numbered list. The model replies with indices, so step
+   * identity is resolved against the catalog afterwards rather than trusted from
+   * the reply — see `app/utils/aiScenario.ts`. The tier is deliberately NOT
+   * named here: preference for the team's own steps is expressed positionally
+   * ("prefer a lower-numbered step"), so a model that ignores the instruction
+   * still cannot name a step that does not exist.
+   */
+  private buildScenarioPrompt(req: AIStreamRequest): string {
+    const stepList = req.context.steps
+      .map((s, i) => `[${i}] ${s.keyword} ${s.pattern}`)
+      .join('\n')
+
+    return [
+      'You assemble a BDD scenario using ONLY the numbered steps below.',
+      'You may not invent, reword, or paraphrase a step.',
+      '',
+      'Reply with ONLY a JSON object, no prose and no code fences:',
+      '{"scenarios":[{"name":string,"tags":string[],"steps":[{"i":number,"text":string}]}],"gaps":string[]}',
+      '',
+      '- "i" is the number of a step from the list. Never use a number that is not in the list.',
+      '- "text" is that step with its arguments filled in.',
+      '- "gaps" lists anything the request asks for that no listed step can express.',
+      '  Put it in "gaps" rather than inventing a step.',
+      '- Prefer a lower-numbered step when two steps express the same thing.',
+      '- If the request contains several distinct acceptance criteria, propose one',
+      '  scenario per criterion. Otherwise propose exactly one scenario.',
+      '',
+      'Available steps:',
+      stepList || '(none provided)',
+      '',
+      `Request: ${req.input}`,
+      '',
+      'Scenario so far:',
+      req.context.scenarioText || '(none)',
+    ].join('\n')
   }
 
   /**

@@ -1,14 +1,35 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/vue'
+import { createTestingPinia } from '@pinia/testing'
 import NewScenarioDialog from '../components/NewScenarioDialog.vue'
-import { primeVueStubs } from './testUtils'
+import { primeVueStubs, mockStepDefinitions } from './testUtils'
 
-function createWrapper(props: { visible?: boolean } = {}) {
+function createWrapper(
+  props: { visible?: boolean } = {},
+  // The AI entry point is gated on a configured provider AND available steps
+  // (feature 012, FR-001/FR-003); unconfigured is the default here so the
+  // existing expectations describe the unchanged flow.
+  options: { aiConfigured?: boolean; steps?: typeof mockStepDefinitions } = {},
+) {
   return render(NewScenarioDialog, {
     props: {
       visible: props.visible ?? true,
     },
     global: {
+      plugins: [
+        createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            ai: { config: { type: options.aiConfigured ? 'ollama' : null } },
+            steps: {
+              steps: options.steps ?? mockStepDefinitions,
+              catalog: [],
+              isLoading: false,
+              error: null,
+            },
+          },
+        }),
+      ],
       stubs: primeVueStubs,
     },
   })
@@ -239,6 +260,36 @@ describe('NewScenarioDialog', () => {
       expect(emitted()['create']![0]).toEqual([
         { name: 'Test', fileName: 'test.feature' },
       ])
+    })
+  })
+
+  describe('AI entry point (feature 012, FR-001/FR-003)', () => {
+    it('is absent when no AI provider is configured', () => {
+      createWrapper({}, { aiConfigured: false })
+      expect(screen.queryByTestId('describe-with-ai-button')).toBeNull()
+    })
+
+    it('is absent when the workspace has no steps to build from', () => {
+      createWrapper({}, { aiConfigured: true, steps: [] })
+      expect(screen.queryByTestId('describe-with-ai-button')).toBeNull()
+    })
+
+    it('is offered when a provider is configured and steps exist', () => {
+      createWrapper({}, { aiConfigured: true })
+      expect(screen.getByTestId('describe-with-ai-button')).toBeTruthy()
+    })
+
+    it('emits create-with-ai with the same payload as a plain create', async () => {
+      const { emitted } = createWrapper({}, { aiConfigured: true })
+
+      await fireEvent.update(screen.getByTestId('new-scenario-name-input'), 'Checkout flow')
+      await fireEvent.click(screen.getByTestId('describe-with-ai-button'))
+
+      expect(emitted()['create-with-ai']![0]).toEqual([
+        { name: 'Checkout flow', fileName: 'checkout-flow.feature' },
+      ])
+      // The plain create path must not also fire.
+      expect(emitted()['create']).toBeFalsy()
     })
   })
 })

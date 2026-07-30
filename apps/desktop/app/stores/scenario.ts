@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import type { Scenario, ScenarioStep, StepArg, ValidationResult, StepKeyword, StepArgDefinition, ExampleTable, ExampleRow, StepDefinition } from '@suisui/shared'
+import type { Scenario, ScenarioStep, StepArg, ValidationResult, StepKeyword, StepArgDefinition, ExampleTable, ExampleRow, StepDefinition, ScenarioDraft, DraftApplyMode } from '@suisui/shared'
 import { resolvePattern, findBestMatch } from '@suisui/shared'
 import { toGherkinTable, parseTableValue, parseGherkinTable, stringifyTableValue } from '~/utils/tableUtils'
 
@@ -213,6 +213,56 @@ export const useScenarioStore = defineStore('scenario', {
         current.steps.push(step)
         this.isDirty = true
       }
+    },
+
+    /**
+     * Apply an accepted AI draft to the active scenario (feature 012, FR-024).
+     *
+     * `extend` appends the draft's steps, keeping every existing step and
+     * argument value — the default, and the non-destructive outcome.
+     * `redraft` replaces the scenario's steps entirely.
+     *
+     * Never writes to disk: the scenario is marked dirty and persisted only by
+     * the tester's existing save action (FR-014).
+     */
+    applyDraft(draft: ScenarioDraft, mode: DraftApplyMode = 'extend') {
+      const current = this.scenarios[this.activeScenarioIndex]
+      if (!current) return
+
+      const steps: ScenarioStep[] = draft.steps.map((s) => ({
+        id: generateStepId(),
+        keyword: s.keyword,
+        pattern: s.pattern,
+        args: s.args.map((arg) => ({
+          name: arg.name,
+          type: arg.type,
+          value: arg.value,
+          ...(arg.enumValues ? { enumValues: arg.enumValues } : {}),
+          ...(arg.tableColumns ? { tableColumns: arg.tableColumns } : {}),
+        })),
+      }))
+
+      if (mode === 'redraft') {
+        current.steps = steps
+        if (draft.name) current.name = draft.name
+      } else {
+        current.steps.push(...steps)
+        // An extend must not rename the scenario the tester already named.
+        if (!current.name && draft.name) current.name = draft.name
+      }
+
+      for (const tag of draft.tags) {
+        if (!current.tags) current.tags = []
+        if (!current.tags.includes(tag)) current.tags.push(tag)
+      }
+
+      if (draft.requirementRef) {
+        const line = `# Requirement: ${draft.requirementRef}`
+        if (!current.comments) current.comments = []
+        if (!current.comments.includes(line)) current.comments.unshift(line)
+      }
+
+      this.isDirty = true
     },
 
     updateStep(stepId: string, updates: Partial<ScenarioStep>) {
@@ -499,6 +549,15 @@ export const useScenarioStore = defineStore('scenario', {
       }
 
       for (const scenario of this.scenarios) {
+        // Scenario-leading comments, verbatim and before the tags (feature 012).
+        // Emitted only when present, so output for a comment-free feature file
+        // is byte-identical to what this produced before the feature existed.
+        if (scenario.comments && scenario.comments.length > 0) {
+          for (const comment of scenario.comments) {
+            lines.push(`  ${comment}`)
+          }
+        }
+
         // Scenario tags
         if (scenario.tags && scenario.tags.length > 0) {
           lines.push('  ' + scenario.tags.map(t => `@${t}`).join(' '))
@@ -578,6 +637,8 @@ export const useScenarioStore = defineStore('scenario', {
       let parsingExamples = false
       let parsingDescription = false
       let pendingTags: string[] = []
+      /** Comment lines awaiting the scenario they belong to (feature 012). */
+      let pendingComments: string[] = []
       let descriptionLines: string[] = []
       let exampleColumns: string[] = []
 
@@ -615,6 +676,15 @@ export const useScenarioStore = defineStore('scenario', {
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? ''
         const trimmed = line.trim()
+
+        // Comment lines attach to the scenario that follows, exactly as tags do
+        // (feature 012, FR-029 → FR-031). Stored verbatim so a URL or ticket
+        // title round-trips untouched and is never reinterpreted (FR-032/033).
+        if (trimmed.startsWith('#')) {
+          flushDataTable()
+          pendingComments.push(trimmed)
+          continue
+        }
 
         // Parse tags (lines starting with @)
         if (trimmed.startsWith('@')) {
@@ -663,7 +733,9 @@ export const useScenarioStore = defineStore('scenario', {
             name,
             tags: pendingTags.length > 0 ? [...pendingTags] : [],
             steps: [],
+            ...(pendingComments.length > 0 ? { comments: [...pendingComments] } : {}),
           }
+          pendingComments = []
 
           if (isOutline) {
             currentScenario.examples = { columns: [], rows: [] }

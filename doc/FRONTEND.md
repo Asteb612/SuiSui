@@ -1255,3 +1255,35 @@ Nothing in the progress pipeline touches the editor's selected feature or scenar
 panel was never mounted, and `ScenarioBuilder`'s `run` view mode was unreachable —
 `currentViewMode` in `pages/index.vue` is typed `'read' | 'edit'`. Rather than wire live
 progress into a code path no user could reach, the path was removed (Constitution VI).
+
+## AI scenario generation (renderer, feature 012-ai-scenario-generation)
+
+Draft a whole scenario from a description, assembled **only** from steps that already
+exist in the workspace.
+
+- **`AiScenarioDialog.vue`** — description input, optional requirement reference, the
+  extend/redraft choice, and the review. Reachable from `NewScenarioDialog.vue`
+  ("Describe it instead") and from the `ScenarioBuilder.vue` edit-mode toolbar
+  ("Draft with AI"). Both entry points are gated on `aiStore.isConfigured` **and** a
+  non-empty step catalog — with no steps there is nothing to build from (FR-003).
+- **`app/utils/aiScenario.ts`** — the enforcement point, and the most important file in
+  the feature. `parseScenarioResponse(raw, steps)` is pure and never throws; it resolves
+  the model's step **indices** against the step list that was sent. `keyword`, `pattern`
+  and `tier` come from the catalog entry, **never** from the response — read them from
+  the model's JSON and the "no invented steps" guarantee is gone regardless of the
+  prompt. `selectStepsForPrompt()` orders project steps first and caps the list at
+  `STEP_PROMPT_BUDGET` (300), dropping generic steps before project ones.
+- **`useAiStore`** — `generateScenario()` reuses the existing `ai:*` stream; the JSON is
+  parsed only on `done` (a partial draft is never rendered). `scenarioOutcome` is one of
+  `drafted` / `empty` / `failed`, so an attempt cannot end with no feedback.
+  `applyMode` is per-generation and never persisted; `extend` is always the starting
+  point. `cancelScenarioGeneration()` makes a late response unable to produce a draft.
+- **`useScenarioStore.applyDraft(draft, mode)`** — `extend` appends and keeps every
+  existing step and argument; `redraft` replaces. Marks the scenario dirty; **never**
+  writes to disk — the tester's existing save does that.
+- **Validation** runs on a _candidate_ `Scenario` via `window.api.validate.scenario`,
+  not through `scenarioStore.validate()`, which would mean mutating the tester's
+  scenario to find out whether the draft is any good.
+- **`Scenario.comments`** — verbatim comment lines above a scenario, used to record
+  `# Requirement: <ref>`. See the round-trip note in the services doc; before this
+  feature, any comment above a scenario was deleted on the tester's first save.

@@ -77,13 +77,30 @@ export interface AIStatusTarget {
 }
 
 /** The use case a generation request serves. */
-export type AIGenerationKind = 'step-match' | 'arg-fill' | 'failure-explain' | 'failure-fix'
+export type AIGenerationKind =
+  | 'step-match'
+  | 'arg-fill'
+  | 'failure-explain'
+  | 'failure-fix'
+  /** Assemble a whole scenario from existing catalog steps (feature 012). */
+  | 'scenario-generate'
 
 /** Workspace context supplied to the model so drafts prefer reuse over invention. */
 export interface AIRequestContext {
+  /**
+   * The steps the model may choose from. For `scenario-generate` the renderer
+   * sends these already ordered (project steps first) and capped to a budget —
+   * the main process builds the prompt from what it receives and does not
+   * re-filter. `isGeneric` carries the tier.
+   */
   steps: StepDefinition[]
   scenarioText: string | null
   targetStep: StepDefinition | null
+  /**
+   * A requirement / acceptance-criteria reference to record on accepted
+   * scenarios (feature 012, FR-020). Free-form: may be a URL or a ticket id.
+   */
+  requirementRef?: string | null
 }
 
 /** A user intent plus workspace context sent to a provider. */

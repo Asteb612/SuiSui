@@ -87,6 +87,9 @@ onUnmounted(() => {
 })
 
 const showNewScenarioDialog = ref(false)
+const showAiScenarioDialog = ref(false)
+/** Scenario text sent as context; null when drafting into an empty scenario. */
+const aiScenarioContext = ref<string | null>(null)
 const showHelpDialog = ref(false)
 const showSettingsDialog = ref(false)
 const showAiSettingsDialog = ref(false)
@@ -266,6 +269,28 @@ function handleCreateScenario(data: { name: string; fileName: string }) {
     name: data.name,
     relativePath: data.fileName,
   })
+}
+
+/**
+ * Create the scenario, then open the AI draft dialog so the tester describes it
+ * instead of picking every step by hand (feature 012, US1). The scenario is
+ * empty at this point, so the dialog offers no extend/redraft choice.
+ */
+async function handleCreateScenarioWithAi(data: { name: string; fileName: string }) {
+  handleCreateScenario(data)
+  await handleModeChange('edit')
+  aiScenarioContext.value = null
+  showAiScenarioDialog.value = true
+}
+
+/** Open the AI draft dialog against the scenario currently being edited (US3). */
+function openAiScenarioDialog() {
+  aiScenarioContext.value = scenarioStore.toGherkin()
+  showAiScenarioDialog.value = true
+}
+
+function handleAiDraftApplied() {
+  showAiScenarioDialog.value = false
 }
 
 /**
@@ -868,6 +893,7 @@ async function handleRunTag(tag: string) {
               :view-mode="currentViewMode"
               @toggle-edit-mode="toggleEditMode"
               @record="showRecorder = true"
+              @draft-with-ai="openAiScenarioDialog"
             />
           </div>
         </section>
@@ -935,6 +961,13 @@ async function handleRunTag(tag: string) {
     <NewScenarioDialog
       v-model:visible="showNewScenarioDialog"
       @create="handleCreateScenario"
+      @create-with-ai="handleCreateScenarioWithAi"
+    />
+
+    <AiScenarioDialog
+      v-model:visible="showAiScenarioDialog"
+      :scenario-text="aiScenarioContext"
+      @applied="handleAiDraftApplied"
     />
 
     <!-- Initialize Workspace Dialog -->

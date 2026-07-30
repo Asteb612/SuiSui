@@ -416,6 +416,9 @@ See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md)
 
 ## Active Technologies
 
+- TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22 + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Reuses the existing AI provider seam (feature 005), the step catalog (feature 006), and the literal text matcher from global search (feature 009) for step ranking (012-ai-scenario-generation)
+- None new. Drafts are in-memory and discarded; the only persistent effect is the tester's existing save, which now also writes scenario-leading comments (012-ai-scenario-generation)
+
 - TypeScript 5.x (strict) on Node.js 20.x (Electron 33 runtime); repo/tests on Node 22. The reporter itself is plain CommonJS JavaScript, executed by the **workspace's** Playwright, not by the app. + Electron 33.x, Nuxt 4 (Vue 3), Pinia, PrimeVue 4.x — **no new runtime dependency**. Uses the workspace's existing `@playwright/test` reporter API (`onTestBegin`/`onStepBegin`/`onStepEnd`/`onTestEnd`) and `playwright-bdd` (≥8.x), which wraps every Gherkin step in `test.step(textWithKeyword, …)`. (011-live-run-progress)
 - None persisted. Live run state is in-memory in the renderer and discarded when a new run starts. The reporter file is a generated artifact under `<workspace>/.app/` (already git-ignored), rewritten on each run. (011-live-run-progress)
 
@@ -454,3 +457,35 @@ See [doc/SERVICES.md](doc/SERVICES.md), [doc/IPC_TYPES.md](doc/IPC_TYPES.md)
 ## Recent Changes
 
 - 001-workspace-detection: Added TypeScript 5.x (strict mode) + Electron 33.x, isomorphic-git, memfs (testing), Vitest 2.x
+
+## AI Scenario Generation (feature 012)
+
+Draft a whole scenario from a description, assembled **only** from steps that already
+exist in the workspace, preferring the team's own steps over the provisioned generic ones.
+
+- **Step identity comes from the catalog, never from the model.** Available steps go out
+  as a numbered list; the model replies with **indices**. `keyword`/`pattern`/`tier` are
+  read from the catalog entry the index resolves to. Reading them from the response
+  breaks FR-004 and SC-001 no matter how the prompt is worded. Enforcement lives in
+  `app/utils/aiScenario.ts`, not in the prompt.
+- An unresolvable proposal becomes a **`DroppedStep`**, never a step; a response with no
+  resolvable steps is the `empty` outcome, never a draft with zero steps. Every attempt
+  ends in exactly one of `drafted` / `empty` / `failed`.
+- **No new IPC channel** — rides the existing `ai:*` stream; only `AIGenerationKind`
+  gained `'scenario-generate'`.
+- **`toGherkin()` regenerates the whole file** from the in-memory model, so anything not
+  modelled is lost on save. That is why `Scenario.comments` had to exist before a
+  requirement reference could be a comment — before feature 012, _any_ comment above a
+  scenario was deleted on the tester's first save. Only scenario-leading comments are
+  preserved; comments elsewhere are still lost.
+- **Known, pre-existing:** `toGherkin()` joins with `'\n'`, so every save normalises CRLF
+  to LF. Independent of this feature; not fixed here.
+- **The tier is derived, not authored.** `StepCatalogService` stamps it from
+  `source.file` on generate _and_ on every cache read; it is not part of the cache key.
+  `StepDefinition.isGeneric` carries it to the renderer — it was hardcoded `false` before.
+- Tests never reach a provider: `FakeAIProvider` plus canned JSON. The
+  byte-identical-output snapshot in `scenarioComments.test.ts` guards every existing
+  user feature file against churn — treat a change there as a data-loss alarm.
+
+See [doc/FRONTEND.md](doc/FRONTEND.md), [doc/SERVICES.md](doc/SERVICES.md), and
+`specs/012-ai-scenario-generation/contracts/`.

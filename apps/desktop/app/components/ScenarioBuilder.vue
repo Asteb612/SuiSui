@@ -38,6 +38,8 @@ const props = withDefaults(
 defineEmits<{
   'toggle-edit-mode': []
   record: []
+  /** Open the AI scenario draft dialog against this scenario (feature 012, US3). */
+  'draft-with-ai': []
 }>()
 
 const scenarioStore = useScenarioStore()
@@ -590,6 +592,16 @@ function selectScenario(index: number) {
             @click="scenarioStore.removeScenario(scenarioStore.activeScenarioIndex)"
           />
           <div class="pagination-separator" />
+          <Button
+            v-if="aiStore.isConfigured"
+            icon="pi pi-sparkles"
+            label="Draft with AI"
+            text
+            size="small"
+            title="Describe what to test and build it from your existing steps"
+            data-testid="ai-draft-btn"
+            @click="$emit('draft-with-ai')"
+          />
           <Button
             icon="pi pi-circle-fill"
             label="Record"
